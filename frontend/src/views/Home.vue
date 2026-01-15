@@ -17,7 +17,14 @@
 
     <!-- Right side - Chat interface -->
     <div class="chat-section">
-      <Conversation :selectedImagePath="currentImage" />
+      <button 
+        @click="handleNewChat"
+        class="new-chat-button"
+        :disabled="conversationRef?.isLoading || false"
+      >
+        <img :src="refreshIcon" alt="Refresh" class="new-chat-icon" />
+      </button>
+      <Conversation ref="conversationRef" :selectedImagePath="currentImage" />
     </div>
   </div>
 </template>
@@ -26,12 +33,14 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Conversation from '../components/Conversation.vue'
+import refreshIcon from '../assets/imgs/refresh.png'
 
 const route = useRoute()
 const router = useRouter()
 
 const currentImage = ref('/imgs/balloon.jpg')
 const imageAlt = ref('Two girls with pink balloons - friendly cartoon illustration')
+const conversationRef = ref<InstanceType<typeof Conversation> | null>(null)
 
 const handleImageError = () => {
   console.log('Image failed to load, using fallback')
@@ -41,6 +50,14 @@ const handleImageError = () => {
 const handleSwitchImage = () => {
   // Navigate back to image selection
   router.push('/')
+}
+
+const handleNewChat = async () => {
+  if (conversationRef.value) {
+    // Use isLoading from the conversation component
+    if (conversationRef.value.isLoading) return
+    await conversationRef.value.startNewChat()
+  }
 }
 
 // Get image from route query parameter
@@ -148,6 +165,54 @@ onMounted(() => {
   position: relative;
 }
 
+.new-chat-button {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  font-family: 'Peachy Kink';
+  color: #FFE600;
+  font-size: 1.5em;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 50px;
+  background: #59A7F6;
+  border: 6px solid #88E7FA;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 6px 0 0 #008CBB;
+  white-space: nowrap;
+  z-index: 201;
+}
+
+.new-chat-button:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 6px 0 0 #008CBB;
+}
+
+.new-chat-button:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.new-chat-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  transform: none;
+}
+
+.new-chat-icon {
+  width: 1.8em;
+  height: 1.8em;
+  object-fit: contain;
+}
+
+.new-chat-text {
+  font-weight: bold;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .home-container {
@@ -171,6 +236,22 @@ onMounted(() => {
   
   .main-image {
     max-height: 35vh;
+  }
+  
+  .new-chat-button {
+    top: 10px;
+    right: 10px;
+    font-size: 1.2em;
+    padding: 8px 16px;
+    border-width: 3px;
+  }
+  
+  .new-chat-icon {
+    font-size: 1em;
+  }
+  
+  .new-chat-text {
+    font-size: 0.9em;
   }
 }
 </style>

@@ -6,15 +6,32 @@
     </div>
 
     <!-- Chat messages area -->
-    <div class="chat-messages" ref="messagesContainer">
+    <div 
+      class="chat-messages" 
+      ref="messagesContainer"
+      :class="{ 'scrolled': isScrolled }"
+      @scroll="handleScroll"
+    >
       
       <div 
         v-for="(msg, index) in chatHistory" 
         :key="index" 
         :class="`message ${msg.role}`"
+        v-show="msg.role === 'user' || (msg.role === 'assistant' && msg.audioReady !== false)"
       >
         <div class="message-bubble">
-          <div class="message-text">{{ msg.content }}</div>
+          <div class="message-text">
+            <template v-if="msg.words">
+              <span 
+                v-for="(word, wordIndex) in msg.words" 
+                :key="wordIndex"
+                :class="{ 'word-visible': word.visible, 'word-hidden': !word.visible }"
+              >
+                {{ word.text }}
+              </span>
+            </template>
+            <span v-else>{{ msg.content }}</span>
+          </div>
           <div class="message-time">{{ msg.time }}</div>
         </div>
       </div>
@@ -45,7 +62,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 // Use relative paths - works with nginx reverse proxy (local) and Ingress (prod)
 
 // Props
@@ -55,11 +72,28 @@ const props = defineProps<{
 // State
 const isLoading = ref(false)
 const isRecording = ref(false)
-const chatHistory = ref<Array<{role: string, content: string, time: string}>>([])
+const chatHistory = ref<Array<{
+  role: string, 
+  content: string, 
+  time: string,
+  words?: Array<{text: string, visible: boolean}>,
+  audioReady?: boolean
+}>>([])
 const messagesContainer = ref<HTMLElement>()
+const isScrolled = ref(false)
 const convState = ref<'greet' | 'scaffolding' | 'scienceqa_init' | 'scienceqa' | 'reflection' | 'close'>('greet')
 const conversationId = ref<string>(crypto.randomUUID())
-const sessionId = ref<string>(crypto.randomUUID())
+// Get or create session_id from localStorage
+const getOrCreateSessionId = (): string => {
+  const stored = localStorage.getItem('curio_session_id')
+  if (stored) {
+    return stored
+  }
+  const newSessionId = crypto.randomUUID()
+  localStorage.setItem('curio_session_id', newSessionId)
+  return newSessionId
+}
+const sessionId = ref<string>(getOrCreateSessionId())
 
 // Audio recording
 let mediaRecorder: MediaRecorder | null = null
@@ -137,6 +171,7 @@ const scrollToBottom = async () => {
   if (messagesContainer.value) {
     messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
   }
+  updateScrollState()
 }
 
 const scrollToLastAssistantMessageTop = async () => {
@@ -149,6 +184,61 @@ const scrollToLastAssistantMessageTop = async () => {
       // Calculate the scroll position to align message top with container top
       const messageOffsetTop = lastMessage.offsetTop
       messagesContainer.value.scrollTop = messageOffsetTop
+    }
+  }
+  updateScrollState()
+}
+
+const handleScroll = () => {
+  updateScrollState()
+}
+
+const updateScrollState = () => {
+  if (messagesContainer.value) {
+    const container = messagesContainer.value
+    const scrollTop = container.scrollTop
+    
+    // Find all message elements
+    const messages = container.querySelectorAll('.message')
+    
+    if (messages.length === 0) {
+      isScrolled.value = false
+      return
+    }
+    
+    // Find the first message that's currently visible in the viewport
+    let firstVisibleMessage: HTMLElement | null = null
+    const containerRect = container.getBoundingClientRect()
+    
+    for (let i = 0; i < messages.length; i++) {
+      const message = messages[i] as HTMLElement
+      const messageRect = message.getBoundingClientRect()
+      
+      // Check if message is visible in viewport (even partially)
+      if (messageRect.bottom >= containerRect.top && messageRect.top <= containerRect.bottom) {
+        firstVisibleMessage = message
+        break
+      }
+    }
+    
+    // If no visible message found, check if we've scrolled past all messages
+    if (!firstVisibleMessage && messages.length > 0) {
+      // If scrollTop > 0, there's content above
+      isScrolled.value = scrollTop > 0
+      return
+    }
+    
+    if (firstVisibleMessage) {
+      // Calculate the distance between container's actual top and message's top
+      // offsetTop gives position relative to container's content area
+      const messageOffsetTop = firstVisibleMessage.offsetTop
+      const distanceFromTop = messageOffsetTop - scrollTop
+      
+      // Show shadow if there's any gap (message is below the top of viewport)
+      // or if we've scrolled down (scrollTop > 0)
+      isScrolled.value = distanceFromTop > 0 || scrollTop > 0
+    } else {
+      isScrolled.value = scrollTop > 0
     }
   }
 }
@@ -190,7 +280,6 @@ const startRecording = async () => {
 
     mediaRecorder.start()
     isRecording.value = true
-    console.log('Recording started')
   } catch (error) {
     console.error('Error accessing microphone:', error)
   }
@@ -200,7 +289,6 @@ const stopRecording = () => {
   if (mediaRecorder && isRecording.value) {
     mediaRecorder.stop()
     isRecording.value = false
-    console.log('Recording stopped')
   }
 }
 
@@ -232,48 +320,155 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
     
     await scrollToBottom()
     
-    // Get AI response using chat completion
+    // Get AI response using streaming chat completion
     const audioBase64 = await blobToBase64(audioBlob)
 
-    const chatResponse = await fetch('/api/chat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        messages: chatHistory.value.map(msg => ({
-          role: msg.role,
-          content: msg.content
-        })),
-        state: convState.value,
-        image_path: props.selectedImagePath,
-        conversation_id: conversationId.value,
-        session_id: sessionId.value,
-        user_audio: audioBase64,
-        user_audio_mime_type: mimeType
-      })
-    })
-    
-    if (!chatResponse.ok) {
-      throw new Error('Chat completion failed')
-    }
-    
-    const chatData = await chatResponse.json()
-    const aiMessage = chatData.response
-    const nextState = chatData.next_state as typeof convState.value
-    
-    // Add AI message to chat history
+    // Add placeholder assistant message for streaming (hidden until audio is ready)
+    const assistantMessageIndex = chatHistory.value.length
     chatHistory.value.push({
       role: 'assistant',
-      content: aiMessage,
-      time: getCurrentTime()
+      content: '',
+      time: getCurrentTime(),
+      words: [],
+      audioReady: false
     })
-    convState.value = nextState
+    
+    let fullText = ''
+    let nextState: typeof convState.value = convState.value
+    
+    try {
+      const response = await fetch('/api/chat/stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          messages: chatHistory.value.slice(0, -1).map(msg => ({
+            role: msg.role,
+            content: msg.content
+          })),
+          state: convState.value,
+          image_path: props.selectedImagePath,
+          conversation_id: conversationId.value,
+          session_id: sessionId.value,
+          user_audio: audioBase64,
+          user_audio_mime_type: mimeType
+        })
+      })
+      
+      if (!response.ok) {
+        throw new Error('Chat completion failed')
+      }
+      
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+      
+      if (!reader) {
+        throw new Error('No response body')
+      }
+      
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        
+        const chunk = decoder.decode(value)
+        const lines = chunk.split('\n')
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+              
+              if (data.type === 'token') {
+                fullText += data.content
+                // Update content for display (will be hidden until audio plays)
+                const assistantMsg = chatHistory.value[assistantMessageIndex]
+                if (assistantMsg) {
+                  assistantMsg.content = fullText
+                }
+              } else if (data.type === 'done') {
+                fullText = data.response
+                nextState = data.next_state as typeof convState.value
+                convState.value = nextState
+              } else if (data.type === 'error') {
+                throw new Error(data.error || 'Streaming error')
+              }
+            } catch (e) {
+              console.error('Error parsing SSE data:', e)
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error in streaming:', error)
+      // Fallback to regular non-streaming endpoint
+      try {
+        const chatResponse = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            messages: chatHistory.value.slice(0, -1).map(msg => ({
+              role: msg.role,
+              content: msg.content
+            })),
+            state: convState.value,
+            image_path: props.selectedImagePath,
+            conversation_id: conversationId.value,
+            session_id: sessionId.value,
+            user_audio: audioBase64,
+            user_audio_mime_type: mimeType
+          })
+        })
+        
+        if (!chatResponse.ok) {
+          throw new Error('Chat completion failed')
+        }
+        
+        const chatData = await chatResponse.json()
+        fullText = chatData.response
+        nextState = chatData.next_state as typeof convState.value
+        convState.value = nextState
+        
+        // Update the assistant message
+        const words = fullText.split(/(\s+)/).filter(w => w.length > 0).map(w => ({
+          text: w,
+          visible: false
+        }))
+        const assistantMsg = chatHistory.value[assistantMessageIndex]
+        if (assistantMsg) {
+          assistantMsg.words = words
+          assistantMsg.content = fullText
+          assistantMsg.audioReady = false
+        }
+        
+        await scrollToLastAssistantMessageTop()
+        await generateAndPlayAudioWithPrinterEffect(fullText, assistantMessageIndex)
+        return
+      } catch (fallbackError) {
+        console.error('Fallback also failed:', fallbackError)
+        throw error // Throw original error
+      }
+    }
+    
+    // Split text into words for printer effect
+    const words = fullText.split(/(\s+)/).filter(w => w.length > 0).map(w => ({
+      text: w,
+      visible: false
+    }))
+    
+    const assistantMsg = chatHistory.value[assistantMessageIndex]
+    if (assistantMsg) {
+      assistantMsg.words = words
+      assistantMsg.content = fullText
+      // Keep audioReady as false - will be set to true when audio is ready
+    }
     
     await scrollToLastAssistantMessageTop()
     
-    // Generate and play audio response
-    await generateAndPlayAudio(aiMessage)
+    // Generate and play audio with printer effect
+    await generateAndPlayAudioWithPrinterEffect(fullText, assistantMessageIndex)
     
   } catch (error) {
     console.error('Error processing audio:', error)
@@ -322,21 +517,342 @@ const generateAndPlayAudio = async (text: string) => {
   }
 }
 
+const generateAndPlayAudioWithPrinterEffect = async (text: string, messageIndex: number) => {
+  try {
+    const response = await fetch('/api/speech', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ text })
+    })
+    
+    if (!response.ok) {
+      throw new Error('Speech generation failed')
+    }
+    
+    const audioBlob = await response.blob()
+    const audioUrl = URL.createObjectURL(audioBlob)
+    const audio = new Audio(audioUrl)
+    
+    // Store reference to current audio
+    currentAudio = audio
+    
+    // Get words array for this message
+    const message = chatHistory.value[messageIndex]
+    if (!message) {
+      // Fallback to regular playback if message doesn't exist
+      await generateAndPlayAudio(text)
+      return
+    }
+    if (!message.words) {
+      // Fallback to regular playback if words array doesn't exist
+      await generateAndPlayAudio(text)
+      return
+    }
+    
+    // Load audio to get duration
+    const setupPrinterEffect = () => {
+      const onReady = () => {
+        // Show message bubble when audio is ready
+        if (message) {
+          message.audioReady = true
+        }
+        startPrinterEffect()
+      }
+      
+      if (audio.readyState >= 2) {
+        // Can play - metadata and some data loaded
+        onReady()
+      } else {
+        // Wait for canplay event to ensure audio is ready
+        audio.addEventListener('canplay', onReady, { once: true })
+        // Also listen for loadedmetadata as fallback
+        audio.addEventListener('loadedmetadata', () => {
+          if (audio.readyState >= 2) {
+            onReady()
+          }
+        }, { once: true })
+      }
+    }
+    
+    const startPrinterEffect = () => {
+      const duration = audio.duration
+      if (!message || !message.words) return
+      const words = message.words
+      
+      // Filter out whitespace-only tokens and calculate timings
+      const wordIndices: number[] = []
+      let totalChars = 0
+      
+      for (let i = 0; i < words.length; i++) {
+        const word = words[i]
+        if (!word) continue
+        const trimmed = word.text.trim()
+        if (trimmed.length > 0) {
+          wordIndices.push(i)
+          totalChars += trimmed.length
+        }
+      }
+      
+      if (wordIndices.length === 0) {
+        // No words to reveal, just play audio
+        return
+      }
+      
+      // Calculate timing for each word based on character count
+      const wordTimings: Array<{wordIndex: number, time: number}> = []
+      let currentTime = 0
+      
+      for (const wordIdx of wordIndices) {
+        if (!words[wordIdx]) continue
+        const wordLength = words[wordIdx].text.trim().length
+        const timeForWord = (wordLength / totalChars) * duration
+        wordTimings.push({ wordIndex: wordIdx, time: currentTime })
+        currentTime += timeForWord
+      }
+      
+      // Reveal words as audio plays
+      let currentWordIndex = 0
+      const updateInterval = setInterval(() => {
+        if (!audio || audio.paused || audio.ended) {
+          clearInterval(updateInterval)
+          return
+        }
+        
+        const currentAudioTime = audio.currentTime || 0
+        
+        // Reveal words that should be visible at current time
+        while (currentWordIndex < wordTimings.length) {
+          const timing = wordTimings[currentWordIndex]
+          if (!timing || currentAudioTime < timing.time) break
+          const wordIdx = timing.wordIndex
+          if (wordIdx !== undefined && words && words[wordIdx]) {
+            words[wordIdx].visible = true
+          }
+          currentWordIndex++
+        }
+      }, 50) // Update every 50ms for smooth effect
+      
+      audio.onended = () => {
+        clearInterval(updateInterval)
+        // Make sure all words are visible at the end
+        if (words) {
+          words.forEach(word => word.visible = true)
+        }
+        URL.revokeObjectURL(audioUrl)
+        if (currentAudio === audio) {
+          currentAudio = null
+        }
+      }
+    }
+    
+    setupPrinterEffect()
+    
+    await audio.play()
+  } catch (error) {
+    console.error('Error playing audio with printer effect:', error)
+    // Fallback to regular playback
+    await generateAndPlayAudio(text)
+  }
+}
+
+
+const loadExistingConversation = async () => {
+  try {
+    // Get the most recent conversation for this session
+    const response = await fetch(`/api/conversations?session_id=${sessionId.value}`)
+    if (!response.ok) {
+      console.error('Failed to fetch conversations:', response.status, response.statusText)
+      throw new Error('Failed to fetch conversations')
+    }
+    
+    const data = await response.json()
+    const conversations = data.conversations || []
+    
+    if (conversations.length === 0) {
+      return false
+    }
+    
+    // Normalize image path for comparison - extract just the filename
+    const currentImage = props.selectedImagePath || '/imgs/balloon.jpg'
+    const normalizeImagePath = (path: string | null | undefined) => {
+      if (!path) return ''
+      // Normalize path: extract just the filename, case-insensitive
+      let normalized = path.trim()
+      // Remove leading slashes
+      normalized = normalized.replace(/^\/+/, '')
+      // Remove 'imgs/' prefix if present
+      normalized = normalized.replace(/^imgs\//, '')
+      // Remove leading slash again in case it was added back
+      normalized = normalized.replace(/^\/+/, '')
+      // Extract just the filename (last part after /)
+      const filename = normalized.split('/').pop() || normalized
+      // Normalize to lowercase for comparison
+      return filename.toLowerCase()
+    }
+    const normalizedCurrentImage = normalizeImagePath(currentImage)
+    
+    // Only look for conversations with the exact same image - strict isolation
+    // First, try to find the most recent unfinished conversation with the same image
+    let matchingConversation = conversations.find((conv: any) => {
+      const normalizedConvImage = normalizeImagePath(conv.image_path)
+      return normalizedConvImage === normalizedCurrentImage && !conv.finished_at
+    })
+    
+    // If no unfinished conversation found, get the most recent conversation with the same image
+    if (!matchingConversation) {
+      const sameImageConvs = conversations.filter((conv: any) => {
+        const normalizedConvImage = normalizeImagePath(conv.image_path)
+        return normalizedConvImage === normalizedCurrentImage
+      })
+      if (sameImageConvs.length > 0) {
+        // Get the most recent one (they're already sorted by updated_at desc)
+        matchingConversation = sameImageConvs[0]
+      }
+    }
+    
+    // Strict isolation: If no match found for this image, don't load any conversation
+    // This ensures conversations are completely isolated by image
+    if (!matchingConversation) {
+      return false
+    }
+    
+    if (matchingConversation) {
+      // Load the conversation
+      conversationId.value = matchingConversation.id
+      
+      // Get messages for this conversation
+      const messagesResponse = await fetch(`/api/conversations/${conversationId.value}/messages`)
+      if (messagesResponse.ok) {
+        const messagesData = await messagesResponse.json()
+        const messages = messagesData.messages || []
+        
+        if (messages.length === 0) {
+          return false
+        }
+        
+        // Restore chat history from messages
+        // Filter out system messages and only include user and assistant messages
+        const greetingText = "Hi, little detective! I'm Curio, your friendly science assistant. We are going to explore the scientific mystery in the image together! What do you find odd in this picture?"
+        
+        chatHistory.value = messages
+          .filter((msg: any) => msg.role === 'user' || msg.role === 'assistant')
+          .map((msg: any) => {
+            return {
+              role: msg.role,
+              content: msg.content,
+              time: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              words: msg.role === 'assistant' ? msg.content.split(/(\s+)/).filter((w: string) => w.length > 0).map((w: string) => ({
+                text: w,
+                visible: true // Already visible since it's loaded
+              })) : undefined,
+              audioReady: msg.role === 'assistant' ? true : undefined
+            }
+          })
+        
+        // Check if the greeting message is already in the history
+        const firstMessage = chatHistory.value[0]
+        const hasGreetingMessage = chatHistory.value.length > 0 && 
+          firstMessage && 
+          firstMessage.role === 'assistant' && 
+          firstMessage.content === greetingText
+        
+        // If no greeting message found, prepend it as the default opening message
+        if (!hasGreetingMessage) {
+          const greetingWords = greetingText.split(/(\s+)/).filter((w: string) => w.length > 0).map((w: string) => ({
+            text: w,
+            visible: true // Already visible since it's loaded
+          }))
+          const firstExistingMessage = chatHistory.value[0]
+          chatHistory.value.unshift({
+            role: 'assistant',
+            content: greetingText,
+            time: firstExistingMessage?.time || getCurrentTime(),
+            words: greetingWords,
+            audioReady: true
+          })
+        }
+        
+        // Get the current state from the conversation
+        const convResponse = await fetch(`/api/conversations/${conversationId.value}`)
+        if (convResponse.ok) {
+          const convData = await convResponse.json()
+          convState.value = convData.current_state || 'greet'
+        }
+        
+        await scrollToBottom()
+        return true // Conversation loaded
+      } else {
+        console.error('Failed to fetch messages:', messagesResponse.status)
+      }
+    }
+    
+    return false // No conversation to load
+  } catch (error) {
+    console.error('Error loading existing conversation:', error)
+    return false
+  }
+}
 
 const generateInitialGreeting = async () => {
   const greetingText = "Hi, little detective! I'm Curio, your friendly science assistant. We are going to explore the scientific mystery in the image together! What do you find odd in this picture?"
   
-  // Add greeting message to chat history
+  // Save greeting message to database
+  try {
+    const response = await fetch(`/api/conversations/${conversationId.value}/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        role: 'assistant',
+        content: greetingText,
+        state: 'greet'
+      })
+    })
+    
+    if (!response.ok) {
+      console.error('Failed to save greeting message to database')
+    }
+  } catch (error) {
+    console.error('Error saving greeting message:', error)
+  }
+  
+  // Split text into words for printer effect
+  const words = greetingText.split(/(\s+)/).filter(w => w.length > 0).map(w => ({
+    text: w,
+    visible: false
+  }))
+  
+  // Add greeting message to chat history (hidden until audio is ready)
+  const greetingIndex = chatHistory.value.length
   chatHistory.value.push({
     role: 'assistant',
     content: greetingText,
-    time: getCurrentTime()
+    time: getCurrentTime(),
+    words: words,
+    audioReady: false
   })
   
   await scrollToBottom()
   
-  // Generate and play audio for the greeting
-  await generateAndPlayAudio(greetingText)
+  // Generate and play audio for the greeting with printer effect
+  await generateAndPlayAudioWithPrinterEffect(greetingText, greetingIndex)
+}
+
+const startNewChat = async () => {
+  if (isLoading.value) return
+  
+  // Create a new conversation ID but keep the same session ID
+  conversationId.value = crypto.randomUUID()
+  
+  // Clear the chat history
+  chatHistory.value = []
+  convState.value = 'greet'
+  
+  // Generate initial greeting for the new conversation
+  await generateInitialGreeting()
 }
 
 const handleKeyDown = (e: KeyboardEvent) => {
@@ -353,12 +869,64 @@ const handleKeyUp = (e: KeyboardEvent) => {
   }
 }
 
+// Watch for chat history changes to update scroll state
+watch(chatHistory, async () => {
+  await nextTick()
+  updateScrollState()
+}, { deep: true })
+
+// Watch for image path changes and reload conversation if needed
+watch(() => props.selectedImagePath, async (newPath, oldPath) => {
+  // If image path changes, always reload conversation for the new image
+  if (newPath !== oldPath) {
+    // Stop any playing audio first
+    if (currentAudio) {
+      currentAudio.pause()
+      currentAudio.currentTime = 0
+      if (currentAudio.src && currentAudio.src.startsWith('blob:')) {
+        URL.revokeObjectURL(currentAudio.src)
+      }
+      currentAudio = null
+    }
+    
+    // Clear current state
+    chatHistory.value = []
+    convState.value = 'greet'
+    
+    // Try to load conversation for new image
+    const conversationLoaded = await loadExistingConversation()
+    if (!conversationLoaded) {
+      // If no conversation found for this image, start a new one
+      conversationId.value = crypto.randomUUID()
+      await generateInitialGreeting()
+    }
+  }
+}, { immediate: false })
+
 onMounted(async () => {
   document.addEventListener('keydown', handleKeyDown)
   document.addEventListener('keyup', handleKeyUp)
   
-  // Generate initial greeting with audio
-  await generateInitialGreeting()
+  // Wait for props to be set (may take a moment if parent sets them in onMounted)
+  let attempts = 0
+  while (!props.selectedImagePath && attempts < 10) {
+    await nextTick()
+    await new Promise(resolve => setTimeout(resolve, 50))
+    attempts++
+  }
+  
+  // Try to load existing conversation for the current image first
+  // This ensures we only load conversations that match the selected image
+  const conversationLoaded = await loadExistingConversation()
+  
+  // If no conversation was loaded for this image, generate initial greeting
+  if (!conversationLoaded) {
+    conversationId.value = crypto.randomUUID()
+    await generateInitialGreeting()
+  }
+  
+  // Initialize scroll state
+  updateScrollState()
 })
 
 onUnmounted(() => {
@@ -368,6 +936,23 @@ onUnmounted(() => {
   if (mediaRecorder && mediaRecorder.state === 'recording') {
     mediaRecorder.stop()
   }
+  
+  // Stop any playing audio
+  if (currentAudio) {
+    currentAudio.pause()
+    currentAudio.currentTime = 0
+    // Revoke object URL to free memory
+    if (currentAudio.src && currentAudio.src.startsWith('blob:')) {
+      URL.revokeObjectURL(currentAudio.src)
+    }
+    currentAudio = null
+  }
+})
+
+// Expose methods and state to parent component
+defineExpose({
+  startNewChat,
+  isLoading
 })
 </script>
 
@@ -432,6 +1017,31 @@ onUnmounted(() => {
   transform: translateZ(0); /* Force hardware acceleration and new stacking context */
 }
 
+/* Top shadow effect when scrolled */
+.chat-messages::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  background: linear-gradient(to bottom, 
+    rgba(0, 0, 0, 0.2) 0%, 
+    rgba(0, 0, 0, 0.1) 30%, 
+    rgba(0, 0, 0, 0.05) 60%, 
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  border-radius: 40px 40px 0 0;
+}
+
+.chat-messages.scrolled::before {
+  opacity: 1;
+}
+
 .message {
   margin-bottom: 15px;
   display: flex;
@@ -460,7 +1070,7 @@ onUnmounted(() => {
   color: white;
   font-family: 'Roboto';
   font-size: 1.3em;
-  border: 6px solid white;
+  border: 3px solid white;
   border-bottom-right-radius: 0px;
 }
 
@@ -469,7 +1079,7 @@ onUnmounted(() => {
   color: #ffffff;
   font-family: 'Roboto';
   font-size: 1.3em;
-  border: 6px solid white;
+  border: 3px solid white;
   border-top-left-radius: 0px;
   position: relative;
 }
@@ -479,6 +1089,19 @@ onUnmounted(() => {
   line-height: 1.4;
   margin-bottom: 5px;
   text-align: left;
+}
+
+.word-visible {
+  opacity: 1;
+  transition: opacity 0.1s ease-in;
+}
+
+.word-hidden {
+  opacity: 0;
+}
+
+.message-bubble {
+  transition: opacity 0.3s ease-in;
 }
 
 .message-time {

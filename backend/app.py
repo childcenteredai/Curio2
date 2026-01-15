@@ -1005,8 +1005,9 @@ def chat_completion_stream():
     except Exception as e:
         db.rollback()
         print(f"Chat completion stream error: {e}")
+        error_message = str(e)
         def error_generate():
-            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'error': error_message})}\n\n"
         return Response(stream_with_context(error_generate()), mimetype='text/event-stream')
     finally:
         if db:
@@ -1033,7 +1034,7 @@ def get_conversations():
         # Debug: Check all conversations to see what session_ids exist
         all_convs = db.query(Conversation).limit(10).all()
         if all_convs:
-            print(f"Sample of all conversations (first 10):")
+            print("Sample of all conversations (first 10):")
             for conv in all_convs:
                 print(f"  Conversation {conv.id}: session_id={conv.session_id}, image_path={conv.image_path}")
         

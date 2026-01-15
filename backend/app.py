@@ -450,8 +450,12 @@ def chat_completion():
         conversation = db.get(Conversation, conversation_id)
         if not conversation:
             # Use the provided session_identifier, or generate a new one if not provided
-            final_session_id = session_identifier if session_identifier else str(uuid.uuid4())
-            print(f"Creating new conversation {conversation_id} with session_id: {final_session_id}")
+            final_session_id = (
+                session_identifier if session_identifier else str(uuid.uuid4())
+            )
+            print(
+                f"Creating new conversation {conversation_id} with session_id: {final_session_id}"
+            )
             conversation = Conversation(
                 id=conversation_id,
                 session_id=final_session_id,
@@ -463,13 +467,17 @@ def chat_completion():
             # Commit conversation immediately so it exists when messages are added
             try:
                 db.commit()
-                print(f"Successfully created conversation {conversation_id} with session_id: {final_session_id}")
+                print(
+                    f"Successfully created conversation {conversation_id} with session_id: {final_session_id}"
+                )
             except Exception as commit_error:
                 db.rollback()
                 print(f"Error committing conversation: {commit_error}")
                 raise
         else:
-            print(f"Found existing conversation {conversation_id} with session_id: {conversation.session_id}")
+            print(
+                f"Found existing conversation {conversation_id} with session_id: {conversation.session_id}"
+            )
             # Commit conversation immediately so it exists when messages are added
             try:
                 db.commit()
@@ -486,34 +494,44 @@ def chat_completion():
                 # Extract flagged categories from the categories object
                 # Categories object has boolean attributes for each category
                 flagged_categories = []
-                if hasattr(categories, '__dict__'):
+                if hasattr(categories, "__dict__"):
                     flagged_categories = [
-                        cat for cat, flagged in vars(categories).items()
+                        cat
+                        for cat, flagged in vars(categories).items()
                         if isinstance(flagged, bool) and flagged
                     ]
                 else:
                     # Fallback: try common category names
                     common_categories = [
-                        'hate', 'hate_threatening', 'harassment', 'harassment_threatening',
-                        'self_harm', 'self_harm_intent', 'self_harm_instructions',
-                        'sexual', 'sexual_minors', 'violence', 'violence_graphic'
+                        "hate",
+                        "hate_threatening",
+                        "harassment",
+                        "harassment_threatening",
+                        "self_harm",
+                        "self_harm_intent",
+                        "self_harm_instructions",
+                        "sexual",
+                        "sexual_minors",
+                        "violence",
+                        "violence_graphic",
                     ]
                     flagged_categories = [
-                        cat for cat in common_categories
+                        cat
+                        for cat in common_categories
                         if getattr(categories, cat, False)
                     ]
                 app.logger.warning(
                     f"Moderation flagged message in conversation {conversation_id}: "
                     f"Categories: {flagged_categories}"
                 )
-                
+
                 # Return a safe, child-friendly response
                 safe_response = (
                     "I'm here to help you learn about science in a safe and positive way! "
                     "Let's focus on exploring the scientific phenomenon in the image. "
                     "What do you notice about what's happening?"
                 )
-                
+
                 # Still save the user message to the database (for audit purposes)
                 # but don't process it through the normal flow
                 user_message_record = Message(
@@ -526,7 +544,7 @@ def chat_completion():
                     audio_mime_type=user_audio_mime_type,
                 )
                 db.add(user_message_record)
-                
+
                 assistant_message_record = Message(
                     conversation_id=conversation.id,
                     role="assistant",
@@ -534,15 +552,13 @@ def chat_completion():
                     state=state,
                 )
                 db.add(assistant_message_record)
-                
+
                 conversation.updated_at = datetime.utcnow()
                 db.commit()
-                
-                return jsonify({
-                    "response": safe_response,
-                    "next_state": state,
-                    "moderated": True
-                })
+
+                return jsonify(
+                    {"response": safe_response, "next_state": state, "moderated": True}
+                )
 
         conv_state_history = state_history[conversation_id]
         conv_scienceqa_history = scienceqa_history[conversation_id]
@@ -655,7 +671,9 @@ def chat_completion():
             # Commit user message immediately so it's saved
             try:
                 db.commit()
-                print(f"Saved user message for conversation {conversation_id}: {latest_user_message[:50]}...")
+                print(
+                    f"Saved user message for conversation {conversation_id}: {latest_user_message[:50]}..."
+                )
             except Exception as commit_error:
                 db.rollback()
                 print(f"Error committing user message: {commit_error}")
@@ -698,8 +716,11 @@ def chat_completion():
             print(f"Saved assistant message for conversation {conversation_id}")
         except Exception as commit_error:
             db.rollback()
-            print(f"Error committing assistant message for conversation {conversation_id}: {commit_error}")
+            print(
+                f"Error committing assistant message for conversation {conversation_id}: {commit_error}"
+            )
             import traceback
+
             print(traceback.format_exc())
             raise
 
@@ -766,8 +787,12 @@ def chat_completion_stream():
         conversation = db.get(Conversation, conversation_id)
         if not conversation:
             # Use the provided session_identifier, or generate a new one if not provided
-            final_session_id = session_identifier if session_identifier else str(uuid.uuid4())
-            print(f"Creating new conversation {conversation_id} with session_id: {final_session_id}")
+            final_session_id = (
+                session_identifier if session_identifier else str(uuid.uuid4())
+            )
+            print(
+                f"Creating new conversation {conversation_id} with session_id: {final_session_id}"
+            )
             conversation = Conversation(
                 id=conversation_id,
                 session_id=final_session_id,
@@ -779,13 +804,17 @@ def chat_completion_stream():
             # Commit conversation immediately so it exists when messages are added
             try:
                 db.commit()
-                print(f"Successfully created conversation {conversation_id} with session_id: {final_session_id}")
+                print(
+                    f"Successfully created conversation {conversation_id} with session_id: {final_session_id}"
+                )
             except Exception as commit_error:
                 db.rollback()
                 print(f"Error committing conversation: {commit_error}")
                 raise
         else:
-            print(f"Found existing conversation {conversation_id} with session_id: {conversation.session_id}")
+            print(
+                f"Found existing conversation {conversation_id} with session_id: {conversation.session_id}"
+            )
 
         # Check for harmful content
         if latest_user_message:
@@ -796,7 +825,7 @@ def chat_completion_stream():
                     "Let's focus on exploring the scientific phenomenon in the image. "
                     "What do you notice about what's happening?"
                 )
-                
+
                 user_message_record = Message(
                     conversation_id=conversation.id,
                     role="user",
@@ -807,7 +836,7 @@ def chat_completion_stream():
                     audio_mime_type=user_audio_mime_type,
                 )
                 db.add(user_message_record)
-                
+
                 assistant_message_record = Message(
                     conversation_id=conversation.id,
                     role="assistant",
@@ -815,16 +844,18 @@ def chat_completion_stream():
                     state=state,
                 )
                 db.add(assistant_message_record)
-                
+
                 conversation.updated_at = datetime.utcnow()
                 db.commit()
-                
+
                 # Stream the safe response
                 def generate():
                     yield f"data: {json.dumps({'type': 'token', 'content': safe_response})}\n\n"
                     yield f"data: {json.dumps({'type': 'done', 'response': safe_response, 'next_state': state})}\n\n"
-                
-                return Response(stream_with_context(generate()), mimetype='text/event-stream')
+
+                return Response(
+                    stream_with_context(generate()), mimetype="text/event-stream"
+                )
 
         conv_state_history = state_history[conversation_id]
         conv_scienceqa_history = scienceqa_history[conversation_id]
@@ -925,7 +956,9 @@ def chat_completion_stream():
             # Commit user message immediately so it's saved even if streaming fails
             try:
                 db.commit()
-                print(f"Saved user message for conversation {conversation_id}: {latest_user_message[:50]}...")
+                print(
+                    f"Saved user message for conversation {conversation_id}: {latest_user_message[:50]}..."
+                )
             except Exception as commit_error:
                 db.rollback()
                 print(f"Error committing user message: {commit_error}")
@@ -962,13 +995,13 @@ def chat_completion_stream():
                     max_tokens=OPENAI_MAX_TOKENS,
                     stream=True,
                 )
-                
+
                 for chunk in stream:
                     if chunk.choices[0].delta.content:
                         token = chunk.choices[0].delta.content
                         full_content += token
                         yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
-                
+
                 # Save to database using separate session
                 # Use saved_conversation_id string instead of conversation.id to avoid detached instance error
                 assistant_message_record = Message(
@@ -981,34 +1014,44 @@ def chat_completion_stream():
                 # Commit assistant message (user message already committed above)
                 try:
                     db_session.commit()
-                    print(f"Saved assistant message for conversation {saved_conversation_id}")
+                    print(
+                        f"Saved assistant message for conversation {saved_conversation_id}"
+                    )
                 except Exception as commit_error:
                     db_session.rollback()
-                    print(f"Error committing assistant message for conversation {saved_conversation_id}: {commit_error}")
+                    print(
+                        f"Error committing assistant message for conversation {saved_conversation_id}: {commit_error}"
+                    )
                     import traceback
+
                     print(traceback.format_exc())
                     raise
-                
+
                 # Send final message
                 yield f"data: {json.dumps({'type': 'done', 'response': full_content, 'next_state': current_state})}\n\n"
             except Exception as e:
                 db_session.rollback()
                 print(f"Streaming error: {e}")
                 import traceback
+
                 print(traceback.format_exc())
                 yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
             finally:
                 db_session.close()
 
-        return Response(stream_with_context(generate()), mimetype='text/event-stream')
+        return Response(stream_with_context(generate()), mimetype="text/event-stream")
 
     except Exception as e:
         db.rollback()
         print(f"Chat completion stream error: {e}")
         error_message = str(e)
+
         def error_generate():
             yield f"data: {json.dumps({'type': 'error', 'error': error_message})}\n\n"
-        return Response(stream_with_context(error_generate()), mimetype='text/event-stream')
+
+        return Response(
+            stream_with_context(error_generate()), mimetype="text/event-stream"
+        )
     finally:
         if db:
             db.close()
@@ -1022,40 +1065,54 @@ def get_conversations():
         session_id = request.args.get("session_id")
         if not session_id:
             return jsonify({"error": "session_id is required"}), 400
-        
+
         print(f"Looking for conversations with session_id: {session_id}")
-        
-        conversations = db.query(Conversation).filter(
-            Conversation.session_id == session_id
-        ).order_by(Conversation.updated_at.desc()).all()
-        
+
+        conversations = (
+            db.query(Conversation)
+            .filter(Conversation.session_id == session_id)
+            .order_by(Conversation.updated_at.desc())
+            .all()
+        )
+
         print(f"Found {len(conversations)} conversations for session_id: {session_id}")
-        
+
         # Debug: Check all conversations to see what session_ids exist
         all_convs = db.query(Conversation).limit(10).all()
         if all_convs:
             print("Sample of all conversations (first 10):")
             for conv in all_convs:
-                print(f"  Conversation {conv.id}: session_id={conv.session_id}, image_path={conv.image_path}")
-        
+                print(
+                    f"  Conversation {conv.id}: session_id={conv.session_id}, image_path={conv.image_path}"
+                )
+
         result = []
         for conv in conversations:
-            result.append({
-                "id": conv.id,
-                "session_id": conv.session_id,
-                "image_path": conv.image_path,
-                "phenomenon": conv.phenomenon,
-                "started_at": conv.started_at.isoformat() if conv.started_at else None,
-                "finished_at": conv.finished_at.isoformat() if conv.finished_at else None,
-                "updated_at": conv.updated_at.isoformat() if conv.updated_at else None,
-                "message_count": len(conv.messages)
-            })
-        
+            result.append(
+                {
+                    "id": conv.id,
+                    "session_id": conv.session_id,
+                    "image_path": conv.image_path,
+                    "phenomenon": conv.phenomenon,
+                    "started_at": conv.started_at.isoformat()
+                    if conv.started_at
+                    else None,
+                    "finished_at": conv.finished_at.isoformat()
+                    if conv.finished_at
+                    else None,
+                    "updated_at": conv.updated_at.isoformat()
+                    if conv.updated_at
+                    else None,
+                    "message_count": len(conv.messages),
+                }
+            )
+
         return jsonify({"conversations": result}), 200
-    
+
     except Exception as e:
         print(f"Error getting conversations: {e}")
         import traceback
+
         traceback.print_exc()
         return jsonify({"error": "Failed to get conversations"}), 500
     finally:
@@ -1070,50 +1127,66 @@ def get_conversation_messages(conversation_id):
         conversation = db.get(Conversation, conversation_id)
         if not conversation:
             return jsonify({"error": "Conversation not found"}), 404
-        
-        messages = db.query(Message).filter(
-            Message.conversation_id == conversation_id
-        ).order_by(Message.created_at.asc()).all()
-        
+
+        messages = (
+            db.query(Message)
+            .filter(Message.conversation_id == conversation_id)
+            .order_by(Message.created_at.asc())
+            .all()
+        )
+
         result = []
         state_history_list = []
         scienceqa_history_list = []
-        
+
         for msg in messages:
-            result.append({
-                "role": msg.role,
-                "content": msg.content,
-                "state": msg.state,
-                "evaluation_result": msg.evaluation_result,
-                "created_at": msg.created_at.isoformat() if msg.created_at else None
-            })
-            
+            result.append(
+                {
+                    "role": msg.role,
+                    "content": msg.content,
+                    "state": msg.state,
+                    "evaluation_result": msg.evaluation_result,
+                    "created_at": msg.created_at.isoformat()
+                    if msg.created_at
+                    else None,
+                }
+            )
+
             # Reconstruct state history from assistant messages
             if msg.role == "assistant" and msg.state:
-                if msg.state not in state_history_list or state_history_list[-1] != msg.state:
+                if (
+                    msg.state not in state_history_list
+                    or state_history_list[-1] != msg.state
+                ):
                     state_history_list.append(msg.state)
-            
+
             # Reconstruct scienceqa history from evaluation results
             if msg.evaluation_result and msg.evaluation_result in [
-                "no_question", "irrelevant", "factual", "explanatory", 
-                "general_causal", "specific_causal"
+                "no_question",
+                "irrelevant",
+                "factual",
+                "explanatory",
+                "general_causal",
+                "specific_causal",
             ]:
                 scienceqa_history_list.append(msg.evaluation_result)
-        
+
         # Restore state history in memory for this conversation
         state_history[conversation_id] = state_history_list
         scienceqa_history[conversation_id] = scienceqa_history_list
-        
-        return jsonify({
-            "conversation_id": conversation_id,
-            "session_id": conversation.session_id,
-            "image_path": conversation.image_path,
-            "phenomenon": conversation.phenomenon,
-            "messages": result,
-            "state_history": state_history_list,
-            "scienceqa_history": scienceqa_history_list
-        }), 200
-    
+
+        return jsonify(
+            {
+                "conversation_id": conversation_id,
+                "session_id": conversation.session_id,
+                "image_path": conversation.image_path,
+                "phenomenon": conversation.phenomenon,
+                "messages": result,
+                "state_history": state_history_list,
+                "scienceqa_history": scienceqa_history_list,
+            }
+        ), 200
+
     except Exception as e:
         print(f"Error getting messages: {e}")
         return jsonify({"error": "Failed to get messages"}), 500
@@ -1129,15 +1202,15 @@ def create_message(conversation_id):
         conversation = db.get(Conversation, conversation_id)
         if not conversation:
             return jsonify({"error": "Conversation not found"}), 404
-        
+
         data = request.get_json()
         role = data.get("role")
         content = data.get("content")
         state = data.get("state", "greet")
-        
+
         if not role or not content:
             return jsonify({"error": "role and content are required"}), 400
-        
+
         message = Message(
             conversation_id=conversation_id,
             role=role,
@@ -1146,19 +1219,24 @@ def create_message(conversation_id):
         )
         db.add(message)
         db.commit()
-        
-        return jsonify({
-            "id": message.id,
-            "role": message.role,
-            "content": message.content,
-            "state": message.state,
-            "created_at": message.created_at.isoformat() if message.created_at else None
-        }), 201
-    
+
+        return jsonify(
+            {
+                "id": message.id,
+                "role": message.role,
+                "content": message.content,
+                "state": message.state,
+                "created_at": message.created_at.isoformat()
+                if message.created_at
+                else None,
+            }
+        ), 201
+
     except Exception as e:
         db.rollback()
         print(f"Error creating message: {e}")
         import traceback
+
         print(traceback.format_exc())
         return jsonify({"error": "Failed to create message"}), 500
     finally:
@@ -1173,25 +1251,36 @@ def get_conversation(conversation_id):
         conversation = db.get(Conversation, conversation_id)
         if not conversation:
             return jsonify({"error": "Conversation not found"}), 404
-        
+
         # Get the last message to determine current state
-        last_message = db.query(Message).filter(
-            Message.conversation_id == conversation_id
-        ).order_by(Message.created_at.desc()).first()
-        
+        last_message = (
+            db.query(Message)
+            .filter(Message.conversation_id == conversation_id)
+            .order_by(Message.created_at.desc())
+            .first()
+        )
+
         current_state = last_message.state if last_message else "greet"
-        
-        return jsonify({
-            "id": conversation.id,
-            "session_id": conversation.session_id,
-            "image_path": conversation.image_path,
-            "phenomenon": conversation.phenomenon,
-            "current_state": current_state,
-            "started_at": conversation.started_at.isoformat() if conversation.started_at else None,
-            "finished_at": conversation.finished_at.isoformat() if conversation.finished_at else None,
-            "updated_at": conversation.updated_at.isoformat() if conversation.updated_at else None
-        }), 200
-    
+
+        return jsonify(
+            {
+                "id": conversation.id,
+                "session_id": conversation.session_id,
+                "image_path": conversation.image_path,
+                "phenomenon": conversation.phenomenon,
+                "current_state": current_state,
+                "started_at": conversation.started_at.isoformat()
+                if conversation.started_at
+                else None,
+                "finished_at": conversation.finished_at.isoformat()
+                if conversation.finished_at
+                else None,
+                "updated_at": conversation.updated_at.isoformat()
+                if conversation.updated_at
+                else None,
+            }
+        ), 200
+
     except Exception as e:
         print(f"Error getting conversation: {e}")
         return jsonify({"error": "Failed to get conversation"}), 500

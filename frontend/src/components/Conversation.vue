@@ -94,6 +94,7 @@ const getOrCreateSessionId = (): string => {
   return newSessionId
 }
 const sessionId = ref<string>(getOrCreateSessionId())
+const isGeneratingGreeting = ref(false)
 
 // Audio recording
 let mediaRecorder: MediaRecorder | null = null
@@ -798,47 +799,104 @@ const loadExistingConversation = async () => {
 const generateInitialGreeting = async () => {
   const greetingText = "Hi, little detective! I'm Curio, your friendly science assistant. We are going to explore the scientific mystery in the image together! What do you find odd in this picture?"
   
-  // Save greeting message to database
-  try {
-    const response = await fetch(`/api/conversations/${conversationId.value}/messages`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        role: 'assistant',
-        content: greetingText,
-        state: 'greet'
-      })
-    })
-    
-    if (!response.ok) {
-      console.error('Failed to save greeting message to database')
-    }
-  } catch (error) {
-    console.error('Error saving greeting message:', error)
+  // Prevent duplicate greeting calls - check if greeting already exists in chat history
+  const hasGreeting = chatHistory.value.some(msg => 
+    msg.role === 'assistant' && msg.content === greetingText
+  )
+  if (isGeneratingGreeting.value || hasGreeting) {
+    return
   }
   
-  // Split text into words for printer effect
-  const words = greetingText.split(/(\s+)/).filter(w => w.length > 0).map(w => ({
-    text: w,
-    visible: false
-  }))
+  isGeneratingGreeting.value = true
   
-  // Add greeting message to chat history (hidden until audio is ready)
-  const greetingIndex = chatHistory.value.length
-  chatHistory.value.push({
-    role: 'assistant',
-    content: greetingText,
-    time: getCurrentTime(),
-    words: words,
-    audioReady: false
-  })
-  
-  await scrollToBottom()
-  
-  // Generate and play audio for the greeting with printer effect
-  await generateAndPlayAudioWithPrinterEffect(greetingText, greetingIndex)
+  try {
+    
+    // Ensure conversation exists in database before trying to add messages
+    let conversationCreated = false
+    try {
+      const createConvResponse = await fetch('/api/conversations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          id: conversationId.value,
+          session_id: sessionId.value,
+          image_path: props.selectedImagePath || '/imgs/balloon.jpg'
+        })
+      })
+      
+      if (!createConvResponse.ok) {
+        const errorText = await createConvResponse.text().catch(() => 'Unknown error')
+        console.error('Failed to create conversation:', createConvResponse.status, errorText)
+        throw new Error(`Failed to create conversation: ${createConvResponse.status}`)
+      }
+      
+      // Parse response to verify conversation was created and get the actual ID
+      const convData = await createConvResponse.json()
+      if (convData.id) {
+        // Use the ID from the response (could be new or existing conversation)
+        conversationId.value = convData.id
+        conversationCreated = true
+      } else {
+        throw new Error('Conversation creation response missing ID')
+      }
+    } catch (error) {
+      console.error('Error creating conversation:', error)
+      // Don't continue if conversation creation failed
+      return
+    }
+    
+    // Don't proceed if conversation wasn't successfully created/verified
+    if (!conversationCreated) {
+      console.error('Conversation was not created successfully')
+      return
+    }
+    
+    // Save greeting message to database
+    try {
+      const response = await fetch(`/api/conversations/${conversationId.value}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          role: 'assistant',
+          content: greetingText,
+          state: 'greet'
+        })
+      })
+      
+      if (!response.ok) {
+        console.error('Failed to save greeting message to database')
+      }
+    } catch (error) {
+      console.error('Error saving greeting message:', error)
+    }
+    
+    // Split text into words for printer effect
+    const words = greetingText.split(/(\s+)/).filter(w => w.length > 0).map(w => ({
+      text: w,
+      visible: false
+    }))
+    
+    // Add greeting message to chat history (hidden until audio is ready)
+    const greetingIndex = chatHistory.value.length
+    chatHistory.value.push({
+      role: 'assistant',
+      content: greetingText,
+      time: getCurrentTime(),
+      words: words,
+      audioReady: false
+    })
+    
+    await scrollToBottom()
+    
+    // Generate and play audio for the greeting with printer effect
+    await generateAndPlayAudioWithPrinterEffect(greetingText, greetingIndex)
+  } finally {
+    isGeneratingGreeting.value = false
+  }
 }
 
 const startNewChat = async () => {
@@ -1017,30 +1075,6 @@ defineExpose({
   transform: translateZ(0); /* Force hardware acceleration and new stacking context */
 }
 
-/* Top shadow effect when scrolled */
-.chat-messages::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 40px;
-  background: linear-gradient(to bottom, 
-    rgba(0, 0, 0, 0.2) 0%, 
-    rgba(0, 0, 0, 0.1) 30%, 
-    rgba(0, 0, 0, 0.05) 60%, 
-    transparent 100%
-  );
-  pointer-events: none;
-  z-index: 10;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-  border-radius: 40px 40px 0 0;
-}
-
-.chat-messages.scrolled::before {
-  opacity: 1;
-}
 
 .message {
   margin-bottom: 15px;

@@ -1194,13 +1194,91 @@ def get_conversation_messages(conversation_id):
         db.close()
 
 
+@app.route("/api/conversations", methods=["POST"])
+def create_conversation():
+    """Create a new conversation"""
+    db = SessionLocal()
+    try:
+        data = request.get_json()
+        conversation_id = data.get("id") or str(uuid.uuid4())
+        session_id = data.get("session_id")
+        image_path = data.get("image_path", "")
+        
+        if not session_id:
+            return jsonify({"error": "session_id is required"}), 400
+        
+        # Check if conversation already exists - use query instead of db.get() to avoid cache issues
+        existing = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+        if existing:
+            return jsonify(
+                {
+                    "id": existing.id,
+                    "session_id": existing.session_id,
+                    "image_path": existing.image_path,
+                    "phenomenon": existing.phenomenon,
+                    "created_at": existing.started_at.isoformat()
+                    if existing.started_at
+                    else None,
+                }
+            ), 200
+        
+        # Determine the phenomenon based on image path
+        if "balloon.jpg" in image_path:
+            phenomenon = "balloon"
+        elif "bend.jpg" in image_path:
+            phenomenon = "bend"
+        elif "pepper.jpg" in image_path:
+            phenomenon = "pepper"
+        else:
+            phenomenon = "balloon"  # default fallback
+        
+        conversation = Conversation(
+            id=conversation_id,
+            session_id=session_id,
+            image_path=image_path,
+            phenomenon=phenomenon,
+            started_at=datetime.utcnow(),
+        )
+        db.add(conversation)
+        db.flush()  # Flush to ensure the conversation is in the database
+        db.commit()
+        db.refresh(conversation)  # Refresh to ensure we have the latest state
+        
+        return jsonify(
+            {
+                "id": conversation.id,
+                "session_id": conversation.session_id,
+                "image_path": conversation.image_path,
+                "phenomenon": conversation.phenomenon,
+                "created_at": conversation.started_at.isoformat()
+                if conversation.started_at
+                else None,
+            }
+        ), 201
+        
+    except Exception as e:
+        db.rollback()
+        print(f"Error creating conversation: {e}")
+        import traceback
+        print(traceback.print_exc())
+        return jsonify({"error": "Failed to create conversation"}), 500
+    finally:
+        db.close()
+
+
 @app.route("/api/conversations/<conversation_id>/messages", methods=["POST"])
 def create_message(conversation_id):
     """Create a new message in a conversation"""
     db = SessionLocal()
     try:
-        conversation = db.get(Conversation, conversation_id)
+        # Use query instead of db.get() to explicitly query the database and avoid cache issues
+        conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
         if not conversation:
+            # Log for debugging
+            print(f"Conversation {conversation_id} not found when trying to create message")
+            # Check if conversation exists at all (for debugging)
+            all_conv_ids = [str(c.id) for c in db.query(Conversation.id).all()]
+            print(f"Available conversation IDs: {all_conv_ids[:5]}...")  # Print first 5 for debugging
             return jsonify({"error": "Conversation not found"}), 404
 
         data = request.get_json()

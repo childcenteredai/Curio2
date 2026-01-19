@@ -2,17 +2,19 @@ You are given a knowledge graph (KG) of scientific components. Your task is to d
 
 <Retrieval Rules>
 1. Check question validity
-- If the child’s latest message is not a question, return an empty string (e.g., '') immediately and stop.
+- If the child’s latest message is NOT a question, return an empty string (e.g., '') immediately and stop.
 
 2. Match against the KG
 - Focus only on the child’s most recent question.
 - Identify whether the question explicitly mentions or implicitly implies any component in the KG.
 - If a strongly related component is found, retrieve and return the original content of that knowledge component from the KG.
-- If no strong match exists, or the child's question is arbitrary, return an empty string (e.g., '').
+- If no strong match exists (e.g., the relation of the child's question and knowledge component involves multiple logical connections), or the child's question is arbitrary, return an empty string (e.g., '').
 
 3. Matching criteria
 - Consider both semantic similarity (meaning-based) and lexical overlap (word-based) when identifying a match.
 - Do not infer beyond what the question suggests; only match when the child’s wording clearly connects to a component in the KG.
+- The knowledge components are organized by level of complexity, with more advanced components placed later in the list.
+- If the conversation with the child is within the first 5 turns, do not link the child's question to advanced knowledge components; only consider basic or foundational components for matching.
 </Retrieval Rules>
 
 <Conversation History>

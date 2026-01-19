@@ -540,6 +540,7 @@ def chat_completion():
                     content=latest_user_message,
                     state=state,
                     evaluation_result="moderated",
+                    matched_knowledge_components=None,
                     audio_data=user_audio_bytes,
                     audio_mime_type=user_audio_mime_type,
                 )
@@ -609,6 +610,8 @@ def chat_completion():
                 conv_state_history.append(current_state)
             eval_state = current_state
 
+        # Track matched knowledge components for saving to database
+        matched_kg = None
         if current_state in ["scienceqa", "reflection"]:
             if current_state == "scienceqa" and child_question_level in [
                 "factual",
@@ -618,6 +621,7 @@ def chat_completion():
             ]:
                 kg = knowledge_retrieval(messages, phenomenon)
                 print(f"kg: {kg}")
+                matched_kg = kg  # Store for database
                 if kg != "":
                     if child_question_level in [
                         "explanatory",
@@ -640,6 +644,7 @@ def chat_completion():
             elif current_state == "reflection":
                 kg = knowledge_retrieval(messages, phenomenon)
                 print(f"kg: {kg}")
+                matched_kg = kg  # Store for database
                 if kg != "":
                     state_prompt = (
                         state_prompt
@@ -664,6 +669,7 @@ def chat_completion():
                 content=latest_user_message,
                 state=state,
                 evaluation_result=user_evaluation_result,
+                matched_knowledge_components=matched_kg if matched_kg else None,
                 audio_data=user_audio_bytes,
                 audio_mime_type=user_audio_mime_type,
             )
@@ -702,11 +708,18 @@ def chat_completion():
 
         content = response.choices[0].message.content or ""
 
+        # Determine assistant evaluation result (only in scienceqa phase)
+        assistant_evaluation_result = None
+        if current_state == "scienceqa" and child_question_level:
+            assistant_evaluation_result = child_question_level
+
         assistant_message_record = Message(
             conversation_id=conversation.id,
             role="assistant",
             content=content,
             state=current_state,
+            evaluation_result=assistant_evaluation_result,
+            matched_knowledge_components=matched_kg if matched_kg else None,
         )
         db.add(assistant_message_record)
 
@@ -832,6 +845,7 @@ def chat_completion_stream():
                     content=latest_user_message,
                     state=state,
                     evaluation_result="moderated",
+                    matched_knowledge_components=None,
                     audio_data=user_audio_bytes,
                     audio_mime_type=user_audio_mime_type,
                 )
@@ -896,6 +910,8 @@ def chat_completion_stream():
                 conv_state_history.append(current_state)
             eval_state = current_state
 
+        # Track matched knowledge components for saving to database
+        matched_kg = None
         if current_state in ["scienceqa", "reflection"]:
             if current_state == "scienceqa" and child_question_level in [
                 "factual",
@@ -904,6 +920,7 @@ def chat_completion_stream():
                 "specific_causal",
             ]:
                 kg = knowledge_retrieval(messages, phenomenon)
+                matched_kg = kg  # Store for database
                 if kg != "":
                     if child_question_level in [
                         "explanatory",
@@ -925,6 +942,7 @@ def chat_completion_stream():
                         )
             elif current_state == "reflection":
                 kg = knowledge_retrieval(messages, phenomenon)
+                matched_kg = kg  # Store for database
                 if kg != "":
                     state_prompt = (
                         state_prompt
@@ -949,6 +967,7 @@ def chat_completion_stream():
                 content=latest_user_message,
                 state=state,
                 evaluation_result=user_evaluation_result,
+                matched_knowledge_components=matched_kg if matched_kg else None,
                 audio_data=user_audio_bytes,
                 audio_mime_type=user_audio_mime_type,
             )
@@ -980,6 +999,10 @@ def chat_completion_stream():
             [system_message] + messages + [{"role": "user", "content": state_prompt}]
         )
 
+        # Capture variables for use inside generate() function
+        saved_child_question_level = child_question_level
+        saved_matched_kg = matched_kg
+
         def generate():
             full_content = ""
             # Create a separate database session for saving the assistant message
@@ -1002,6 +1025,11 @@ def chat_completion_stream():
                         full_content += token
                         yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
 
+                # Determine assistant evaluation result (only in scienceqa phase)
+                assistant_evaluation_result = None
+                if current_state == "scienceqa" and saved_child_question_level:
+                    assistant_evaluation_result = saved_child_question_level
+
                 # Save to database using separate session
                 # Use saved_conversation_id string instead of conversation.id to avoid detached instance error
                 assistant_message_record = Message(
@@ -1009,6 +1037,8 @@ def chat_completion_stream():
                     role="assistant",
                     content=full_content,
                     state=current_state,
+                    evaluation_result=assistant_evaluation_result,
+                    matched_knowledge_components=saved_matched_kg if saved_matched_kg else None,
                 )
                 db_session.add(assistant_message_record)
                 # Commit assistant message (user message already committed above)

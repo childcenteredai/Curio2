@@ -444,7 +444,7 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
           assistantMsg.audioReady = false
         }
         
-        await scrollToLastAssistantMessageTop()
+        await scrollToBottom()
         await generateAndPlayAudioWithPrinterEffect(fullText, assistantMessageIndex)
         return
       } catch (fallbackError) {
@@ -466,7 +466,7 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
       // Keep audioReady as false - will be set to true when audio is ready
     }
     
-    await scrollToLastAssistantMessageTop()
+    await scrollToBottom()
     
     // Generate and play audio with printer effect
     await generateAndPlayAudioWithPrinterEffect(fullText, assistantMessageIndex)
@@ -478,7 +478,7 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
       content: 'Sorry, I encountered an error. Please try again.',
       time: getCurrentTime()
     })
-    await scrollToLastAssistantMessageTop()
+    await scrollToBottom()
   } finally {
     isLoading.value = false
   }

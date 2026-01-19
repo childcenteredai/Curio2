@@ -46,7 +46,9 @@ class Message(Base):
     content = Column(Text, nullable=False)
     state = Column(String)
     evaluation_result = Column(String)
-    matched_knowledge_components = Column(Text)  # JSON string of matched knowledge component names
+    matched_knowledge_components = Column(
+        Text
+    )  # JSON string of matched knowledge component names
     audio_data = Column(LargeBinary)
     audio_mime_type = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

@@ -1038,7 +1038,9 @@ def chat_completion_stream():
                     content=full_content,
                     state=current_state,
                     evaluation_result=assistant_evaluation_result,
-                    matched_knowledge_components=saved_matched_kg if saved_matched_kg else None,
+                    matched_knowledge_components=saved_matched_kg
+                    if saved_matched_kg
+                    else None,
                 )
                 db_session.add(assistant_message_record)
                 # Commit assistant message (user message already committed above)
@@ -1233,12 +1235,14 @@ def create_conversation():
         conversation_id = data.get("id") or str(uuid.uuid4())
         session_id = data.get("session_id")
         image_path = data.get("image_path", "")
-        
+
         if not session_id:
             return jsonify({"error": "session_id is required"}), 400
-        
+
         # Check if conversation already exists - use query instead of db.get() to avoid cache issues
-        existing = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+        existing = (
+            db.query(Conversation).filter(Conversation.id == conversation_id).first()
+        )
         if existing:
             return jsonify(
                 {
@@ -1251,7 +1255,7 @@ def create_conversation():
                     else None,
                 }
             ), 200
-        
+
         # Determine the phenomenon based on image path
         if "balloon.jpg" in image_path:
             phenomenon = "balloon"
@@ -1261,7 +1265,7 @@ def create_conversation():
             phenomenon = "pepper"
         else:
             phenomenon = "balloon"  # default fallback
-        
+
         conversation = Conversation(
             id=conversation_id,
             session_id=session_id,
@@ -1273,7 +1277,7 @@ def create_conversation():
         db.flush()  # Flush to ensure the conversation is in the database
         db.commit()
         db.refresh(conversation)  # Refresh to ensure we have the latest state
-        
+
         return jsonify(
             {
                 "id": conversation.id,
@@ -1285,11 +1289,12 @@ def create_conversation():
                 else None,
             }
         ), 201
-        
+
     except Exception as e:
         db.rollback()
         print(f"Error creating conversation: {e}")
         import traceback
+
         print(traceback.print_exc())
         return jsonify({"error": "Failed to create conversation"}), 500
     finally:
@@ -1302,13 +1307,19 @@ def create_message(conversation_id):
     db = SessionLocal()
     try:
         # Use query instead of db.get() to explicitly query the database and avoid cache issues
-        conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+        conversation = (
+            db.query(Conversation).filter(Conversation.id == conversation_id).first()
+        )
         if not conversation:
             # Log for debugging
-            print(f"Conversation {conversation_id} not found when trying to create message")
+            print(
+                f"Conversation {conversation_id} not found when trying to create message"
+            )
             # Check if conversation exists at all (for debugging)
             all_conv_ids = [str(c.id) for c in db.query(Conversation.id).all()]
-            print(f"Available conversation IDs: {all_conv_ids[:5]}...")  # Print first 5 for debugging
+            print(
+                f"Available conversation IDs: {all_conv_ids[:5]}..."
+            )  # Print first 5 for debugging
             return jsonify({"error": "Conversation not found"}), 404
 
         data = request.get_json()

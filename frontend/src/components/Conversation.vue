@@ -175,21 +175,6 @@ const scrollToBottom = async () => {
   updateScrollState()
 }
 
-const scrollToLastAssistantMessageTop = async () => {
-  await nextTick()
-  if (messagesContainer.value) {
-    // Find the last assistant message element
-    const assistantMessages = messagesContainer.value.querySelectorAll('.message.assistant')
-    if (assistantMessages.length > 0) {
-      const lastMessage = assistantMessages[assistantMessages.length - 1] as HTMLElement
-      // Calculate the scroll position to align message top with container top
-      const messageOffsetTop = lastMessage.offsetTop
-      messagesContainer.value.scrollTop = messageOffsetTop
-    }
-  }
-  updateScrollState()
-}
-
 const handleScroll = () => {
   updateScrollState()
 }

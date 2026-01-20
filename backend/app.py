@@ -392,6 +392,7 @@ def transcribe_audio():
             model=OPENAI_WHISPER_MODEL,
             file=(filename, audio_file),
             response_format="json",
+            language="en",
         )
 
         return jsonify({"text": transcript.text}), 200

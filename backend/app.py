@@ -597,7 +597,7 @@ def chat_completion():
             if current_state == "scienceqa":
                 child_question_level = state_classification(state, messages, phenomenon)
                 conv_scienceqa_history.append(child_question_level)
-                print(f"\n=== Turn Evaluation (Non-Stream) ===")
+                print("\n=== Turn Evaluation (Non-Stream) ===")
                 print(f"Child's Question: {latest_user_message}")
                 print(f"Evaluation Result: {child_question_level}")
                 print("=" * 50)
@@ -607,7 +607,7 @@ def chat_completion():
             else:
                 child_question_level = None
                 if latest_user_message:
-                    print(f"\n=== Turn Evaluation (Non-Stream) ===")
+                    print("\n=== Turn Evaluation (Non-Stream) ===")
                     print(f"Child's Question: {latest_user_message}")
                     print(f"Evaluation Result: {eval_state}")
                     print("=" * 50)
@@ -625,15 +625,15 @@ def chat_completion():
                 state_prompt = state_prompt_classification(current_state)
                 child_question_level = None
                 if latest_user_message:
-                    print(f"\n=== Turn Evaluation (Non-Stream) ===")
+                    print("\n=== Turn Evaluation (Non-Stream) ===")
                     print(f"Child's Question: {latest_user_message}")
-                    print(f"Evaluation Result: reflection")
+                    print("Evaluation Result: reflection")
                     print("=" * 50)
             else:
                 # Classify the child's question level
                 child_question_level = state_classification(state, messages, phenomenon)
                 conv_scienceqa_history.append(child_question_level)
-                print(f"\n=== Turn Evaluation (Non-Stream) ===")
+                print("\n=== Turn Evaluation (Non-Stream) ===")
                 print(f"Child's Question: {latest_user_message}")
                 print(f"Evaluation Result: {child_question_level}")
                 current_state = "scienceqa"  # Stay in scienceqa state
@@ -922,7 +922,7 @@ def chat_completion_stream():
             if current_state == "scienceqa":
                 child_question_level = state_classification(state, messages, phenomenon)
                 conv_scienceqa_history.append(child_question_level)
-                print(f"\n=== Turn Evaluation (Stream) ===")
+                print("\n=== Turn Evaluation (Stream) ===")
                 print(f"Child's Question: {latest_user_message}")
                 print(f"Evaluation Result: {child_question_level}")
                 state_prompt = state_prompt_classification(
@@ -931,7 +931,7 @@ def chat_completion_stream():
             else:
                 child_question_level = None
                 if latest_user_message:
-                    print(f"\n=== Turn Evaluation (Stream) ===")
+                    print("\n=== Turn Evaluation (Stream) ===")
                     print(f"Child's Question: {latest_user_message}")
                     print(f"Evaluation Result: {eval_state}")
                     print("=" * 50)
@@ -948,14 +948,14 @@ def chat_completion_stream():
                 state_prompt = state_prompt_classification(current_state)
                 child_question_level = None
                 if latest_user_message:
-                    print(f"\n=== Turn Evaluation (Stream) ===")
+                    print("\n=== Turn Evaluation (Stream) ===")
                     print(f"Child's Question: {latest_user_message}")
-                    print(f"Evaluation Result: reflection")
+                    print("Evaluation Result: reflection")
                     print("=" * 50)
             else:
                 child_question_level = state_classification(state, messages, phenomenon)
                 conv_scienceqa_history.append(child_question_level)
-                print(f"\n=== Turn Evaluation (Stream) ===")
+                print("\n=== Turn Evaluation (Stream) ===")
                 print(f"Child's Question: {latest_user_message}")
                 print(f"Evaluation Result: {child_question_level}")
                 print("=" * 50)

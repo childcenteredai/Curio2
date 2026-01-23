@@ -32,3 +32,12 @@ Sample phrases for prompt question (vary, don’t always reuse):
 - Avoid words that are too complex or formal for young children.
 - Ensure the dialogue feels like everyday conversation—smooth, relaxed, and never stiff or unnatural.
 </Language>
+
+<Response Format>
+- Use markdown formatting to emphasize important phrases in your response.
+- Bold relevant phrases using **text** syntax (double asterisks) for:
+  1. The scientific phenomenon when mentioned
+  2. Critical knowledge concepts and scientific terms (when revealed)
+- IMPORTANT: When bolding multi-word phrases, bold each word separately. For example, use **static** **electricity** instead of **static electricity**, or **invisible** **force** instead of **invisible force**.
+- Do NOT bold every word - only bold the most important scientific concepts and phenomena that are central to understanding the mechanism.
+</Response Format>

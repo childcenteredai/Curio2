@@ -227,6 +227,21 @@ def format_prompt(
             "<Scientific Knowledge>\n" + phenomenon_data.get("knowledge", ""),
         )
 
+    if "<Mechanism Context>" in state_prompt:
+        # Load mechanism from kg.json
+        knowledge_base = json.load(open("knowledge/kg.json", "r"))
+        phenomenon_map = {
+            "balloon": "Hair stands up near a balloon",
+            "bend": "Bending Water Stream with a Comb",
+            "pepper": "Pepper Leaping up to Spoon",
+        }
+        phenomenon_key = phenomenon_map.get(phenomenon, "Hair stands up near a balloon")
+        mechanism = knowledge_base.get(phenomenon_key, {}).get("mechanism", "")
+        state_prompt = state_prompt.replace(
+            "<Mechanism Context>",
+            "<Mechanism Context>\n" + mechanism,
+        )
+
     if "<Child's Question>" in state_prompt:
         state_prompt = state_prompt.replace(
             "<Child's Question>",
@@ -256,14 +271,20 @@ def knowledge_retrieval(messages, phenomenon="balloon"):
 
     knowledge_concepts = list(knowledge_base[phenomenon_key]["concepts"].keys())
 
+    # Calculate conversation turn count (each user message + assistant response = 1 turn)
+    # Count user messages as turns
+    turn_count = sum(1 for msg in messages if msg.get("role") == "user")
+
+    # Add turn count information to the prompt
     retrieval_prompt = (
         retrieval_prompt
-        + "\n\n<Knowledge Components>\n"
+        + "\n\n<Knowledge Components (ordered by complexity: simpler concepts first, advanced concepts later)>\n"
         + json.dumps(knowledge_concepts)
         + "\n</Knowledge Components>"
+        + f"\n\n<Conversation Turn Count>\nCurrent turn: {turn_count}\n</Conversation Turn Count>"
     )
 
-    print(f"retrieval_prompt: {retrieval_prompt}")
+    # print(f"retrieval_prompt: {retrieval_prompt}")
     messages = [{"role": "system", "content": retrieval_prompt}]
     response = client.chat.completions.create(
         model=OPENAI_CHAT_MODEL, messages=messages, max_tokens=OPENAI_MAX_TOKENS
@@ -296,32 +317,34 @@ def format_kg(mode="definition", kg_raw="", phenomenon="balloon"):
 
     try:
         kg_list = json.loads(kg_raw)
-        kg_content = ""
-        for component in kg_list:
-            definition = knowledge_base[phenomenon_key]["concepts"][component][
-                "definition"
-            ]
-            explanation = knowledge_base[phenomenon_key]["concepts"][component][
-                "explanation"
-            ]
-            if mode == "definition":
-                kg_content += (
-                    "'" + component + "':\n\nDefinition: " + definition + "\n\n"
-                )
-            elif mode == "explanation":
-                kg_content += (
-                    "'" + component + "':\n\nExplanation: " + explanation + "\n\n"
-                )
-            elif mode == "definition_and_explanation":
-                kg_content += (
-                    "'"
-                    + component
-                    + "':\n\nDefinition: "
-                    + definition
-                    + "\n\nExplanation: "
-                    + explanation
-                    + "\n\n"
-                )
+
+        # Only use the FIRST component (most relevant one)
+        # Do not process multiple components
+        if not kg_list or len(kg_list) == 0:
+            return ""
+
+        component = kg_list[0]  # Take only the first component
+
+        # Verify the component exists in the knowledge base
+        if component not in knowledge_base[phenomenon_key]["concepts"]:
+            print(f"Warning: Component '{component}' not found in knowledge base")
+            return ""
+
+        # Get the component data (do NOT include sub_concepts)
+        component_data = knowledge_base[phenomenon_key]["concepts"][component]
+        definition = component_data.get("definition", "")
+        explanation = component_data.get("explanation", "")
+
+        # Format the single component (without sub_concepts)
+        if mode == "definition":
+            kg_content = f"'{component}':\n\nDefinition: {definition}\n\n"
+        elif mode == "explanation":
+            kg_content = f"'{component}':\n\nExplanation: {explanation}\n\n"
+        elif mode == "definition_and_explanation":
+            kg_content = f"'{component}':\n\nDefinition: {definition}\n\nExplanation: {explanation}\n\n"
+        else:
+            kg_content = ""
+
         kg_content = kg_content.strip()
         print(f"kg_content: {kg_content}")
         return kg_content
@@ -567,23 +590,27 @@ def chat_completion():
 
         eval_state = None
         if state != "scienceqa":
-            print(f"state: {state}")
             eval_state = state_classification(state, messages, phenomenon)
-            print(f"eval_state: {eval_state}")
             current_state = state_update(state, eval_state, conv_state_history)
-            print(f"current_state: {current_state}")
 
             # If transitioning to scienceqa, classify the question level immediately
             if current_state == "scienceqa":
                 child_question_level = state_classification(state, messages, phenomenon)
                 conv_scienceqa_history.append(child_question_level)
-                print(f"child_question_level: {child_question_level}")
-                print(f"scienceqa_history: {conv_scienceqa_history}")
+                print(f"\n=== Turn Evaluation (Non-Stream) ===")
+                print(f"Child's Question: {latest_user_message}")
+                print(f"Evaluation Result: {child_question_level}")
+                print("=" * 50)
                 state_prompt = state_prompt_classification(
                     current_state, child_question_level
                 )
             else:
                 child_question_level = None
+                if latest_user_message:
+                    print(f"\n=== Turn Evaluation (Non-Stream) ===")
+                    print(f"Child's Question: {latest_user_message}")
+                    print(f"Evaluation Result: {eval_state}")
+                    print("=" * 50)
                 state_prompt = state_prompt_classification(current_state)
         else:
             # Check if we should move to reflection based on qualified questions
@@ -597,12 +624,18 @@ def chat_completion():
                 current_state = "reflection"
                 state_prompt = state_prompt_classification(current_state)
                 child_question_level = None
+                if latest_user_message:
+                    print(f"\n=== Turn Evaluation (Non-Stream) ===")
+                    print(f"Child's Question: {latest_user_message}")
+                    print(f"Evaluation Result: reflection")
+                    print("=" * 50)
             else:
                 # Classify the child's question level
                 child_question_level = state_classification(state, messages, phenomenon)
                 conv_scienceqa_history.append(child_question_level)
-                print(f"child_question_level: {child_question_level}")
-                print(f"scienceqa_history: {conv_scienceqa_history}")
+                print(f"\n=== Turn Evaluation (Non-Stream) ===")
+                print(f"Child's Question: {latest_user_message}")
+                print(f"Evaluation Result: {child_question_level}")
                 current_state = "scienceqa"  # Stay in scienceqa state
                 state_prompt = state_prompt_classification(
                     current_state, child_question_level
@@ -621,8 +654,11 @@ def chat_completion():
                 "specific_causal",
             ]:
                 kg = knowledge_retrieval(messages, phenomenon)
-                print(f"kg: {kg}")
                 matched_kg = kg  # Store for database
+                print(
+                    f"Matched Knowledge Components: {matched_kg if matched_kg else 'None'}"
+                )
+                print("=" * 50)
                 if kg != "":
                     if child_question_level in [
                         "explanatory",
@@ -639,13 +675,16 @@ def chat_completion():
                         state_prompt = (
                             state_prompt
                             + "\n\n<Relevant Knowledge Components>\n"
-                            + format_kg("definition", kg, phenomenon)
+                            + format_kg("definition_and_explanation", kg, phenomenon)
                             + "\n</Relevant Knowledge Components>"
                         )
             elif current_state == "reflection":
                 kg = knowledge_retrieval(messages, phenomenon)
-                print(f"kg: {kg}")
                 matched_kg = kg  # Store for database
+                print(
+                    f"Matched Knowledge Components: {matched_kg if matched_kg else 'None'}"
+                )
+                print("=" * 50)
                 if kg != "":
                     state_prompt = (
                         state_prompt
@@ -883,11 +922,19 @@ def chat_completion_stream():
             if current_state == "scienceqa":
                 child_question_level = state_classification(state, messages, phenomenon)
                 conv_scienceqa_history.append(child_question_level)
+                print(f"\n=== Turn Evaluation (Stream) ===")
+                print(f"Child's Question: {latest_user_message}")
+                print(f"Evaluation Result: {child_question_level}")
                 state_prompt = state_prompt_classification(
                     current_state, child_question_level
                 )
             else:
                 child_question_level = None
+                if latest_user_message:
+                    print(f"\n=== Turn Evaluation (Stream) ===")
+                    print(f"Child's Question: {latest_user_message}")
+                    print(f"Evaluation Result: {eval_state}")
+                    print("=" * 50)
                 state_prompt = state_prompt_classification(current_state)
         else:
             qualified_question_num = sum(
@@ -900,9 +947,18 @@ def chat_completion_stream():
                 current_state = "reflection"
                 state_prompt = state_prompt_classification(current_state)
                 child_question_level = None
+                if latest_user_message:
+                    print(f"\n=== Turn Evaluation (Stream) ===")
+                    print(f"Child's Question: {latest_user_message}")
+                    print(f"Evaluation Result: reflection")
+                    print("=" * 50)
             else:
                 child_question_level = state_classification(state, messages, phenomenon)
                 conv_scienceqa_history.append(child_question_level)
+                print(f"\n=== Turn Evaluation (Stream) ===")
+                print(f"Child's Question: {latest_user_message}")
+                print(f"Evaluation Result: {child_question_level}")
+                print("=" * 50)
                 current_state = "scienceqa"
                 state_prompt = state_prompt_classification(
                     current_state, child_question_level
@@ -922,6 +978,10 @@ def chat_completion_stream():
             ]:
                 kg = knowledge_retrieval(messages, phenomenon)
                 matched_kg = kg  # Store for database
+                print(
+                    f"Matched Knowledge Components: {matched_kg if matched_kg else 'None'}"
+                )
+                print("=" * 50)
                 if kg != "":
                     if child_question_level in [
                         "explanatory",
@@ -938,12 +998,16 @@ def chat_completion_stream():
                         state_prompt = (
                             state_prompt
                             + "\n\n<Relevant Knowledge Components>\n"
-                            + format_kg("definition", kg, phenomenon)
+                            + format_kg("definition_and_explanation", kg, phenomenon)
                             + "\n</Relevant Knowledge Components>"
                         )
             elif current_state == "reflection":
                 kg = knowledge_retrieval(messages, phenomenon)
                 matched_kg = kg  # Store for database
+                print(
+                    f"Matched Knowledge Components: {matched_kg if matched_kg else 'None'}"
+                )
+                print("=" * 50)
                 if kg != "":
                     state_prompt = (
                         state_prompt

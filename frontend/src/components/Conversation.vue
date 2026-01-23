@@ -23,14 +23,19 @@
           <div class="message-text">
             <template v-if="msg.words">
               <span 
-                v-for="(word, wordIndex) in msg.words" 
+                v-for="(word, wordIndex) in renderWordsWithBoldState(msg.words)" 
                 :key="wordIndex"
-                :class="{ 'word-visible': word.visible, 'word-hidden': !word.visible }"
-              >
-                {{ word.text }}
-              </span>
+                :class="{ 
+                  'word-visible': word.visible, 
+                  'word-hidden': !word.visible,
+                  'bold-highlight': word.isBold,
+                  'bold-first': word.isFirstBold,
+                  'bold-last': word.isLastBold
+                }"
+                v-html="escapeHtml(word.text)"
+              ></span>
             </template>
-            <span v-else>{{ msg.content }}</span>
+            <span v-else v-html="renderTextWithBoldState(msg.content)"></span>
           </div>
           <div class="message-time">{{ msg.time }}</div>
         </div>
@@ -165,6 +170,133 @@ const transcribeWithBackend = async (audioBlob: Blob): Promise<string> => {
 
 const getCurrentTime = () => {
   return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+// Helper to escape HTML
+const escapeHtml = (str: string): string => {
+  if (!str) return ''
+  const div = document.createElement('div')
+  div.textContent = str
+  return div.innerHTML
+}
+
+// Simple bold state tracking: if word contains '**', toggle bold state
+// Process words array and mark which words should be bold, and track first/last in sequence
+const renderWordsWithBoldState = (words: Array<{text: string, visible: boolean}>): Array<{text: string, visible: boolean, isBold: boolean, isFirstBold?: boolean, isLastBold?: boolean}> => {
+  if (!words) return []
+  
+  let isBold = false
+  const processedWords: Array<{text: string, visible: boolean, isBold: boolean, isFirstBold?: boolean, isLastBold?: boolean}> = []
+  
+  // First pass: mark bold words
+  for (const word of words) {
+    let wordText = word.text
+    
+    // Check if this word contains '**'
+    if (wordText.includes('**')) {
+      // Count how many '**' markers are in this word
+      const markerCount = (wordText.match(/\*\*/g) || []).length
+      
+      // Remove '**' markers from the text
+      wordText = wordText.replace(/\*\*/g, '')
+      
+      let wordIsBold: boolean
+      
+      if (markerCount % 2 === 1) {
+        // This is an opening or closing marker (odd count)
+        // Opening marker: isBold is false → toggle to true, word should be true
+        // Closing marker: isBold is true → word should be true, toggle to false
+        if (!isBold) {
+          // Opening marker: toggle first, then use new state
+          isBold = true
+          wordIsBold = true
+        } else {
+          // Closing marker: use current state, then toggle
+          wordIsBold = true
+          isBold = false
+        }
+      } else {
+        // Even count: opening and closing in same word, state doesn't change
+        wordIsBold = isBold
+      }
+      
+      processedWords.push({
+        text: wordText,
+        visible: word.visible,
+        isBold: wordIsBold
+      })
+    } else {
+      // No marker, use current bold state (including for whitespace)
+      processedWords.push({
+        text: wordText,
+        visible: word.visible,
+        isBold: isBold
+      })
+    }
+  }
+  
+  // Second pass: mark first and last in each bold sequence
+  for (let i = 0; i < processedWords.length; i++) {
+    const word = processedWords[i]
+    if (!word) continue
+    
+    if (word.isBold) {
+      // Check if this is the first in sequence
+      const isFirst = i === 0 || !processedWords[i - 1]?.isBold
+      // Check if this is the last in sequence
+      const isLast = i === processedWords.length - 1 || !processedWords[i + 1]?.isBold
+      
+      if (isFirst) {
+        word.isFirstBold = true
+      }
+      if (isLast) {
+        word.isLastBold = true
+      }
+    }
+  }
+  
+  return processedWords
+}
+
+// Render text with bold state (for messages without words array)
+const renderTextWithBoldState = (text: string): string => {
+  if (!text) return ''
+  
+  let isBold = false
+  let result = ''
+  let currentText = ''
+  
+  // Simple state machine: track bold state and build HTML
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '*' && text[i + 1] === '*') {
+      // Found '**' marker
+      // Add accumulated text with current bold state
+      if (currentText) {
+        if (isBold) {
+          result += `<strong class="bold-highlight">${escapeHtml(currentText)}</strong>`
+        } else {
+          result += escapeHtml(currentText)
+        }
+        currentText = ''
+      }
+      // Toggle bold state
+      isBold = !isBold
+      i++ // Skip the second '*'
+    } else {
+      currentText += text[i]
+    }
+  }
+  
+  // Add remaining text
+  if (currentText) {
+    if (isBold) {
+      result += `<strong class="bold-highlight">${escapeHtml(currentText)}</strong>`
+    } else {
+      result += escapeHtml(currentText)
+    }
+  }
+  
+  return result
 }
 
 const scrollToBottom = async () => {
@@ -1108,6 +1240,28 @@ defineExpose({
   line-height: 1.4;
   margin-bottom: 5px;
   text-align: left;
+}
+
+.message-text :deep(.bold-highlight),
+.message-text .bold-highlight {
+  font-weight: 700;
+  color: #FFE600;
+  background: rgba(255, 230, 0, 0.2);
+  padding: 1px 0;
+  font-family: 'Roboto', sans-serif;
+  display: inline;
+}
+
+.message-text :deep(.bold-highlight.bold-first),
+.message-text .bold-highlight.bold-first {
+  border-top-left-radius: 3px;
+  border-bottom-left-radius: 3px;
+}
+
+.message-text :deep(.bold-highlight.bold-last),
+.message-text .bold-highlight.bold-last {
+  border-top-right-radius: 3px;
+  border-bottom-right-radius: 3px;
 }
 
 .word-visible {

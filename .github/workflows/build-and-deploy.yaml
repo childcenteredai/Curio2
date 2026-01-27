@@ -78,14 +78,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.HELM_CHARTS_GHA_PAT_TOKEN }}
         run: |
-          curl -X POST \
+          UPDATES=$(jq -n -c --arg vf "values-scienceqa.yaml" --arg t "${{ needs.build.outputs.tag }}" '[{values_file: $vf, tag: $t}]')
+          PAYLOAD=$(jq -n --arg updates "$UPDATES" '{"ref": "main", "inputs": {"updates": $updates}}')
+
+          curl -f -sS -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer $GH_TOKEN" \
             https://api.github.com/repos/ying-xu/helm-charts/actions/workflows/update-fullstack-app-image-tags.yaml/dispatches \
-            -d '{
-              "ref": "main",
-              "inputs": {
-                "new_tag": "${{ needs.build.outputs.tag }}",
-                "values_file_name": "values-scienceqa.yaml"
-              }
-            }'
+            -d "$PAYLOAD"

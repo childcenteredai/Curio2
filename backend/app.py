@@ -975,7 +975,7 @@ def chat_completion():
             original_content = content
             content = fix_scienceqa_bold_formatting(content)
             if content != original_content:
-                print(f"Fixed bold formatting in scienceqa response")
+                print("Fixed bold formatting in scienceqa response")
                 print(f"Original: {original_content[:100]}...")
                 print(f"Fixed: {content[:100]}...")
 
@@ -1352,7 +1352,7 @@ def chat_completion_stream():
                     original_content = full_content
                     full_content = fix_scienceqa_bold_formatting(full_content)
                     if full_content != original_content:
-                        print(f"Fixed bold formatting in scienceqa streaming response")
+                        print("Fixed bold formatting in scienceqa streaming response")
                         print(f"Original: {original_content[:100]}...")
                         print(f"Fixed: {full_content[:100]}...")
 

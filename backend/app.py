@@ -71,6 +71,7 @@ def get_user_from_request(request):
         "groups": payload.get("groups") or [],
     }
 
+
 # CORS configuration - allow both dev server and Docker frontend
 allowed_origins = [
     "http://localhost",  # Docker frontend (localhost without port)
@@ -301,7 +302,7 @@ def format_prompt(
         phenomenon_key = phenomenon_map.get(phenomenon, "Hair stands up near a balloon")
         concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
         all_concepts = extract_all_concepts_and_subconcepts(concepts_dict)
-        
+
         # Format the list as a comma-separated string for inline insertion
         concepts_list_str = ", ".join(all_concepts)
         state_prompt = state_prompt.replace("{kg_concepts}", concepts_list_str)
@@ -328,11 +329,18 @@ def build_structured_kg(concepts_dict):
         structured_kg[concept_name] = {}
         if "sub_concepts" in concept_data and concept_data["sub_concepts"]:
             sub_concepts_list = []
-            for sub_concept_name, sub_concept_data in concept_data["sub_concepts"].items():
+            for sub_concept_name, sub_concept_data in concept_data[
+                "sub_concepts"
+            ].items():
                 sub_concept_entry = {"name": sub_concept_name}
                 # Check if this sub-concept has its own sub-concepts
-                if "sub_concepts" in sub_concept_data and sub_concept_data["sub_concepts"]:
-                    sub_concept_entry["sub-concepts"] = list(sub_concept_data["sub_concepts"].keys())
+                if (
+                    "sub_concepts" in sub_concept_data
+                    and sub_concept_data["sub_concepts"]
+                ):
+                    sub_concept_entry["sub-concepts"] = list(
+                        sub_concept_data["sub_concepts"].keys()
+                    )
                 sub_concepts_list.append(sub_concept_entry)
             structured_kg[concept_name]["sub-concepts"] = sub_concepts_list
         else:
@@ -346,7 +354,7 @@ def extract_all_concepts_and_subconcepts(concepts_dict):
     Returns a flat list of all concept and sub-concept names.
     """
     all_concepts = []
-    
+
     def extract_recursive(concept_data, parent_name=None):
         """Recursively extract all concept and sub-concept names."""
         if isinstance(concept_data, dict):
@@ -355,13 +363,16 @@ def extract_all_concepts_and_subconcepts(concepts_dict):
                     for sub_concept_name, sub_concept_data in value.items():
                         all_concepts.append(sub_concept_name)
                         # Recursively extract nested sub-concepts
-                        if isinstance(sub_concept_data, dict) and "sub_concepts" in sub_concept_data:
+                        if (
+                            isinstance(sub_concept_data, dict)
+                            and "sub_concepts" in sub_concept_data
+                        ):
                             extract_recursive(sub_concept_data, sub_concept_name)
-    
+
     for concept_name, concept_data in concepts_dict.items():
         all_concepts.append(concept_name)
         extract_recursive(concept_data, concept_name)
-    
+
     return all_concepts
 
 
@@ -496,18 +507,18 @@ def fix_scienceqa_bold_formatting(text):
     1. Single asterisks (*text*) should be converted to double asterisks (**text**)
     2. Multi-word phrases should have each word separately bolded: **word1** **word2**
     3. Ensure all bold markers are properly paired
-    
+
     Args:
         text: Text that may have incorrect bold formatting
-        
+
     Returns:
         Text with corrected bold formatting
     """
     if not text:
         return ""
-    
+
     import re
-    
+
     # Step 1: Fix single asterisks (*text*) to double asterisks (**text**)
     # Match single asterisks that are not already part of **
     # Pattern: *word* but not **word** or *word** or **word*
@@ -519,11 +530,11 @@ def fix_scienceqa_bold_formatting(text):
             return " ".join([f"**{word}**" for word in words])
         else:
             return f"**{content}**"
-    
+
     # Replace single asterisks (not part of double asterisks)
     # This regex matches *word* but avoids matching **word** or *word** or **word*
-    text = re.sub(r'(?<!\*)\*([^*]+?)\*(?!\*)', fix_single_asterisks, text)
-    
+    text = re.sub(r"(?<!\*)\*([^*]+?)\*(?!\*)", fix_single_asterisks, text)
+
     # Step 2: Fix multi-word phrases that are bolded together (**word1 word2**)
     # Convert to **word1** **word2**
     def fix_multiword_bold(match):
@@ -533,15 +544,15 @@ def fix_scienceqa_bold_formatting(text):
             return " ".join([f"**{word}**" for word in words])
         else:
             return match.group(0)  # Keep original if single word
-    
+
     # Match **word1 word2 word3** patterns
-    text = re.sub(r'\*\*([^*]+?)\*\*', fix_multiword_bold, text)
-    
+    text = re.sub(r"\*\*([^*]+?)\*\*", fix_multiword_bold, text)
+
     # Step 3: Fix any remaining unpaired asterisks
     # Count asterisks and ensure they're paired
     # Remove any single asterisks that aren't part of a pair
-    text = re.sub(r'(?<!\*)\*(?!\*)', '', text)
-    
+    text = re.sub(r"(?<!\*)\*(?!\*)", "", text)
+
     return text
 
 
@@ -550,25 +561,25 @@ def clean_text_for_speech(text):
     Clean markdown formatting from text for TTS generation.
     Removes markdown bold markers (**text**) while preserving the text content.
     This ensures TTS can generate speech without interruption from formatting markers.
-    
+
     Args:
         text: Text with markdown formatting
-        
+
     Returns:
         Cleaned text suitable for TTS
     """
     if not text:
         return ""
-    
+
     # Remove markdown bold markers (**text**)
     # This handles both **text** and **text** **text** patterns
     cleaned = text.replace("**", "")
-    
+
     # Optionally clean other markdown formatting if needed
     # Remove markdown italic markers (*text* or _text_)
     # But be careful - single * might be used for emphasis in speech
     # For now, we only remove ** (double asterisks) as requested
-    
+
     return cleaned
 
 
@@ -1441,7 +1452,9 @@ def get_conversations():
             print(f"Found {len(conversations)} conversations for user_id: {user_id}")
         else:
             if not session_id:
-                return jsonify({"error": "session_id is required or user must be authenticated"}), 400
+                return jsonify(
+                    {"error": "session_id is required or user must be authenticated"}
+                ), 400
 
             print(f"Looking for conversations with session_id: {session_id}")
             conversations = (
@@ -1450,7 +1463,9 @@ def get_conversations():
                 .order_by(Conversation.updated_at.desc())
                 .all()
             )
-            print(f"Found {len(conversations)} conversations for session_id: {session_id}")
+            print(
+                f"Found {len(conversations)} conversations for session_id: {session_id}"
+            )
 
         # Debug: Check all conversations to see what session_ids exist
         all_convs = db.query(Conversation).limit(10).all()
@@ -1629,7 +1644,7 @@ def create_conversation():
             image_path=image_path,
             phenomenon=phenomenon,
             user_id=user_info.get("userId") if user_info else None,
-            user_email= user_info.get("email") if user_info else None,
+            user_email=user_info.get("email") if user_info else None,
             username=user_info.get("username") if user_info else None,
             user_groups=user_groups_json,
             started_at=datetime.utcnow(),

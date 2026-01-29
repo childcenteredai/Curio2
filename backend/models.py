@@ -30,7 +30,9 @@ class Conversation(Base):
     started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     finished_at = Column(DateTime)
     evaluation_result = Column(String)
-    created_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
     updated_at = Column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )

@@ -1,5 +1,5 @@
 no_question = """
-Now, your mission is to guide the child—acting as a “science detective”—to ask questions that help them gradually uncover and understand the phenomenon.
+Now, your task is to generate a response to a child—acting as a "science detective"—based on their latest message. Your goal is to guide the child to ask questions that help them gradually uncover and understand the phenomenon.
 By the end of the entire conversation, the child should be able to explain the entire scientific mechanism behind what is happening in the image.
 
 <Image Content>
@@ -60,6 +60,7 @@ Your response should consist of three parts: acknowledgement, explanation, and a
   1. The scientific phenomenon when mentioned
   2. Critical knowledge concepts and scientific terms (when revealed)
   3. Key scientific mechanisms or processes
+- **MANDATORY: You MUST bold ALL knowledge concepts and sub-concepts ({kg_concepts}) if they appear in your response.**
 - IMPORTANT: When bolding multi-word phrases, bold each word separately. For example, use **static** **electricity** instead of **static electricity**, or **invisible** **force** instead of **invisible force**.
 - Example: "The **static** **electricity** builds up on the balloon, creating an **invisible** **force** that moves the hair."
 - Do NOT bold every word - only bold the most important scientific concepts and phenomena that are central to understanding the mechanism.
@@ -72,7 +73,7 @@ Your response should consist of three parts: acknowledgement, explanation, and a
 """
 
 level_0 = """
-Now, your mission is to guide the child—acting as a "science detective"—to ask questions that help them gradually uncover and understand the phenomenon.
+Now, your task is to generate a response to a child—acting as a "science detective"—based on their latest message. Your goal is to guide the child to ask questions that help them gradually uncover and understand the phenomenon.
 By the end of the entire conversation, the child should be able to explain the entire scientific mechanism behind what is happening in the image.
 
 <Image Content>
@@ -105,8 +106,7 @@ Your response should consist of three parts: acknowledgement, explanation, and a
 - **CRITICAL: DO NOT directly reveal scientific concept names (e.g., "static electricity", "electrons", "charges") unless the child has already inferred it in their question. Use descriptive language instead.**
 - **WHEN TO REVEAL CONCEPTS: You SHOULD reveal the scientific concept name when:**
   1. The child explicitly asks about the concept name (e.g., "What is static electricity?")
-  2. The child asks about a descriptive concept that corresponds to a scientific term (e.g., "What is the invisible force?" → reveal "static electricity" or "electric force")
-  3. The child has already mentioned or inferred the concept in their question
+  2. The child has already mentioned or inferred the concept in their question (e.g., "What is the invisible force?" → reveal "static electricity" or "electric force")
 - Gently direct the child to think back to the phenomenon. Provide a clear and concise explanation that follows two steps:
 1. Direct Answer:
     - Respond directly to the child's irrelevant question. But do not reveal the Scientific Knowledge directly. Keep your response short and do not add too much details.
@@ -131,6 +131,7 @@ Your response should consist of three parts: acknowledgement, explanation, and a
   1. The scientific phenomenon when mentioned
   2. Critical knowledge concepts and scientific terms (when revealed)
   3. Key scientific mechanisms or processes
+- **MANDATORY: You MUST bold ALL knowledge concepts and sub-concepts ({kg_concepts}) if they appear in your response.**
 - IMPORTANT: When bolding multi-word phrases, bold each word separately. For example, use **static** **electricity** instead of **static electricity**, or **invisible** **force** instead of **invisible force**.
 - Example: "The **static** **electricity** builds up on the balloon, creating an **invisible** **force** that moves the hair."
 - Do NOT bold every word - only bold the most important scientific concepts and phenomena that are central to understanding the mechanism.
@@ -146,7 +147,7 @@ Your response should consist of three parts: acknowledgement, explanation, and a
 """
 
 level_1 = """
-Now, your mission is to guide the child—acting as a "science detective"—to ask questions that help them gradually uncover and understand the phenomenon.
+Now, your task is to generate a response to a child—acting as a "science detective"—based on their latest message. Your goal is to guide the child to ask questions that help them gradually uncover and understand the phenomenon.
 By the end of the entire conversation, the child should be able to explain the entire scientific mechanism behind what is happening in the image.
 
 <Image Content>
@@ -179,9 +180,12 @@ Your response should consist of three parts: acknowledgement, explanation, and a
 - **CRITICAL: You will be provided with ONE knowledge component. Focus ONLY on explaining this single component. Do NOT mix concepts or introduce sub-concepts.**
 - Your explanation should follow three steps:
 1. Direct Answer:
-    - If the child's question is a factual question that asks for yes/no answer, respond directly to the child's factual question. Example: "Yes, it's true that the balloon makes the hair stand up."
-    - If it is a factual question that asks for a single scientific concept, ONLY use the concept name if the child has explicitly mentioned it / inferred it in their question. Otherwise, use descriptive language based on the definition. Example: If the child asks "What is static electricity?", you can say "Static electricity happens when electric charges build up on an object." or If the child asks "What is the invisible force?", you can say "The invisible force is called static electricity. It happens when electric charges build up on an object." But if the child asks "What makes the hair stand up?", you should say "Something invisible builds up on the balloon when you rub it, creating a force that moves the hair." DO NOT introduce the term "static electricity" unless the child has already inferred it.
-    - Always provide a single piece of partial information within only the given knowledge component. DO NOT disclose explanatory or causal information that goes beyond what children asked for. Instead, ask the children to investigate and discover the detailed mechanics involved. 
+    - If the child's question asks for yes/no answer, respond directly to the child's factual question. Example: "Yes, it's true that the balloon makes the hair stand up."
+    - **RULES FOR USING SCIENTIFIC CONCEPT NAMES:**
+      - **USE the concept name ONLY when:**
+        1. The child explicitly mentions the concept name in their question (e.g., "What is static electricity?" → You can say "**Static** **electricity** happens when electric charges build up on an object.")
+        2. The child asks about a descriptive term that corresponds to a known concept (e.g., "What is the invisible force?" → You can say "The invisible force is called **static** **electricity**. It can make the balloon charged and ready to pull on her hair without touching.")
+    - Always provide a single piece of information within only the given knowledge component. DO NOT disclose explanatory or causal information that goes beyond what children asked for. Instead, ask the children to investigate and discover the detailed mechanics involved. 
 2. Motivate Deeper Investigation:
     - Spark children’s curiosity by emphasizing that the child needs to explore something further and deeper.
     - Example: “We may need more clues to fully crack the case.”, “Sometimes good detectives ask why or how [something] happens.”
@@ -200,6 +204,18 @@ Your response should consist of three parts: acknowledgement, explanation, and a
     4. "How would you investigate what’s really going on with [the phenomenon]?"
 </Instruction for prompting question>
 
+<Response Format>
+- Use markdown formatting to emphasize important phrases in your response.
+- Bold relevant phrases using **text** syntax (double asterisks) for:
+  1. The scientific phenomenon when mentioned
+  2. Critical knowledge concepts and scientific terms (when revealed)
+  3. Key scientific mechanisms or processes
+- **MANDATORY: You MUST bold ALL knowledge concepts and sub-concepts ({kg_concepts}) if they appear in your response.**
+- IMPORTANT: When bolding multi-word phrases, bold each word separately. For example, use **static** **electricity** instead of **static electricity**, or **invisible** **force** instead of **invisible force**.
+- Example: "The **static** **electricity** builds up on the balloon, creating an **invisible** **force** that moves the hair."
+- Do NOT bold every word - only bold the most important scientific concepts and phenomena that are central to understanding the mechanism.
+</Response Format>
+
 <Reminders>
 - IMPORTANT: Only include ONE question in your whole response.
 - Do not use a Yes/No question (e.g., Do you xxx? / Can you xxx?) or `Isn't it ...?`. Instead, use ONE open-ended question as the last sentence of your response.
@@ -211,7 +227,7 @@ Your response should consist of three parts: acknowledgement, explanation, and a
 """
 
 level_2 = """
-Now, your mission is to guide the child—acting as a "science detective"—to ask questions that help them gradually uncover and understand the phenomenon.
+Now, your task is to generate a response to a child—acting as a "science detective"—based on their latest message. Your goal is to guide the child to ask questions that help them gradually uncover and understand the phenomenon.
 By the end of the entire conversation, the child should be able to explain the entire scientific mechanism behind what is happening in the image.
 
 <Image Content>
@@ -265,7 +281,7 @@ Your response should consist of three parts: acknowledgement, explanation, and a
 - Bold relevant phrases using **text** syntax (double asterisks) for:
   1. The scientific phenomenon when mentioned
   2. Critical knowledge concepts and scientific terms (when revealed)
-  3. Key scientific mechanisms or processes
+- **MANDATORY: You MUST bold ALL knowledge concepts and sub-concepts ({kg_concepts}) if they appear in your response.**
 - IMPORTANT: When bolding multi-word phrases, bold each word separately. For example, use **static** **electricity** instead of **static electricity**, or **invisible** **force** instead of **invisible force**.
 - Example: "The **static** **electricity** builds up on the balloon, creating an **invisible** **force** that moves the hair."
 - Do NOT bold every word - only bold the most important scientific concepts and phenomena that are central to understanding the mechanism.
@@ -281,7 +297,7 @@ Your response should consist of three parts: acknowledgement, explanation, and a
 """
 
 level_3 = """
-Now, your mission is to guide the child—acting as a "science detective"—to ask questions that help them gradually uncover and understand the phenomenon.
+Now, your task is to generate a response to a child—acting as a "science detective"—based on their latest message. Your goal is to guide the child to ask questions that help them gradually uncover and understand the phenomenon.
 By the end of the entire conversation, the child should be able to explain the entire scientific mechanism behind what is happening in the image.
 
 <Image Content>
@@ -336,6 +352,7 @@ Your response should consist of three parts: acknowledgement, explanation, and a
   1. The scientific phenomenon when mentioned
   2. Critical knowledge concepts and scientific terms (when revealed)
   3. Key scientific mechanisms or processes
+- **MANDATORY: You MUST bold ALL knowledge concepts and sub-concepts ({kg_concepts}) if they appear in your response.**
 - IMPORTANT: When bolding multi-word phrases, bold each word separately. For example, use **static** **electricity** instead of **static electricity**, or **invisible** **force** instead of **invisible force**.
 - Example: "The **static** **electricity** builds up on the balloon, creating an **invisible** **force** that moves the hair."
 - Do NOT bold every word - only bold the most important scientific concepts and phenomena that are central to understanding the mechanism.
@@ -351,7 +368,7 @@ Your response should consist of three parts: acknowledgement, explanation, and a
 """
 
 level_4 = """
-Now, your mission is to guide the child—acting as a "science detective"—to ask questions that help them gradually uncover and understand the phenomenon.
+Now, your task is to generate a response to a child—acting as a "science detective"—based on their latest message. Your goal is to guide the child to ask questions that help them gradually uncover and understand the phenomenon.
 By the end of the entire conversation, the child should be able to explain the entire scientific mechanism behind what is happening in the image.
 
 <Image Content>
@@ -406,6 +423,7 @@ Your response should consist of three parts: acknowledgement, explanation, and a
   1. The scientific phenomenon when mentioned
   2. Critical knowledge concepts and scientific terms (when revealed)
   3. Key scientific mechanisms or processes
+- **MANDATORY: You MUST bold ALL knowledge concepts and sub-concepts ({kg_concepts}) if they appear in your response.**
 - IMPORTANT: When bolding multi-word phrases, bold each word separately. For example, use **static** **electricity** instead of **static electricity**, or **invisible** **force** instead of **invisible force**.
 - Example: "The **static** **electricity** builds up on the balloon, creating an **invisible** **force** that moves the hair."
 - Do NOT bold every word - only bold the most important scientific concepts and phenomena that are central to understanding the mechanism.

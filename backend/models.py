@@ -22,10 +22,15 @@ class Conversation(Base):
     session_id = Column(String, nullable=False)
     image_path = Column(String)
     phenomenon = Column(String)
+    # User information from authentication system (optional, for logged-in users)
+    user_id = Column(String)  # From JWT payload.sub
+    user_email = Column(String)  # From JWT payload.email
+    username = Column(String)  # From JWT payload.preferred_username or payload.name
+    user_groups = Column(Text)  # JSON string of groups from JWT payload.groups
     started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     finished_at = Column(DateTime)
     evaluation_result = Column(String)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     updated_at = Column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )

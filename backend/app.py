@@ -23,6 +23,54 @@ from prompts.scienceqa import level_0, level_1, level_2, level_3, level_4, no_qu
 load_dotenv()
 app = Flask(__name__)
 
+
+def decode_jwt(token):
+    """Decode JWT token without signature verification."""
+    try:
+        parts = token.split(".")
+        if len(parts) != 3:
+            return None
+
+        # JWT payload is base64url encoded (may be missing padding)
+        padded = parts[1] + "=" * (-len(parts[1]) % 4)
+        payload_bytes = base64.urlsafe_b64decode(padded.encode("utf-8"))
+        return json.loads(payload_bytes.decode("utf-8"))
+    except Exception as e:
+        print(f"Error decoding JWT: {e}")
+        return None
+
+
+def get_user_from_request(request):
+    """
+    Extract user info from JWT in the header defined by ID_TOKEN_HEADER_NAME env var.
+
+    Expected payload fields:
+      - userId: payload.sub
+      - email: payload.email
+      - username: payload.preferred_username or payload.name
+      - groups: payload.groups (list)
+
+    Returns:
+      dict with keys: userId, email, username, groups
+      or None if token is missing/invalid.
+    """
+    header_name = os.getenv("ID_TOKEN_HEADER_NAME", "x-id-token")
+    token = request.headers.get(header_name)
+
+    if not token:
+        return None
+
+    payload = decode_jwt(token)
+    if not payload or not payload.get("sub"):
+        return None
+
+    return {
+        "userId": payload.get("sub"),
+        "email": payload.get("email"),
+        "username": payload.get("preferred_username") or payload.get("name"),
+        "groups": payload.get("groups") or [],
+    }
+
 # CORS configuration - allow both dev server and Docker frontend
 allowed_origins = [
     "http://localhost",  # Docker frontend (localhost without port)
@@ -242,6 +290,22 @@ def format_prompt(
             "<Mechanism Context>\n" + mechanism,
         )
 
+    if "{kg_concepts}" in state_prompt:
+        # Load knowledge base and extract all concepts and sub-concepts
+        knowledge_base = json.load(open("knowledge/kg.json", "r"))
+        phenomenon_map = {
+            "balloon": "Hair stands up near a balloon",
+            "bend": "Bending Water Stream with a Comb",
+            "pepper": "Pepper Leaping up to Spoon",
+        }
+        phenomenon_key = phenomenon_map.get(phenomenon, "Hair stands up near a balloon")
+        concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
+        all_concepts = extract_all_concepts_and_subconcepts(concepts_dict)
+        
+        # Format the list as a comma-separated string for inline insertion
+        concepts_list_str = ", ".join(all_concepts)
+        state_prompt = state_prompt.replace("{kg_concepts}", concepts_list_str)
+
     if "<Child's Question>" in state_prompt:
         state_prompt = state_prompt.replace(
             "<Child's Question>",
@@ -252,6 +316,53 @@ def format_prompt(
             "<Conversation History>", "<Conversation History>\n" + json.dumps(messages)
         )
     return state_prompt
+
+
+def build_structured_kg(concepts_dict):
+    """
+    Build a structured knowledge graph showing concept/sub-concept hierarchy.
+    Returns a dictionary with concepts and their sub-concepts.
+    """
+    structured_kg = {}
+    for concept_name, concept_data in concepts_dict.items():
+        structured_kg[concept_name] = {}
+        if "sub_concepts" in concept_data and concept_data["sub_concepts"]:
+            sub_concepts_list = []
+            for sub_concept_name, sub_concept_data in concept_data["sub_concepts"].items():
+                sub_concept_entry = {"name": sub_concept_name}
+                # Check if this sub-concept has its own sub-concepts
+                if "sub_concepts" in sub_concept_data and sub_concept_data["sub_concepts"]:
+                    sub_concept_entry["sub-concepts"] = list(sub_concept_data["sub_concepts"].keys())
+                sub_concepts_list.append(sub_concept_entry)
+            structured_kg[concept_name]["sub-concepts"] = sub_concepts_list
+        else:
+            structured_kg[concept_name]["sub-concepts"] = []
+    return structured_kg
+
+
+def extract_all_concepts_and_subconcepts(concepts_dict):
+    """
+    Extract all concept and sub-concept names from the knowledge graph.
+    Returns a flat list of all concept and sub-concept names.
+    """
+    all_concepts = []
+    
+    def extract_recursive(concept_data, parent_name=None):
+        """Recursively extract all concept and sub-concept names."""
+        if isinstance(concept_data, dict):
+            for key, value in concept_data.items():
+                if key == "sub_concepts" and isinstance(value, dict):
+                    for sub_concept_name, sub_concept_data in value.items():
+                        all_concepts.append(sub_concept_name)
+                        # Recursively extract nested sub-concepts
+                        if isinstance(sub_concept_data, dict) and "sub_concepts" in sub_concept_data:
+                            extract_recursive(sub_concept_data, sub_concept_name)
+    
+    for concept_name, concept_data in concepts_dict.items():
+        all_concepts.append(concept_name)
+        extract_recursive(concept_data, concept_name)
+    
+    return all_concepts
 
 
 def knowledge_retrieval(messages, phenomenon="balloon"):
@@ -269,18 +380,20 @@ def knowledge_retrieval(messages, phenomenon="balloon"):
     }
     phenomenon_key = phenomenon_map.get(phenomenon, "Hair stands up near a balloon")
 
-    knowledge_concepts = list(knowledge_base[phenomenon_key]["concepts"].keys())
+    # Build structured KG with concept/sub-concept hierarchy
+    concepts_dict = knowledge_base[phenomenon_key]["concepts"]
+    structured_kg = build_structured_kg(concepts_dict)
 
     # Calculate conversation turn count (each user message + assistant response = 1 turn)
     # Count user messages as turns
     turn_count = sum(1 for msg in messages if msg.get("role") == "user")
 
-    # Add turn count information to the prompt
+    # Add structured KG information to the prompt
     retrieval_prompt = (
         retrieval_prompt
-        + "\n\n<Knowledge Components (ordered by complexity: simpler concepts first, advanced concepts later)>\n"
-        + json.dumps(knowledge_concepts)
-        + "\n</Knowledge Components>"
+        + "\n\n<Knowledge Graph Structure (concepts with their sub-concepts)>\n"
+        + json.dumps(structured_kg, indent=2)
+        + "\n</Knowledge Graph Structure>"
         + f"\n\n<Conversation Turn Count>\nCurrent turn: {turn_count}\n</Conversation Turn Count>"
     )
 
@@ -376,6 +489,89 @@ def check_moderation(text):
         return False, {}
 
 
+def fix_scienceqa_bold_formatting(text):
+    """
+    Fix bold formatting in scienceqa responses.
+    Rules:
+    1. Single asterisks (*text*) should be converted to double asterisks (**text**)
+    2. Multi-word phrases should have each word separately bolded: **word1** **word2**
+    3. Ensure all bold markers are properly paired
+    
+    Args:
+        text: Text that may have incorrect bold formatting
+        
+    Returns:
+        Text with corrected bold formatting
+    """
+    if not text:
+        return ""
+    
+    import re
+    
+    # Step 1: Fix single asterisks (*text*) to double asterisks (**text**)
+    # Match single asterisks that are not already part of **
+    # Pattern: *word* but not **word** or *word** or **word*
+    def fix_single_asterisks(match):
+        content = match.group(1)
+        # If it's a multi-word phrase, split and bold each word separately
+        words = content.split()
+        if len(words) > 1:
+            return " ".join([f"**{word}**" for word in words])
+        else:
+            return f"**{content}**"
+    
+    # Replace single asterisks (not part of double asterisks)
+    # This regex matches *word* but avoids matching **word** or *word** or **word*
+    text = re.sub(r'(?<!\*)\*([^*]+?)\*(?!\*)', fix_single_asterisks, text)
+    
+    # Step 2: Fix multi-word phrases that are bolded together (**word1 word2**)
+    # Convert to **word1** **word2**
+    def fix_multiword_bold(match):
+        content = match.group(1)
+        words = content.split()
+        if len(words) > 1:
+            return " ".join([f"**{word}**" for word in words])
+        else:
+            return match.group(0)  # Keep original if single word
+    
+    # Match **word1 word2 word3** patterns
+    text = re.sub(r'\*\*([^*]+?)\*\*', fix_multiword_bold, text)
+    
+    # Step 3: Fix any remaining unpaired asterisks
+    # Count asterisks and ensure they're paired
+    # Remove any single asterisks that aren't part of a pair
+    text = re.sub(r'(?<!\*)\*(?!\*)', '', text)
+    
+    return text
+
+
+def clean_text_for_speech(text):
+    """
+    Clean markdown formatting from text for TTS generation.
+    Removes markdown bold markers (**text**) while preserving the text content.
+    This ensures TTS can generate speech without interruption from formatting markers.
+    
+    Args:
+        text: Text with markdown formatting
+        
+    Returns:
+        Cleaned text suitable for TTS
+    """
+    if not text:
+        return ""
+    
+    # Remove markdown bold markers (**text**)
+    # This handles both **text** and **text** **text** patterns
+    cleaned = text.replace("**", "")
+    
+    # Optionally clean other markdown formatting if needed
+    # Remove markdown italic markers (*text* or _text_)
+    # But be careful - single * might be used for emphasis in speech
+    # For now, we only remove ** (double asterisks) as requested
+    
+    return cleaned
+
+
 @app.route("/api/health", methods=["GET"])
 def health():
     """Health check endpoint"""
@@ -430,6 +626,9 @@ def chat_completion():
     """Generate chat response and a next_state using OpenAI"""
     db = SessionLocal()
     try:
+        # Extract user info from JWT (if available)
+        user_info = get_user_from_request(request)
+
         # Record start time for latency tracking
         start_time = time.time()
         request_session_id = request.remote_addr  # Fallback session identifier
@@ -480,11 +679,24 @@ def chat_completion():
             print(
                 f"Creating new conversation {conversation_id} with session_id: {final_session_id}"
             )
+
+            # Prepare user info for database (optional, only if token is present)
+            user_groups_json = None
+            if user_info and user_info.get("groups"):
+                try:
+                    user_groups_json = json.dumps(user_info["groups"])
+                except (TypeError, ValueError):
+                    user_groups_json = None
+
             conversation = Conversation(
                 id=conversation_id,
                 session_id=final_session_id,
                 image_path=image_path,
                 phenomenon=phenomenon,
+                user_id=user_info.get("userId") if user_info else None,
+                user_email=user_info.get("email") if user_info else None,
+                username=user_info.get("username") if user_info else None,
+                user_groups=user_groups_json,
                 started_at=datetime.utcnow(),
             )
             db.add(conversation)
@@ -502,6 +714,16 @@ def chat_completion():
             print(
                 f"Found existing conversation {conversation_id} with session_id: {conversation.session_id}"
             )
+            # Backfill user info if it is missing and we have it from JWT
+            if user_info and not conversation.user_id:
+                conversation.user_id = user_info.get("userId")
+                conversation.user_email = user_info.get("email")
+                conversation.username = user_info.get("username")
+                if user_info.get("groups"):
+                    try:
+                        conversation.user_groups = json.dumps(user_info["groups"])
+                    except (TypeError, ValueError):
+                        pass
             # Commit conversation immediately so it exists when messages are added
             try:
                 db.commit()
@@ -748,6 +970,15 @@ def chat_completion():
 
         content = response.choices[0].message.content or ""
 
+        # Fix bold formatting for scienceqa responses
+        if current_state == "scienceqa":
+            original_content = content
+            content = fix_scienceqa_bold_formatting(content)
+            if content != original_content:
+                print(f"Fixed bold formatting in scienceqa response")
+                print(f"Original: {original_content[:100]}...")
+                print(f"Fixed: {content[:100]}...")
+
         # Determine assistant evaluation result (only in scienceqa phase)
         assistant_evaluation_result = None
         if current_state == "scienceqa" and child_question_level:
@@ -796,6 +1027,9 @@ def chat_completion_stream():
     """Generate chat response with streaming using OpenAI"""
     db = SessionLocal()
     try:
+        # Extract user info from JWT (if available)
+        user_info = get_user_from_request(request)
+
         # Record start time for latency tracking
         start_time = time.time()
         request_session_id = request.remote_addr
@@ -846,11 +1080,24 @@ def chat_completion_stream():
             print(
                 f"Creating new conversation {conversation_id} with session_id: {final_session_id}"
             )
+
+            # Prepare user info for database (optional, only if token is present)
+            user_groups_json = None
+            if user_info and user_info.get("groups"):
+                try:
+                    user_groups_json = json.dumps(user_info["groups"])
+                except (TypeError, ValueError):
+                    user_groups_json = None
+
             conversation = Conversation(
                 id=conversation_id,
                 session_id=final_session_id,
                 image_path=image_path,
                 phenomenon=phenomenon,
+                user_id=user_info.get("userId") if user_info else None,
+                user_email=user_info.get("email") if user_info else None,
+                username=user_info.get("username") if user_info else None,
+                user_groups=user_groups_json,
                 started_at=datetime.utcnow(),
             )
             db.add(conversation)
@@ -868,6 +1115,16 @@ def chat_completion_stream():
             print(
                 f"Found existing conversation {conversation_id} with session_id: {conversation.session_id}"
             )
+            # Backfill user info if it is missing and we have it from JWT
+            if user_info and not conversation.user_id:
+                conversation.user_id = user_info.get("userId")
+                conversation.user_email = user_info.get("email")
+                conversation.username = user_info.get("username")
+                if user_info.get("groups"):
+                    try:
+                        conversation.user_groups = json.dumps(user_info["groups"])
+                    except (TypeError, ValueError):
+                        pass
 
         # Check for harmful content
         if latest_user_message:
@@ -1090,6 +1347,15 @@ def chat_completion_stream():
                         full_content += token
                         yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
 
+                # Fix bold formatting for scienceqa responses
+                if current_state == "scienceqa":
+                    original_content = full_content
+                    full_content = fix_scienceqa_bold_formatting(full_content)
+                    if full_content != original_content:
+                        print(f"Fixed bold formatting in scienceqa streaming response")
+                        print(f"Original: {original_content[:100]}...")
+                        print(f"Fixed: {full_content[:100]}...")
+
                 # Determine assistant evaluation result (only in scienceqa phase)
                 assistant_evaluation_result = None
                 if current_state == "scienceqa" and saved_child_question_level:
@@ -1156,23 +1422,35 @@ def chat_completion_stream():
 
 @app.route("/api/conversations", methods=["GET"])
 def get_conversations():
-    """Get all conversations for a session"""
+    """Get all conversations for a session or authenticated user"""
     db = SessionLocal()
     try:
+        # Try to get user info from JWT first
+        user_info = get_user_from_request(request)
         session_id = request.args.get("session_id")
-        if not session_id:
-            return jsonify({"error": "session_id is required"}), 400
 
-        print(f"Looking for conversations with session_id: {session_id}")
+        if user_info and user_info.get("userId"):
+            user_id = user_info["userId"]
+            print(f"Looking for conversations with user_id: {user_id}")
+            conversations = (
+                db.query(Conversation)
+                .filter(Conversation.user_id == user_id)
+                .order_by(Conversation.updated_at.desc())
+                .all()
+            )
+            print(f"Found {len(conversations)} conversations for user_id: {user_id}")
+        else:
+            if not session_id:
+                return jsonify({"error": "session_id is required or user must be authenticated"}), 400
 
-        conversations = (
-            db.query(Conversation)
-            .filter(Conversation.session_id == session_id)
-            .order_by(Conversation.updated_at.desc())
-            .all()
-        )
-
-        print(f"Found {len(conversations)} conversations for session_id: {session_id}")
+            print(f"Looking for conversations with session_id: {session_id}")
+            conversations = (
+                db.query(Conversation)
+                .filter(Conversation.session_id == session_id)
+                .order_by(Conversation.updated_at.desc())
+                .all()
+            )
+            print(f"Found {len(conversations)} conversations for session_id: {session_id}")
 
         # Debug: Check all conversations to see what session_ids exist
         all_convs = db.query(Conversation).limit(10).all()
@@ -1189,6 +1467,9 @@ def get_conversations():
                 {
                     "id": conv.id,
                     "session_id": conv.session_id,
+                    "user_id": conv.user_id,
+                    "user_email": conv.user_email,
+                    "username": conv.username,
                     "image_path": conv.image_path,
                     "phenomenon": conv.phenomenon,
                     "started_at": conv.started_at.isoformat()
@@ -1296,6 +1577,9 @@ def create_conversation():
     """Create a new conversation"""
     db = SessionLocal()
     try:
+        # Extract user info from JWT (if available)
+        user_info = get_user_from_request(request)
+
         data = request.get_json()
         conversation_id = data.get("id") or str(uuid.uuid4())
         session_id = data.get("session_id")
@@ -1331,11 +1615,23 @@ def create_conversation():
         else:
             phenomenon = "balloon"  # default fallback
 
+        # Prepare user info for database (optional, only if token is present)
+        user_groups_json = None
+        if user_info and user_info.get("groups"):
+            try:
+                user_groups_json = json.dumps(user_info["groups"])
+            except (TypeError, ValueError):
+                user_groups_json = None
+
         conversation = Conversation(
             id=conversation_id,
             session_id=session_id,
             image_path=image_path,
             phenomenon=phenomenon,
+            user_id=user_info.get("userId") if user_info else None,
+            user_email= user_info.get("email") if user_info else None,
+            username=user_info.get("username") if user_info else None,
+            user_groups=user_groups_json,
             started_at=datetime.utcnow(),
         )
         db.add(conversation)
@@ -1496,11 +1792,16 @@ def generate_speech():
         if not text:
             return jsonify({"error": "No text provided"}), 400
 
+        # Clean markdown formatting from text for TTS
+        # This removes ** markers that can cause TTS to break
+        # The original text with markdown is preserved in the database/display
+        cleaned_text = clean_text_for_speech(text)
+
         # Generate speech using OpenAI TTS
         response = client.audio.speech.create(
             model=OPENAI_TTS_MODEL,
             voice=OPENAI_TTS_VOICE,
-            input=text,
+            input=cleaned_text,
             response_format="mp3",
         )
 

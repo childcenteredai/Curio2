@@ -1,211 +1,112 @@
 {
-  "Hair stands up near a balloon": {
-    "mechanism": "When the child rubs a balloon on her fleece sweater, the rubbing gives energy to tiny negative charges called electrons, making them move from the fleece onto the balloon. This movement builds up static electricity, leaving the balloon with extra electrons (a negative charge) and the sweater with fewer (a positive charge). When the charged balloon is brought near the child’s hair, it pulls on the hair without touching it. Each strand of hair also carries a similar charge, so the hairs push away from one another and spread out like a spiky crown. Fleece helps this happen because it easily lets electrons move, while cotton does not. Children can test when static electricity happens and how strong it is by changing the material, the number of rubs, how close the balloon is to the hair, or their own creative ideas.",
+  "Hair Stands Up Near a Balloon": {
+    "mechanism": "When a child rubs a balloon on a fleece sweater, the rubbing gives energy that makes tiny negative particles called electrons move from the sweater onto the balloon. Because of this movement, the balloon ends up with more negative charge and the sweater with less, so the charges are no longer balanced and the balloon becomes charged for a short time. Everything around the balloon, including the child’s hair, has positive and negative charges inside it. When the charged balloon is held near the hair without touching it, it can push or pull on those charges. The balloon has more negative charge, and the hair is pulled toward it. At the same time, each strand of hair has the same kind of charge, so the hairs push away from one another and spread out like a spiky crown. This works best with a balloon and fleece because those materials let charges move and stay in place for a while, and children can explore this by changing how much they rub the balloon, how close it is to the hair, or what materials they test.",
     "concepts": {
-      "static electricity": {
-        "definition": "Static electricity happens when electric charges build up on an object because of electrons moving between materials or shifting in place. This can happen when objects rub, touch, or even come close together. When this build-up occurs, one object can gain extra charge and the other lose some, creating an invisible push or pull between them.",
-        "explanation": "When the child rubs the balloon on her fleece sweater, tiny negative charges called electrons move from the sweater onto the balloon. This movement builds up static electricity, leaving the balloon charged and ready to pull on her hair without touching. The sibling’s cotton shirt doesn’t move many electrons to the balloon, so it doesn’t build up much static electricity.",
-        "ngss": [
-          "3-PS2-3",
-          "4-PS3-2"
-        ],
-        "sub_concepts": {
-          "charges": {
-            "definition": "Charge is a property of matter that happens when tiny particles called electrons move from one object to another. This movement makes one object have extra electrons (a negative charge) and the other have fewer (a positive charge). The difference in charge lets objects interact with each other in special ways.",
-            "explanation": "Rubbing moves tiny negative charges called electrons from one object to another. The balloon gains extra electrons and becomes negatively charged, while the hair loses some and becomes slightly positive. This difference in charge sets up the conditions for the balloon to pull on other objects.",
-            "ngss": [
-              "3-PS2-4"
-            ],
-            "sub_concepts": {
-              "electrons": {
-                "definition": "Electrons are tiny, invisible bits of negative charge that can move from one object to another. When they move, they can make objects gain or lose charge.",
-                "explanation": "When the balloon is rubbed on the fleece sweater, tiny bits of negative charge move from the sweater onto the balloon. This gives the balloon extra negative charge and leaves the sweater with less. Rubbing on cotton doesn’t move as much charge, so the balloon stays mostly uncharged.",
-                "ngss": [
-                  "5-PS1-1"
-                ]
-              },
-              "static charge": {
-                "definition": "Static charge happens when electrons move from one object to another, creating an imbalance of charges. One object ends up with extra electrons (negative charge), and the other has fewer electrons (positive charge). This uneven build-up of charge stays in place for a while, giving a chance for the charged objects to affect nearby things before the charge disappears.",
-                "explanation": "The balloon rubbed on fleece ends up with extra electrons, while the hair has fewer. This imbalance of charge makes both objects charged for a while. The charged balloon can affect nearby things, such as pulling on the hair, making it rise and spread apart. The sibling’s cotton shirt doesn’t cause this imbalance, so her balloon stays neutral and her hair doesn’t move.",
-                "ngss": [
-                  "4-PS3-2"
-                ]
-              }
-            }
-          },
-          "attraction & repulsion": {
-            "definition": "Attraction and repulsion happen when electric charges create invisible pushes and pulls between objects. Opposite charges (positive and negative) pull toward each other, and like charges (two positives or two negatives) push away. These pushes and pulls can happen even when the objects don’t touch.",
-            "explanation": "The negatively charged balloon attracts the nearby positively charged or polarized hair, lifting it up. At the same time, each hair strand has the same type of charge, so they repel one another, forming a 'spiky crown.' The sibling’s uncharged balloon does not cause any attraction or repulsion, so her hair stays flat.",
-            "ngss": [
-              "3-PS2-4"
-            ]
-          }
-        }
+      "Force at a Distance": {
+        "definition": "Charged objects can push or pull on other objects without touching them.",
+        "explanation": "The charged balloon pushes and pulls on the charges inside the child’s hair, even though it does not touch the hair. This invisible force is strong enough to lift the hair and make it move."
       },
-      "energy from rubbing": {
-        "definition": "Rubbing gives energy to tiny charges and helps them move from one material to another. The movement of these charges builds up static electricity.",
-        "explanation": "Rubbing the balloon on fleece gives the electrons enough energy to move from the fleece onto the balloon, creating a strong static charge. Rubbing on cotton doesn’t transfer much energy, so very few electrons move, and no hair stands up.",
-        "ngss": [
-          "4-PS3-2"
-        ]
+      "Charges": {
+        "definition": "All objects are made of tiny particles that have an electric charge. There are two kinds of charge: positive and negative. Most of the time, objects have equal amounts of both, so the charges are balanced and nothing special happens.",
+        "explanation": "The balloon, sweater, and hair all contain tiny positive and negative charges. Before rubbing, these charges are balanced, so the hair hangs down normally."
       },
-      "material properties": {
-        "definition": "Static electricity only works with certain kinds of materials that let charges move between them and keep those charges for a while.",
-        "explanation": "Fleece is a synthetic material that donates electrons easily, so rubbing a balloon on fleece creates strong static electricity. Cotton is a natural fiber that does not transfer electrons as easily, so rubbing a balloon on cotton produces little or no static charge. This explains why one child’s balloon makes hair stand up while the sibling’s balloon does not, even though both have the same hair type and color.",
-        "ngss": [
-          "4-PS3-2"
-        ]
+      "Electrons": {
+        "definition": "Electrons are tiny particles that carry a negative charge. Negative does not mean bad—it just means this is one of the two kinds of charge. Electrons can move from one object to another, especially when objects rub together.",
+        "explanation": "When the balloon is rubbed on the fleece sweater, electrons move from the sweater onto the balloon. Because electrons have moved, the balloon and the sweater no longer have the same amount of negative charge."
       },
-      "testing the effect of static electricity": {
+      "Energy from Rubbing": {
+        "definition": "Rubbing gives energy that helps electrons, tiny negative charges, move from one material to another. This movement of these charges is what builds up static electricity we see, like objects pulling or pushing without touching.",
+        "explanation": "Rubbing the balloon on the fleece gives electrons enough energy to move from the sweater onto the balloon. Without rubbing, the electrons would stay mostly in place, and the balloon would not affect the hair."
+      },
+      "Imbalance of Charges": {
+        "definition": "An imbalance of charges happens when electrons move so that one object has more negative charge and another has less. When this happens, the object is said to be charged. This charged state, which is called static electricity, lasts for a short time before it slowly goes away.",
+        "explanation": "After rubbing, the balloon has more electrons than before, and the sweater has fewer. This imbalance of charge is called static electricity. Because the charges are no longer balanced, the balloon becomes charged and can cause effects like lifting and spreading the hair for a short time."
+      },
+      "Attraction & Repulsion": {
+        "definition": "Electric charges can push or pull on other objects without touching them. When two objects have different kinds of charge (positive and negative), they pull toward each other. When two objects have the same kind of charge (two positives or two negatives), they push away from each other. These pushes and pulls can happen even when the objects don’t touch.",
+        "explanation": "The charged balloon and the hair have different kinds of charge. Different kinds of charge mean one is more positive and the other is more negative. In this situation, the balloon has a more negative charge, and the hair has a more positive charge. Because opposite charges pull toward each other, they pull toward each other, even though they do not touch. At the same time, each strand of hair has the same kind of positive charges, so the hairs push away from one another and spread out."
+      },
+      "Material Properties": {
+        "definition": "In static electricity, some materials make it easier for electrons, tiny negative charges, to move and stay on them for a while. Other materials do not. This is why rubbing certain objects works better than others.",
+        "explanation": "Balloons and fleece sweater allow electrons to move and stay in place after rubbing. Cotton does not hold those electric charges well, so rubbing a balloon on cotton does not make hair stand up as much. This explains why one child’s balloon makes hair stand up while the sibling’s balloon does not, even though both have the same hair type and color."
+      },
+      "Testing the Effect of Static Electricity": {
         "definition": "We can explore static electricity by changing what we do and watching what happens. By testing one thing at a time, we can find out what affects how strong the effect is.",
-        "explanation": "Children can test different measurable effects to explore static electricity. Examples include: (1) how many rubs on fleece vs. cotton are needed to make hair stand up, (2) how high or wide the hair spreads, or (3) how far the balloon can be from the hair and still make it move. Children may also invent their own ways to measure static electricity, such as how long the hair stays up, how many hairs are lifted, or which material makes the strongest effect.",
-        "variables": [
-          "number of rubs",
-          "height/angle of hair spread",
-          "balloon–hair distance",
-          "other child-invented measures"
-        ]
+        "explanation": "Children can test how the effect changes by rubbing the balloon more or fewer times, holding it closer or farther from the hair, or trying different materials. They can also observe how high the hair stands up, how long it stays lifted, or which material makes the strongest effect.."
       }
     }
   },
-  "Pepper Leaping up to Spoon": {
-    "mechanism": "When both siblings rub their plastic spoons on fuzzy sweaters, the rubbing gives energy to tiny negative charges called electrons, making them move from the sweaters onto the spoons. This builds up static electricity, leaving each spoon with extra electrons (a negative charge) and the sweater with fewer (a positive charge). When one charged spoon is brought near a mixture of salt and pepper, the light, dry pepper flakes leap upward and stick to the spoon, while the heavier salt grains stay in the bowl. The sibling’s spoon, brought near only salt, doesn’t move anything. This shows that static electricity can pull more easily on very small, dry, lightweight pieces than on heavier or damp ones. Children can test what affects the strength of the effect by changing the materials, the number of rubs, how close the spoon is, or other creative ideas.",
+   "Pepper Leaping up to Spoon": {
+    "mechanism": "When a child rubs a plastic spoon on a fuzzy sweater, the rubbing gives energy that makes tiny negative particles called electrons move from the sweater onto the spoon. Because of this movement, the spoon ends up with more negative charge and the sweater with less, so the charges are no longer balanced and the spoon becomes charged for a short time. Everything around the spoon, including tiny pieces of pepper and salt, has positive and negative charges inside it. When the charged spoon is held near the pepper without touching it, it can push or pull on those charges. The spoon has a more negative charge, and the pepper pieces move toward it, causing the light pepper flakes to leap up and stick to the spoon. Heavier salt grains do not move as easily and stay in the bowl. This works best with a plastic spoon and dry materials because they let charges move and stay in place for a while, and children can explore this by changing how much they rub the spoon, how close it is, or what materials they test.",
     "concepts": {
-      "static electricity": {
-        "definition": "Static electricity happens when electric charges build up on an object because of electrons moving between materials or shifting in place. This can happen when objects rub, touch, or even come close together. When this build-up occurs, one object can gain extra charge and the other lose some, creating an invisible push or pull between them.",
-        "explanation": "When both children rub plastic spoons on fuzzy sweaters, electrons move from the sweaters onto the spoons. This movement builds up static electricity, leaving each spoon charged and ready to pull on nearby, lightweight materials without touching.",
-        "ngss": [
-          "3-PS2-3",
-          "4-PS3-2"
-        ],
-        "sub_concepts": {
-          "charges": {
-            "definition": "Charge is a property of matter that happens when tiny particles called electrons move from one object to another. This movement makes one object have extra electrons (a negative charge) and the other have fewer (a positive charge). The difference in charge lets objects interact with each other in special ways.",
-            "explanation": "Rubbing moves tiny negative charges called electrons from the fuzzy sweater onto the plastic spoon. The spoon becomes negatively charged, and the sweater becomes slightly positive. This difference in charge sets up the conditions for the charged spoon to move nearby objects without touching them.",
-            "ngss": [
-              "3-PS2-4"
-            ],
-            "sub_concepts": {
-              "electrons": {
-                "definition": "Electrons are tiny, invisible bits of negative charge that can move from one object to another. When they move, they can make objects gain or lose charge.",
-                "explanation": "When the spoon is rubbed on the sweater, tiny bits of negative charge move from the sweater onto the spoon. This gives the spoon an extra negative charge and leaves the sweater with less.",
-                "ngss": [
-                  "5-PS1-1"
-                ]
-              },
-              "static charge": {
-                "definition": "Static charge happens when electrons move from one object to another, creating an imbalance of charges. One object ends up with extra electrons (negative charge), and the other has fewer electrons (positive charge). This uneven build-up of charge stays in place for a while, giving a chance for charged objects to affect nearby things before the charge disappears.",
-                "explanation": "The rubbed plastic spoon keeps extra electrons for a short time, while the sweater has fewer. During that time, the charged spoon can pull on light materials, like pepper flakes, without touching them.",
-                "ngss": [
-                  "4-PS3-2"
-                ]
-              }
-            }
-          },
-          "attraction & repulsion": {
-            "definition": "Attraction and repulsion happen when electric charges create invisible pushes and pulls between objects. Opposite charges (positive and negative) pull toward each other, and like charges (two positives or two negatives) push away. These pushes and pulls can happen even when the objects don’t touch.",
-            "explanation": "The negatively charged spoon attracts nearby neutral pepper flakes because the charges inside each flake shift slightly, making the side closer to the spoon slightly positive. The electric pull lifts the light pepper flakes toward the spoon. The heavier salt grains don’t respond as easily, so they stay in the bowl.",
-            "ngss": [
-              "3-PS2-4"
-            ]
-          }
-        }
+      "Force at a Distance": {
+        "definition": "Charged objects can push or pull on other objects without touching them.",
+        "explanation": "The charged plastic spoon pushes and pulls on the charges inside the pepper flakes, even though it does not touch them. This invisible force is strong enough to lift the light pepper flakes up to the spoon."
       },
-      "energy from rubbing": {
-        "definition": "Rubbing gives energy to tiny charges and helps them move from one material to another. The movement of these charges builds up static electricity.",
-        "explanation": "Rubbing the plastic spoon on a fuzzy sweater gives the electrons energy to move from the sweater onto the spoon. Without rubbing, the spoon stays neutral and cannot pull on pepper.",
-        "ngss": [
-          "4-PS3-2"
-        ]
+      "Charges": {
+        "definition": "All objects are made of tiny particles that have an electric charge. There are two kinds of charge: positive and negative. Most of the time, objects have equal amounts of both, so the charges are balanced and nothing special happens.",
+        "explanation": "The spoon, sweater, pepper, and salt all contain tiny positive and negative charges. Before rubbing, these charges are balanced, so the pepper and salt stay still in the bowl."
       },
-      "material properties": {
-        "definition": "Static electricity only works with certain kinds of materials that let charges move between them and keep those charges for a while.",
-        "explanation": "Plastic spoons and fuzzy sweaters are good at building and holding static charge. Pepper flakes are small, light, and dry, so they move easily when pulled by electric forces. Salt crystals are heavier and often slightly damp, so they don’t move as much. Humid air also weakens the effect by letting the charge leak away.",
-        "ngss": [
-          "4-PS3-2"
-        ]
+      "Electrons": {
+        "definition": "Electrons are tiny particles that carry a negative charge. Negative does not mean bad—it just means this is one of the two kinds of charge. Electrons can move from one object to another, especially when objects rub together.",
+        "explanation": "When the plastic spoon is rubbed on the fuzzy sweater, electrons move from the sweater onto the spoon. Because electrons have moved, the spoon and the sweater no longer have the same amount of negative charge."
       },
-      "testing the effect of static electricity": {
+      "Energy from Rubbing": {
+        "definition": "Rubbing gives energy that helps electrons, tiny negative charges, move from one material to another. This movement of these charges is what builds up static electricity we see, like objects pulling or pushing without touching.",
+        "explanation": "Rubbing the spoon on the sweater gives electrons enough energy to move from the sweater onto the spoon. Without rubbing, the electrons would stay mostly in place, and the spoon would not be able to pull pepper flakes upward."
+      },
+      "Imbalance of Charges": {
+        "definition": "An imbalance of charges happens when electrons move so that one object has more negative charge and another has less. When this happens, the object is said to be charged. This charged state, which is called static electricity, lasts for a short time before it slowly goes away.",
+        "explanation": "After rubbing, the spoon has more electrons than before, and the sweater has fewer. This imbalance of charge is called static electricity. Because the charges are no longer balanced, the spoon becomes charged and can cause effects like pulling pepper flakes up for a short time."
+      },
+      "Attraction & Repulsion": {
+        "definition": "Electric charges can push or pull on other objects without touching them. When two objects have different kinds of charge (positive and negative), they pull toward each other. When two objects have the same kind of charge  (two positives or two negatives), they push away from each other. These pushes and pulls can happen even when the objects don’t touch.",
+        "explanation": "The charged plastic spoon and the pepper flake have different kinds of charge. Different kinds of charge mean one is more positive and the other is more negative. In this situation, the plastic spoon has a more negative charge, and the pepper flake has a more positive charge. Because opposite charges pull toward each other, the pepper flakes are pulled up toward the spoon, even though they do not touch."
+      },
+      "Material Properties": {
+        "definition": "In static electricity, some materials make it easier for electrons, tiny negative charges, to move and stay on them for a while. Other materials do not. This is why rubbing certain objects works better than others.",
+        "explanation": "Plastic spoons and fuzzy sweaters allow electrons to move and stay in place after rubbing. Pepper flakes are light and dry, so they move easily when pulled. Salt grains are heavier and often slightly damp, so they stay in the bowl."
+      },
+      "Testing the Effect of Static Electricity": {
         "definition": "We can explore static electricity by changing what we do and watching what happens. By testing one thing at a time, we can find out what affects how strong the effect is.",
-        "explanation": "Children can test different measurable effects to explore static electricity. Examples include: (1) which materials move more, such as pepper, salt, sugar, flour, or paper bits, (2) how many times they rub the spoon, (3) how close the spoon is to the material, or (4) how dry the air or materials are. Children may also invent their own ways to measure static electricity, such as how many flakes stick, how far pieces jump, or how long they stay attached.",
-        "variables": [
-          "material type (pepper/salt/sugar/flour/paper)",
-          "number of rubs",
-          "spoon–mixture distance",
-          "dryness/humidity",
-          "amount lifted or distance jumped",
-          "other child-invented measures"
-        ]
+        "explanation": "Children can test how the effect changes by rubbing the spoon more or fewer times, holding it closer or farther from the pepper, or trying different materials like salt, sugar, flour, or paper bits. They can also count how many pieces jump or how long they stick."
       }
     }
   },
-  "Bending Water Stream with a Comb": {
-    "mechanism": "When one child combs dry hair with a plastic comb, the rubbing gives energy to tiny negative charges called electrons, making them move from the hair onto the comb. This builds up static electricity, leaving the comb with extra electrons (a negative charge) and the hair with fewer (a positive charge). When the charged comb is held near a thin stream of water, it pulls on the water without touching it. The electric charge attracts the water, making the stream bend toward the comb. The other child’s water stream stays straight because nothing nearby is charged. Plastic and dry hair work best because they let charges move and stay in place long enough for the effect to happen. Children can test how static electricity works by changing how many times they comb, how close they hold the comb, or how strong the water flow is.",
+"Bending Water Stream with a Comb": {
+    "mechanism": "When a child rubs a plastic comb on dry hair, the rubbing gives energy that makes tiny negative particles called electrons move from the hair onto the comb. Because of this movement, the comb ends up with more negative charge and the hair with less, so the charges are no longer balanced and the comb becomes charged for a short time. Everything, including water, has tiny positive and negative charges inside it, and when the charged comb is held near the water, it can push or pull on those charges even without touching them. In this case, the comb has more negative charge and the water has more positive charge, so they pull toward each other and the water stream bends toward the comb. This works best with a plastic comb and dry hair because those materials let the charges move and stay in place for a while, and children can explore this by changing how much they rub the comb, how close it is to the water, or how fast the water flows.",
     "concepts": {
-      "static electricity": {
-        "definition": "Static electricity happens when electric charges build up on an object because of electrons moving between materials or shifting in place. This can happen when objects rub, touch, or even come close together. When this build-up occurs, one object can gain extra charge and the other lose some, creating an invisible push or pull between them.",
-        "explanation": "When the child runs a plastic comb through dry hair, tiny electrons move from the hair onto the comb, giving the comb extra negative charge. This build-up of static electricity lets the comb pull on the water stream without touching it. The other child’s comb wasn’t rubbed, so no charge built up and the water stayed straight.",
-        "ngss": [
-          "3-PS2-3",
-          "4-PS3-2"
-        ],
-        "sub_concepts": {
-          "charges": {
-            "definition": "Charge is a property of matter that happens when tiny particles called electrons move from one object to another. This movement makes one object have extra electrons (a negative charge) and the other have fewer (a positive charge). This difference in charge sets up the conditions for the spoon to interact with other objects in special ways.",
-            "explanation": "Rubbing moves tiny negative charges called electrons from the hair onto the comb. This leaves the comb with extra electrons (a negative charge) and the hair with fewer (a positive charge). The charged comb can now influence nearby objects, like water, without touching them.",
-            "ngss": [
-              "3-PS2-4"
-            ],
-            "sub_concepts": {
-              "electrons": {
-                "definition": "Electrons are tiny, invisible bits of negative charge that can move from one object to another. When they move, they can make objects gain or lose charge.",
-                "explanation": "When the comb slides through dry hair, tiny bits of negative charge move from the hair to the comb. This makes the comb build up extra negative charge and the hair lose some, leaving it slightly positive.",
-                "ngss": [
-                  "5-PS1-1"
-                ]
-              },
-              "static charge": {
-                "definition": "Static charge happens when electrons move from one object to another, creating an imbalance of charges. One object ends up with extra electrons (negative charge), and the other has fewer electrons (positive charge). This uneven build-up of charge stays in place for a while, giving a chance for the charged objects to affect nearby things before the charge disappears.",
-                "explanation": "The comb ends up with extra electrons, while the hair has fewer. Because of this imbalance of charge, the comb keeps a static charge for a short time. During that time, it can affect nearby things. For example, it can pull the thin stream of water without even touching it.",
-                "ngss": [
-                  "4-PS3-2"
-                ]
-              }
-            }
-          },
-          "attraction & repulsion": {
-            "definition": "Attraction and repulsion happen when electric charges create invisible pushes and pulls between objects. Opposite charges (positive and negative) pull toward each other, and like charges (two positives or two negatives) push away. These pushes and pulls can happen even when the objects don’t touch.",
-            "explanation": "The negatively charged comb pulls on the tiny positive parts inside the water and pushes away the negative parts. The comb pulls on one side of the water and pushes on the other. Because the pulling side is closer, that pull is stronger, so the water bends toward the comb.",
-            "ngss": [
-              "3-PS2-4"
-            ]
-          }
-        }
+      "Force at a Distance": {
+        "definition": "Charged objects can push or pull on other objects without touching them.",
+        "explanation": "The charged comb pushes and pulls on the charges inside the water, even though it does not touch the water. This invisible force is strong enough to change the water’s path and make the stream bend toward the comb."
       },
-      "energy from rubbing": {
-        "definition": "Rubbing gives energy to tiny charges and helps them move from one material to another. The movement of these charges builds up static electricity.",
-        "explanation": "Running the comb through dry hair gives electrons energy to move from the hair onto the comb. Without rubbing, the comb stays neutral and can’t pull on the stream of water.",
-        "ngss": [
-          "4-PS3-2"
-        ]
+      "Charges": {
+        "definition": "All objects are made of tiny particles that have an electric charge. There are two kinds of charge: positive and negative. Most of the time, objects have equal amounts of both, so the charges are balanced and nothing special happens.",
+        "explanation": "The hair, comb, and water all contain tiny positive and negative charges. When these charges are balanced, the objects do not push or pull on each other in noticeable ways."
       },
-      "material properties": {
-        "definition": "Static electricity only works with certain kinds of materials that let charges move between them and keep those charges for a while.",
-        "explanation": "The comb needs to be made of a specific kind of material, like plastic, that holds onto charges after rubbing. Dry hair helps because it allows the charges to move easily. If the comb were metal or the hair were wet, the charges would leak away quickly, and the water would not bend. So, the right kind of material is needed for static electricity to build up and make the effect happen.",
-        "ngss": [
-          "4-PS3-2"
-        ]
+      "Electrons": {
+        "definition": "Electrons are tiny particles that carry a negative charge. Negative does not mean bad—it just means this is one of the two kinds of charge. Electrons can move from one object to another, especially when objects rub together.",
+        "explanation": "When the plastic comb is rubbed on dry hair, electrons move from the hair onto the plastic comb. Because electrons have moved, the comb and the hair no longer have the same amount of negative charge."
       },
-      "testing the effect of static electricity": {
+      "Energy from Rubbing": {
+        "definition": "Rubbing gives energy that helps electrons, tiny negative charges, move from one material to another. This movement of these charges is what builds up static electricity we see, like objects pulling or pushing without touching.",
+        "explanation": "Rubbing the comb through dry hair gives electrons enough energy to move from the hair onto the comb. Without rubbing, the electrons would stay mostly in place, and the comb would not affect the water."
+      },
+      "Imbalance of Charges": {
+        "definition": "An imbalance of charges happens when electrons move so that one object has more negative charge and another has less. When this happens, the object is said to be charged. This charged state, which is called static electricity, lasts for a short time before it slowly goes away.",
+        "explanation": "After rubbing, the comb has more electrons than before, and the hair has fewer. This imbalance of charge is called static electricity. Because the charges are no longer balanced, the comb becomes charged and can cause effects like bending the water stream for a short time."
+      },
+      "Attraction & Repulsion": {
+        "definition": "Electric charges can push or pull on other objects without touching them. When two objects have different kinds of charge (positive and negative), they pull toward each other. When two objects have the same kind of charge  (two positives or two negatives), they push away from each other. These pushes and pulls can happen even when the objects don’t touch.",
+        "explanation": "The charged comb and the water have different kinds of charge. Different kinds of charge mean one is more positive and the other is more negative. In this situation, the plastic comb has a more negative charge, and the water has a more positive charge. Because opposite charges pull toward each other, the water is pulled toward the comb even though they do not touch."
+      },
+      "Material Properties": {
+        "definition": "In static electricity, some materials make it easier for electrons, tiny negative charges, to move and stay on them for a while. Other materials do not. This is why rubbing certain objects works better than others.",
+        "explanation": "Plastic combs and dry hair allow electrons to move and stay in place after rubbing. If the comb were metal or the hair were wet, the electrons would move away quickly, and the water would not bend."
+      },
+      "Testing the Effect of Static Electricity": {
         "definition": "We can explore static electricity by changing what we do and watching what happens. By testing one thing at a time, we can find out what affects how strong the effect is.",
-        "explanation": "Children can test different measurable effects to explore static electricity. Examples include: (1) how many times they comb their hair, (2) how close the comb is to the water stream, or (3) how strong or thin the water flow is. Children may also invent their own ways to measure the effect, such as how far the water bends, how long the bending lasts, or which comb or hair type works best.",
-        "variables": [
-          "number of comb strokes",
-          "distance from water",
-          "water flow strength",
-          "comb or hair type",
-          "other child-created ideas"
-        ]
+        "explanation": "Children can test how the effect changes by rubbing the comb more or fewer times, holding it closer or farther from the water, or changing how strong the water flows. Children may also invent their own ways to measure the effect, such as how far the water bends, how long the bending lasts, or which comb or hair type works best."
       }
     }
   }

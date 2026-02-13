@@ -38,7 +38,10 @@ COMMON_REMINDERS = """
 """
 
 # Level-specific prompts
-no_question = COMMON_HEADER + COMMON_STRUCTURE + """
+no_question = (
+    COMMON_HEADER
+    + COMMON_STRUCTURE
+    + """
 <Instruction for acknowledgement>
 - Acknowledge the child's response with concise and natural language in ONE sentence.
 - If the child's response is relevant to the phenomenon, you can say: "That’s a good observation!"
@@ -69,10 +72,16 @@ no_question = COMMON_HEADER + COMMON_STRUCTURE + """
 - Keep to one sentence.
 - DO NOT start the question with 'Do you ...' or 'Can you ...'
 </Instruction for prompting question>
-""" + COMMON_FORMAT + COMMON_REMINDERS
+"""
+    + COMMON_FORMAT
+    + COMMON_REMINDERS
+)
 
 # Level 0: Irrelevant
-level_0 = COMMON_HEADER + COMMON_STRUCTURE + """
+level_0 = (
+    COMMON_HEADER
+    + COMMON_STRUCTURE
+    + """
 <Instruction for acknowledgement>
 - Show encouragement in ONE sentence and keep the tone warm, supportive, and curious.
 - Use varied acknowledgement phrases such as:
@@ -99,10 +108,16 @@ level_0 = COMMON_HEADER + COMMON_STRUCTURE + """
     - "What's your next question to find the clue of ...?"
     - "Why do you think this happens?"
 </Instruction for prompting question>
-""" + COMMON_FORMAT + COMMON_REMINDERS
+"""
+    + COMMON_FORMAT
+    + COMMON_REMINDERS
+)
 
 # factual
-level_1 = COMMON_HEADER + COMMON_STRUCTURE + """
+level_1 = (
+    COMMON_HEADER
+    + COMMON_STRUCTURE
+    + """
 <Instruction for acknowledgement>
 - Show encouragement in ONE sentence and keep the tone warm, supportive, and curious.
 - Use varied acknowledgement phrases such as:
@@ -133,9 +148,15 @@ level_1 = COMMON_HEADER + COMMON_STRUCTURE + """
   - "What could we check next to find more clues about [something]?"
   - "How would you investigate what's really going on with [phenomenon]?"
 </Instruction for prompting question>
-""" + COMMON_FORMAT + COMMON_REMINDERS
+"""
+    + COMMON_FORMAT
+    + COMMON_REMINDERS
+)
 
-level_2 = COMMON_HEADER + COMMON_STRUCTURE + """
+level_2 = (
+    COMMON_HEADER
+    + COMMON_STRUCTURE
+    + """
 <Instruction for acknowledgement>
 - Start by acknowledging and encouraging the child’s curiosity in ONE sentence.
 - Keep the tone warm, positive, and conversational.
@@ -170,9 +191,15 @@ level_2 = COMMON_HEADER + COMMON_STRUCTURE + """
     2. "What could we check next to find more clues about [something happening here]?"
     3. "How would you investigate what's really going on with [the phenomenon]?"
 </Instruction for prompting question>
-""" + COMMON_FORMAT + COMMON_REMINDERS
+"""
+    + COMMON_FORMAT
+    + COMMON_REMINDERS
+)
 
-level_3 = COMMON_HEADER + COMMON_STRUCTURE + """
+level_3 = (
+    COMMON_HEADER
+    + COMMON_STRUCTURE
+    + """
 <Instruction for acknowledgement>
 - Start by acknowledging and encouraging the child’s curiosity in one sentence.
 - Keep the tone warm, positive, and conversational.
@@ -202,10 +229,16 @@ level_3 = COMMON_HEADER + COMMON_STRUCTURE + """
     2. "What could we check next to find more clues about [something happening here]?"
     3. "How would you investigate what's really going on with [the phenomenon]?"
 </Instruction for prompting question>
-""" + COMMON_FORMAT + COMMON_REMINDERS
+"""
+    + COMMON_FORMAT
+    + COMMON_REMINDERS
+)
 
 # causal
-level_4 = COMMON_HEADER + COMMON_STRUCTURE + """
+level_4 = (
+    COMMON_HEADER
+    + COMMON_STRUCTURE
+    + """
 <Instruction for acknowledgement>
 - Start by acknowledging and encouraging the child’s curiosity in ONE sentence.
 - Keep the tone warm, positive, and conversational.
@@ -234,4 +267,7 @@ level_4 = COMMON_HEADER + COMMON_STRUCTURE + """
     2. "What could we check next to find more clues about [something happening here]?"
     3. "How would you investigate what’s really going on with [the phenomenon]?"
 </Instruction for prompting question>
-""" + COMMON_FORMAT + COMMON_REMINDERS
+"""
+    + COMMON_FORMAT
+    + COMMON_REMINDERS
+)

@@ -8,7 +8,6 @@ Now, your task is to terminate the conversation.
 </Scientific Knowledge>
 
 <How to Terminate>
-- When talking to the child, refer to the child as a 'detective'.
 - You should (1) acknowledge the child's response, (2) provide a summary of the scientific knowledge, and (3) close the conversation with a friendly line.
 - Keep your conversation brief and use simple words that children can comprehend.
 

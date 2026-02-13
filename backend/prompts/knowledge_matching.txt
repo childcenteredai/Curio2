@@ -1,50 +1,25 @@
-You are given a knowledge graph (KG) of scientific components. Your task is to determine whether the child’s latest question in the conversation directly mentions or implies a component that exists in the KG. 
+You are given a knowledge graph (KG) of scientific components. Your task is to determine whether the child's latest question can be explained using a concept that exists in the KG.
 
 <Retrieval Rules>
 1. Check question validity
-- If the child’s latest message is NOT a question, return an empty string (e.g., '') immediately and stop.
+- If the child's latest message is NOT a question, return an empty string ('') immediately.
 
 2. Match against the KG
 - Focus only on the child's most recent question.
-- Identify whether the question explicitly mentions or implicitly implies any component in the KG.
 
-3. Matching criteria
-- Consider both semantic similarity (meaning-based) and lexical overlap (word-based) when identifying a match.
-- Do not infer beyond what the question suggests; only match when the child's wording clearly connects to a component in the KG.
-- **IMPORTANT: The knowledge graph is structured hierarchically with concepts and sub-concepts. Concepts are parent-level components, and sub-concepts are more specific components nested under concepts.**
-- **CRITICAL: Concept hierarchy and matching priority:**
-  - **First, check the conversation history to identify which concepts have already been explicitly mentioned.**
-  - **PRIORITIZE matching concepts that (1) appear first in the list and (2) have NOT been mentioned yet in the conversation.**
-  - **If the conversation is within the first 5 turns, prioritize matching components that appear EARLIER in the list (simpler, foundational concepts).** For example, do not match 'material properties' before mentioning 'static electricity'.
-  - **If a parent concept (e.g., "static electricity") has NOT been mentioned in the conversation, DO NOT match its sub-concepts. Matching sub-concepts before introducing the parent concept would confuse the child.**
-  - **Only match sub-concepts if their parent concept has already been introduced or matched in the conversation.**
-  - **IMPORTANT: Even if a concept is not a strict sub-concept but is logically dependent on another concept (e.g., "energy from rubbing" depends on understanding "static electricity"), do NOT match the dependent concept if the foundational concept has not been introduced.**
-- **Select the SINGLE most relevant component that best matches the child's question. Only return one component, not multiple.**
-
-4. Relevance prioritization
-- Prioritize components that directly answer what the child is asking about.
-- Consider the child's age (8-10 years old) and choose age-appropriate concepts.
-- **IMPORTANT: Prioritize concepts that have NOT been mentioned in the conversation history.**
-- **If a parent concept has not been introduced, prioritize matching the parent concept over its sub-concepts.**
-- If multiple components seem relevant, choose the one that:
-  a) Has NOT been mentioned in the conversation history (highest priority)
-  b) Is a parent concept if its sub-concepts haven't been introduced yet
-  c) Most directly addresses the child's question
-  d) Is simpler and more foundational (appears earlier in the list)
-  e) Best matches the semantic meaning of the child's question
+- Only match when a component in the KG can directly answer the child's question.
+- **Select the SINGLE most relevant component. Return only one component, not multiple.**
+- **If no component is strongly relevant, return an empty string ('').**
 </Retrieval Rules>
 
 <Conversation History>
-
 </Conversation History>
 
 <Child's Question>
-
 </Child's Question>
 
 <Response Format>
-- **Return ONLY ONE component name as a single-item list (e.g., ["static electricity"]).**
-- **Do NOT return multiple components. Select the single most relevant component.**
-- **The component name must match exactly as it appears in the Knowledge Graph Structure (use the concept name, not sub-concept names unless the parent concept has been introduced).**
-- If no component is strongly relevant, return an empty string (e.g., '')
+- **Return ONLY ONE component name as a single-item JSON list (e.g., ["Force at a Distance"]).**
+- **The component name must match exactly as it appears in the Knowledge Graph (use the concept name).**
+- If no component is strongly relevant, return an empty string ('').
 </Response Format>

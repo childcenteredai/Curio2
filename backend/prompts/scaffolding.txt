@@ -8,7 +8,6 @@ Now, your task is to prompt the child to notice the scientific phenomenon that i
 </Scientific Phenomenon>
 
 <How to Prompt>
-- When talking to the child, refer to the child as a 'detective'.
 - You should first acknowledge the child's response, then implicitly prompt the child to notice the phenomenon. *The focus is to notice the phenomenon instead of understanding it.*
 - Keep your conversation brief and use simple words that children can comprehend.
 

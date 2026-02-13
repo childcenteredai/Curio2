@@ -90,7 +90,7 @@ if not openai_api_key:
 client = OpenAI(api_key=openai_api_key)
 
 # OpenAI Model Configuration
-OPENAI_CHAT_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-4")
+OPENAI_CHAT_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-5.2")
 OPENAI_WHISPER_MODEL = os.getenv("OPENAI_WHISPER_MODEL", "whisper-1")
 OPENAI_TTS_MODEL = os.getenv("OPENAI_TTS_MODEL", "tts-1")
 OPENAI_TTS_VOICE = os.getenv("OPENAI_TTS_VOICE", "alloy")
@@ -167,7 +167,7 @@ def state_classification(state, messages, phenomenon):
     # print(f"messages: {messages}")
 
     response = client.chat.completions.create(
-        model=OPENAI_CHAT_MODEL, messages=messages, max_tokens=OPENAI_MAX_TOKENS
+        model=OPENAI_CHAT_MODEL, messages=messages, max_tokens=OPENAI_MAX_TOKENS, temperature=1.0
     )
 
     # response = client.responses.create(
@@ -280,11 +280,11 @@ def format_prompt(
         # Load mechanism from kg.json
         knowledge_base = json.load(open("knowledge/kg.json", "r"))
         phenomenon_map = {
-            "balloon": "Hair stands up near a balloon",
+            "balloon": "Hair Stands Up Near a Balloon",
             "bend": "Bending Water Stream with a Comb",
             "pepper": "Pepper Leaping up to Spoon",
         }
-        phenomenon_key = phenomenon_map.get(phenomenon, "Hair stands up near a balloon")
+        phenomenon_key = phenomenon_map.get(phenomenon, "Hair Stands Up Near a Balloon")
         mechanism = knowledge_base.get(phenomenon_key, {}).get("mechanism", "")
         state_prompt = state_prompt.replace(
             "<Mechanism Context>",
@@ -295,11 +295,11 @@ def format_prompt(
         # Load knowledge base and extract all concepts and sub-concepts
         knowledge_base = json.load(open("knowledge/kg.json", "r"))
         phenomenon_map = {
-            "balloon": "Hair stands up near a balloon",
+            "balloon": "Hair Stands Up Near a Balloon",
             "bend": "Bending Water Stream with a Comb",
             "pepper": "Pepper Leaping up to Spoon",
         }
-        phenomenon_key = phenomenon_map.get(phenomenon, "Hair stands up near a balloon")
+        phenomenon_key = phenomenon_map.get(phenomenon, "Hair Stands Up Near a Balloon")
         concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
         all_concepts = extract_all_concepts_and_subconcepts(concepts_dict)
 
@@ -376,7 +376,143 @@ def extract_all_concepts_and_subconcepts(concepts_dict):
     return all_concepts
 
 
-def knowledge_retrieval(messages, phenomenon="balloon"):
+def get_matched_concepts_from_db(conversation_id, phenomenon="balloon", db_session=None):
+    """
+    Extract all matched concepts from database conversation history.
+    These are concepts that were matched for EXPLANATION purposes.
+    Returns a list of concept names that have been matched in previous turns, in order.
+    """
+    matched_concepts = []
+    
+    if not db_session:
+        return matched_concepts
+    
+    # Load knowledge base to get concept names
+    knowledge_base = open("knowledge/kg.json", "r").read()
+    knowledge_base = json.loads(knowledge_base)
+    
+    phenomenon_map = {
+        "balloon": "Hair Stands Up Near a Balloon",
+        "bend": "Bending Water Stream with a Comb",
+        "pepper": "Pepper Leaping up to Spoon",
+    }
+    phenomenon_key = phenomenon_map.get(phenomenon, "Hair Stands Up Near a Balloon")
+    concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
+    concept_names = list(concepts_dict.keys())
+    
+    # Query database for assistant messages with matched knowledge components
+    from models import Message
+    assistant_messages = (
+        db_session.query(Message)
+        .filter(
+            Message.conversation_id == conversation_id,
+            Message.role == "assistant",
+            Message.matched_knowledge_components.isnot(None)
+        )
+        .order_by(Message.created_at.asc())
+        .all()
+    )
+    
+    # Extract matched concepts in order
+    for msg in assistant_messages:
+        matched_kg = msg.matched_knowledge_components
+        if matched_kg:
+            try:
+                # Try to parse as JSON list
+                kg_list = json.loads(matched_kg) if isinstance(matched_kg, str) else matched_kg
+                if isinstance(kg_list, list) and len(kg_list) > 0:
+                    concept_name = kg_list[0]
+                    # Normalize the concept name (case-insensitive match)
+                    for cn in concept_names:
+                        if cn.lower() == concept_name.lower():
+                            if cn not in matched_concepts:
+                                matched_concepts.append(cn)
+                            break
+            except (json.JSONDecodeError, TypeError):
+                # If not JSON, try direct string match
+                matched_kg_str = str(matched_kg).lower()
+                for cn in concept_names:
+                    if cn.lower() == matched_kg_str:
+                        if cn not in matched_concepts:
+                            matched_concepts.append(cn)
+                        break
+    
+    return matched_concepts
+
+
+def get_next_concept_for_prompting(conversation_id, phenomenon="balloon", db_session=None):
+    """
+    Get the next concept to use for prompting question.
+    Uses an index pointer mechanism: count existing scienceqa assistant messages to determine
+    the current index, then return the concept at that index.
+    
+    Returns the concept name (string) or None if all concepts have been used.
+    """
+    if not db_session:
+        return None
+    
+    # Load knowledge base
+    knowledge_base = open("knowledge/kg.json", "r").read()
+    knowledge_base = json.loads(knowledge_base)
+    
+    phenomenon_map = {
+        "balloon": "Hair Stands Up Near a Balloon",
+        "bend": "Bending Water Stream with a Comb",
+        "pepper": "Pepper Leaping up to Spoon",
+    }
+    phenomenon_key = phenomenon_map.get(phenomenon, "Hair Stands Up Near a Balloon")
+    concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
+    concept_names = list(concepts_dict.keys())
+    
+    if not concept_names:
+        return None
+    
+    # Calculate current index: count existing scienceqa assistant messages
+    # Each scienceqa turn uses one concept for prompting question in sequential order
+    # The index points to the next concept to use
+    from models import Message
+    assistant_messages = (
+        db_session.query(Message)
+        .filter(
+            Message.conversation_id == conversation_id,
+            Message.role == "assistant",
+            Message.state == "scienceqa"
+        )
+        .order_by(Message.created_at.asc())
+        .all()
+    )
+    
+    # Current index = number of scienceqa turns (concepts[0..index-1] have been used)
+    current_index = len(assistant_messages)
+    
+    # Debug: print all concepts and current index
+    print(f"[Prompting Question] Debug - Total concepts: {len(concept_names)}, Concepts: {concept_names}")
+    print(f"[Prompting Question] Debug - Existing scienceqa assistant messages: {current_index}")
+    
+    # Check if we've used all concepts
+    if current_index >= len(concept_names):
+        print(f"[Prompting Question] All concepts used. Index: {current_index}, Total: {len(concept_names)}")
+        return None
+    
+    # Return the concept at current index
+    next_concept = concept_names[current_index]
+    print(f"[Prompting Question] Current index: {current_index}, Next concept: {next_concept}")
+    return next_concept
+
+
+def knowledge_retrieval(messages, phenomenon="balloon", conversation_id=None, db_session=None):
+    """
+    When a child asks a question, match the most relevant knowledge component (concept) 
+    from the knowledge base that can explain the question.
+    
+    Returns:
+        - A JSON string representing the matched concept (e.g., '["Force at a Distance"]')
+        - Empty string ('') if no suitable component can be matched
+        - None if there's an error
+    
+    This function is ONLY responsible for matching concepts for EXPLANATION purposes.
+    It does NOT handle prompting questions.
+    """
     # Load prompt from the txt file
     retrieval_prompt = open("prompts/knowledge_matching.txt", "r").read()
     retrieval_prompt = format_prompt(retrieval_prompt, phenomenon, messages)
@@ -385,14 +521,26 @@ def knowledge_retrieval(messages, phenomenon="balloon"):
 
     # Map phenomenon to knowledge base key
     phenomenon_map = {
-        "balloon": "Hair stands up near a balloon",
+        "balloon": "Hair Stands Up Near a Balloon",
         "bend": "Bending Water Stream with a Comb",
         "pepper": "Pepper Leaping up to Spoon",
     }
-    phenomenon_key = phenomenon_map.get(phenomenon, "Hair stands up near a balloon")
+    phenomenon_key = phenomenon_map.get(phenomenon, "Hair Stands Up Near a Balloon")
+
+    # Verify the phenomenon exists in the knowledge base
+    if phenomenon_key not in knowledge_base:
+        print(f"Warning: Phenomenon '{phenomenon_key}' not found in knowledge base")
+        return None
 
     # Build structured KG with concept/sub-concept hierarchy
-    concepts_dict = knowledge_base[phenomenon_key]["concepts"]
+    concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
+    if not concepts_dict:
+        print(f"Warning: No concepts found for phenomenon '{phenomenon_key}'")
+        return None
+    
+    # Get the ordered list of concepts (maintain order from JSON)
+    concept_names = list(concepts_dict.keys())
+    
     structured_kg = build_structured_kg(concepts_dict)
 
     # Calculate conversation turn count (each user message + assistant response = 1 turn)
@@ -402,45 +550,149 @@ def knowledge_retrieval(messages, phenomenon="balloon"):
     # Add structured KG information to the prompt
     retrieval_prompt = (
         retrieval_prompt
-        + "\n\n<Knowledge Graph Structure (concepts with their sub-concepts)>\n"
+        + "\n\n<Knowledge Graph>\n"
         + json.dumps(structured_kg, indent=2)
-        + "\n</Knowledge Graph Structure>"
+        + "\n</Knowledge Graph>"
         + f"\n\n<Conversation Turn Count>\nCurrent turn: {turn_count}\n</Conversation Turn Count>"
     )
 
     # print(f"retrieval_prompt: {retrieval_prompt}")
-    messages = [{"role": "system", "content": retrieval_prompt}]
+    messages_for_llm = [{"role": "system", "content": retrieval_prompt}]
     response = client.chat.completions.create(
-        model=OPENAI_CHAT_MODEL, messages=messages, max_tokens=OPENAI_MAX_TOKENS
+        model=OPENAI_CHAT_MODEL, messages=messages_for_llm, max_tokens=OPENAI_MAX_TOKENS, temperature=1.0
     )
-
-    # response = client.responses.create(
-    #         model="gpt-5",
-    #         input = messages,
-    #         reasoning={ "effort": "low" }
-    #     )
 
     # content = response.output_text or ""
     content = response.choices[0].message.content or ""
-    kg_raw = content.strip().lower()
-    # print(f"kg_raw: {kg_raw}")
-    return kg_raw
+    kg_raw = content.strip()
+    
+    # Validate the matched concept exists in the knowledge base
+    if kg_raw:
+        try:
+            # Parse the response
+            kg_list = json.loads(kg_raw) if kg_raw.startswith('[') else json.loads(f'["{kg_raw}"]')
+            if isinstance(kg_list, list) and len(kg_list) > 0:
+                matched_concept = kg_list[0]
+                # Normalize and check if it exists in knowledge base
+                matched_concept_normalized = None
+                for cn in concept_names:
+                    if cn.lower() == matched_concept.lower():
+                        matched_concept_normalized = cn
+                        break
+                
+                if matched_concept_normalized:
+                    # Valid match, return the normalized concept name as JSON
+                    return json.dumps([matched_concept_normalized])
+                else:
+                    # Concept not found in knowledge base
+                    print(f"Warning: Matched concept '{matched_concept}' not found in knowledge base")
+                    return ""
+        except (json.JSONDecodeError, TypeError) as e:
+            # Try direct string match
+            matched_concept_normalized = None
+            for cn in concept_names:
+                if cn.lower() == kg_raw.lower():
+                    matched_concept_normalized = cn
+                    break
+            
+            if matched_concept_normalized:
+                return json.dumps([matched_concept_normalized])
+            else:
+                print(f"Warning: Could not parse or match concept from '{kg_raw}': {e}")
+                return ""
+    
+    # No match found or empty response
+    print("No knowledge component matched for this question")
+    return ""
 
 
-def format_kg(mode="definition", kg_raw="", phenomenon="balloon"):
+def extract_kg_definition_and_explanation(kg_raw, phenomenon="balloon"):
+    """
+    Extract definition and explanation from a matched knowledge component.
+    Returns a tuple (definition, explanation) or (None, None) if not found.
+    """
+    if not kg_raw or kg_raw == "":
+        return None, None
+    
     knowledge_base = open("knowledge/kg.json", "r").read()
     knowledge_base = json.loads(knowledge_base)
 
     # Map phenomenon to knowledge base key
     phenomenon_map = {
-        "balloon": "Hair stands up near a balloon",
+        "balloon": "Hair Stands Up Near a Balloon",
         "bend": "Bending Water Stream with a Comb",
         "pepper": "Pepper Leaping up to Spoon",
     }
-    phenomenon_key = phenomenon_map.get(phenomenon, "Hair stands up near a balloon")
+    phenomenon_key = phenomenon_map.get(phenomenon, "Hair Stands Up Near a Balloon")
+
+    if phenomenon_key not in knowledge_base:
+        return None, None
+
+    if "concepts" not in knowledge_base[phenomenon_key]:
+        return None, None
 
     try:
-        kg_list = json.loads(kg_raw)
+        kg_list = json.loads(kg_raw) if isinstance(kg_raw, str) else kg_raw
+
+        if not kg_list or len(kg_list) == 0:
+            return None, None
+
+        component = kg_list[0]
+
+        # Get the actual concept key (case-insensitive matching)
+        concepts = knowledge_base[phenomenon_key]["concepts"]
+        actual_component_key = None
+        
+        if component in concepts:
+            actual_component_key = component
+        else:
+            component_lower = component.lower()
+            for key in concepts.keys():
+                if key.lower() == component_lower:
+                    actual_component_key = key
+                    break
+        
+        if actual_component_key is None:
+            return None, None
+
+        # Get the component data
+        component_data = concepts[actual_component_key]
+        definition = component_data.get("definition", "")
+        explanation = component_data.get("explanation", "")
+
+        return definition, explanation
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
+        print(f"Error extracting knowledge component: {e}")
+        return None, None
+
+
+def format_kg(mode="definition", kg_raw="", phenomenon="balloon"):
+    """
+    Format a knowledge component for use in prompts.
+    This is used for EXPLANATION purposes only.
+    """
+    knowledge_base = open("knowledge/kg.json", "r").read()
+    knowledge_base = json.loads(knowledge_base)
+
+    # Map phenomenon to knowledge base key
+    phenomenon_map = {
+        "balloon": "Hair Stands Up Near a Balloon",
+        "bend": "Bending Water Stream with a Comb",
+        "pepper": "Pepper Leaping up to Spoon",
+    }
+    phenomenon_key = phenomenon_map.get(phenomenon, "Hair Stands Up Near a Balloon")
+
+    # Verify the phenomenon exists in the knowledge base
+    if phenomenon_key not in knowledge_base:
+        print(f"Warning: Phenomenon '{phenomenon_key}' not found in knowledge base")
+        return ""
+
+    if "concepts" not in knowledge_base[phenomenon_key]:
+        print(f"Warning: No concepts found for phenomenon '{phenomenon_key}'")
+        return ""
+
+    try:
+        kg_list = json.loads(kg_raw) if isinstance(kg_raw, str) else kg_raw
 
         # Only use the FIRST component (most relevant one)
         # Do not process multiple components
@@ -449,32 +701,103 @@ def format_kg(mode="definition", kg_raw="", phenomenon="balloon"):
 
         component = kg_list[0]  # Take only the first component
 
-        # Verify the component exists in the knowledge base
-        if component not in knowledge_base[phenomenon_key]["concepts"]:
+        # Get the actual concept key (case-insensitive matching)
+        concepts = knowledge_base[phenomenon_key]["concepts"]
+        actual_component_key = None
+        
+        # First try exact match
+        if component in concepts:
+            actual_component_key = component
+        else:
+            # Try case-insensitive match
+            component_lower = component.lower()
+            for key in concepts.keys():
+                if key.lower() == component_lower:
+                    actual_component_key = key
+                    break
+        
+        if actual_component_key is None:
             print(f"Warning: Component '{component}' not found in knowledge base")
             return ""
 
         # Get the component data (do NOT include sub_concepts)
-        component_data = knowledge_base[phenomenon_key]["concepts"][component]
+        component_data = concepts[actual_component_key]
         definition = component_data.get("definition", "")
         explanation = component_data.get("explanation", "")
 
         # Format the single component (without sub_concepts)
         if mode == "definition":
-            kg_content = f"'{component}':\n\nDefinition: {definition}\n\n"
+            kg_content = f"'{actual_component_key}':\n\nDefinition: {definition}\n\n"
         elif mode == "explanation":
-            kg_content = f"'{component}':\n\nExplanation: {explanation}\n\n"
+            kg_content = f"'{actual_component_key}':\n\nExplanation: {explanation}\n\n"
         elif mode == "definition_and_explanation":
-            kg_content = f"'{component}':\n\nDefinition: {definition}\n\nExplanation: {explanation}\n\n"
+            kg_content = f"'{actual_component_key}':\n\nDefinition: {definition}\n\nExplanation: {explanation}\n\n"
         else:
             kg_content = ""
 
         kg_content = kg_content.strip()
-        print(f"kg_content: {kg_content}")
+        print(f"kg_content (for explanation): {kg_content}")
         return kg_content
-    except (json.JSONDecodeError, KeyError) as e:
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
         print(f"Error processing knowledge graph: {e}")
         return ""
+
+
+def format_concept_for_prompting(concept_name, phenomenon="balloon"):
+    """
+    Format a concept for use in prompting questions.
+    This is used for PROMPTING QUESTION purposes only.
+    Returns the concept's definition (not explanation) to guide question generation.
+    """
+    if not concept_name:
+        return ""
+    
+    knowledge_base = open("knowledge/kg.json", "r").read()
+    knowledge_base = json.loads(knowledge_base)
+
+    # Map phenomenon to knowledge base key
+    phenomenon_map = {
+        "balloon": "Hair Stands Up Near a Balloon",
+        "bend": "Bending Water Stream with a Comb",
+        "pepper": "Pepper Leaping up to Spoon",
+    }
+    phenomenon_key = phenomenon_map.get(phenomenon, "Hair Stands Up Near a Balloon")
+
+    # Verify the phenomenon exists in the knowledge base
+    if phenomenon_key not in knowledge_base:
+        print(f"Warning: Phenomenon '{phenomenon_key}' not found in knowledge base")
+        return ""
+
+    if "concepts" not in knowledge_base[phenomenon_key]:
+        print(f"Warning: No concepts found for phenomenon '{phenomenon_key}'")
+        return ""
+
+    concepts = knowledge_base[phenomenon_key]["concepts"]
+    
+    # Find the concept (case-insensitive)
+    actual_concept_key = None
+    if concept_name in concepts:
+        actual_concept_key = concept_name
+    else:
+        concept_name_lower = concept_name.lower()
+        for key in concepts.keys():
+            if key.lower() == concept_name_lower:
+                actual_concept_key = key
+                break
+    
+    if actual_concept_key is None:
+        print(f"Warning: Concept '{concept_name}' not found in knowledge base")
+        return ""
+    
+    # Get only the definition (not explanation) for prompting questions
+    concept_data = concepts[actual_concept_key]
+    definition = concept_data.get("definition", "")
+    
+    # Format for prompting question guidance
+    concept_content = f"'{actual_concept_key}':\n\nDefinition: {definition}\n\n"
+    concept_content = concept_content.strip()
+    print(f"concept_content (for prompting question): {concept_content}")
+    return concept_content
 
 
 def encode_image(image_path):
@@ -877,54 +1200,94 @@ def chat_completion():
                 conv_state_history.append(current_state)
             eval_state = current_state
 
-        # Track matched knowledge components for saving to database
-        matched_kg = None
+        # ============================================================
+        # Response Generation 
+        # ============================================================
+        # A. Knowledge Retrieval - for EXPLANATION only
+        matched_kg = None  # For explanation
+        next_concept_for_prompting = None  # For prompting question (initialized for all states)
+        
         if current_state in ["scienceqa", "reflection"]:
-            if current_state == "scienceqa" and child_question_level in [
-                "factual",
-                "explanatory",
-                "general_causal",
-                "specific_causal",
-            ]:
-                kg = knowledge_retrieval(messages, phenomenon)
-                matched_kg = kg  # Store for database
-                print(
-                    f"Matched Knowledge Components: {matched_kg if matched_kg else 'None'}"
+            if current_state == "scienceqa":
+                # B. Get next concept for PROMPTING QUESTION (for ALL scienceqa questions)
+                # This should be called for ALL scienceqa questions, regardless of question level
+                next_concept_for_prompting = get_next_concept_for_prompting(
+                    conversation.id, phenomenon, db
                 )
-                print("=" * 50)
-                if kg != "":
-                    if child_question_level in [
-                        "explanatory",
-                        "general_causal",
-                        "specific_causal",
-                    ]:
-                        state_prompt = (
-                            state_prompt
-                            + "\n\n<Relevant Knowledge Components>\n"
-                            + format_kg("definition_and_explanation", kg, phenomenon)
-                            + "\n</Relevant Knowledge Components>"
-                        )
-                    elif child_question_level == "factual":
-                        state_prompt = (
-                            state_prompt
-                            + "\n\n<Relevant Knowledge Components>\n"
-                            + format_kg("definition_and_explanation", kg, phenomenon)
-                            + "\n</Relevant Knowledge Components>"
-                        )
-            elif current_state == "reflection":
-                kg = knowledge_retrieval(messages, phenomenon)
-                matched_kg = kg  # Store for database
                 print(
-                    f"Matched Knowledge Components: {matched_kg if matched_kg else 'None'}"
+                    f"[Prompting Question] Next concept: {next_concept_for_prompting if next_concept_for_prompting else 'None (all used)'}"
                 )
-                print("=" * 50)
-                if kg != "":
-                    state_prompt = (
-                        state_prompt
-                        + "\n\n<Relevant Knowledge Components>\n"
-                        + format_kg("definition_and_explanation", kg, phenomenon)
-                        + "\n</Relevant Knowledge Components>"
+                
+                # A. Knowledge Retrieval: Match concept for EXPLANATION (only for specific question levels)
+                if child_question_level in [
+                    "factual",
+                    "explanatory",
+                    "general_causal",
+                    "specific_causal",
+                ]:
+                    kg = knowledge_retrieval(messages, phenomenon, conversation.id, db)
+                    matched_kg = kg if kg else None  # Store for database and explanation
+                    print(
+                        f"[Knowledge Retrieval] Matched component for explanation: {matched_kg if matched_kg else 'None'}"
                     )
+                    
+                    # Extract definition and explanation for embedding in prompt
+                    definition = ""
+                    explanation = ""
+                    explanation_method = ""
+                    
+                    if matched_kg and matched_kg != "":
+                        definition, explanation = extract_kg_definition_and_explanation(matched_kg, phenomenon)
+                        if definition and explanation:
+                            # Matched: use the knowledge component
+                            explanation_method = f"Here are the matched knowledge component's definition: {definition} and explanation: {explanation}. Based on the conversation history, use the provided knowledge component to explain the knowledge. The definition describes the formal definition of the concept, and the explanation describes how the concept works in the image. Your knowledge explanation should combine these two parts but must be within 30 words."
+                        else:
+                            # No match: use fallback
+                            explanation_method = "Consider the conversation history to provide a simple explanation to the child's message without directly revealing the phenomenon and knowledge."
+                    else:
+                        # No match: use fallback
+                        explanation_method = "Consider the conversation history to provide a simple explanation to the child's message without directly revealing the phenomenon and knowledge."
+                    
+                    # Replace placeholders in prompt
+                    state_prompt = state_prompt.replace("{explanation_method}", explanation_method)
+                else:
+                    # For irrelevant/no_question, use fallback explanation method
+                    explanation_method = "Consider the conversation history to provide a simple explanation to the child's message without directly revealing the phenomenon and knowledge."
+                    state_prompt = state_prompt.replace("{explanation_method}", explanation_method)
+                    matched_kg = None  # No knowledge retrieval for irrelevant/no_question
+                
+                # Replace next_concept placeholder for all scienceqa questions
+                state_prompt = state_prompt.replace("{next_concept}", next_concept_for_prompting if next_concept_for_prompting else "")
+                print("=" * 50)
+                    
+            elif current_state == "reflection":
+                # For reflection, we still do knowledge retrieval for explanation
+                kg = knowledge_retrieval(messages, phenomenon, conversation.id, db)
+                matched_kg = kg if kg else None
+                print(
+                    f"[Knowledge Retrieval] Matched component for explanation: {matched_kg if matched_kg else 'None'}"
+                )
+                print("=" * 50)
+                # Extract definition and explanation for embedding in prompt
+                definition = ""
+                explanation = ""
+                explanation_method = ""
+                
+                if matched_kg and matched_kg != "":
+                    definition, explanation = extract_kg_definition_and_explanation(matched_kg, phenomenon)
+                    if definition and explanation:
+                        # Matched: use the knowledge component
+                        explanation_method = f"Here are the matched knowledge component's definition: {definition} and explanation: {explanation}. Based on the conversation history, use the provided knowledge component to explain the knowledge. The definition describes the formal definition of the concept, and the explanation describes how the concept works in the image. Your knowledge explanation should combine these two parts but must be within 30 words."
+                    else:
+                        # No match: use fallback
+                        explanation_method = "Consider the conversation history to provide a simple explanation to the child's message without directly revealing the phenomenon and knowledge."
+                else:
+                    # No match: use fallback
+                    explanation_method = "Consider the conversation history to provide a simple explanation to the child's message without directly revealing the phenomenon and knowledge."
+                
+                # Replace placeholders in prompt
+                state_prompt = state_prompt.replace("{explanation_method}", explanation_method)
+                state_prompt = state_prompt.replace("{next_concept}", "")  # No prompting question in reflection
 
         if current_state == "scienceqa" and child_question_level is not None:
             state_prompt = format_prompt(
@@ -976,10 +1339,14 @@ def chat_completion():
         )
 
         response = client.chat.completions.create(
-            model=OPENAI_CHAT_MODEL, messages=all_messages, max_tokens=OPENAI_MAX_TOKENS
+            model=OPENAI_CHAT_MODEL, messages=all_messages, max_tokens=OPENAI_MAX_TOKENS, temperature=1.0
         )
 
         content = response.choices[0].message.content or ""
+
+        # Print next concept used for this response (if in scienceqa state)
+        if current_state == "scienceqa":
+            print(f"[Response Generated] Next concept used for prompting question: {next_concept_for_prompting if next_concept_for_prompting else 'None (all concepts used)'}")
 
         # Fix bold formatting for scienceqa responses
         if current_state == "scienceqa":
@@ -1235,54 +1602,94 @@ def chat_completion_stream():
                 conv_state_history.append(current_state)
             eval_state = current_state
 
-        # Track matched knowledge components for saving to database
-        matched_kg = None
+        # ============================================================
+        # Response Generation (生成阶段)
+        # ============================================================
+        # A. Knowledge Retrieval (检索阶段) - for EXPLANATION only
+        matched_kg = None  # For explanation
+        next_concept_for_prompting = None  # For prompting question (initialized for all states)
+        
         if current_state in ["scienceqa", "reflection"]:
-            if current_state == "scienceqa" and child_question_level in [
-                "factual",
-                "explanatory",
-                "general_causal",
-                "specific_causal",
-            ]:
-                kg = knowledge_retrieval(messages, phenomenon)
-                matched_kg = kg  # Store for database
-                print(
-                    f"Matched Knowledge Components: {matched_kg if matched_kg else 'None'}"
+            if current_state == "scienceqa":
+                # B. Get next concept for PROMPTING QUESTION (for ALL scienceqa questions)
+                # This should be called for ALL scienceqa questions, regardless of question level
+                next_concept_for_prompting = get_next_concept_for_prompting(
+                    conversation.id, phenomenon, db
                 )
-                print("=" * 50)
-                if kg != "":
-                    if child_question_level in [
-                        "explanatory",
-                        "general_causal",
-                        "specific_causal",
-                    ]:
-                        state_prompt = (
-                            state_prompt
-                            + "\n\n<Relevant Knowledge Components>\n"
-                            + format_kg("definition_and_explanation", kg, phenomenon)
-                            + "\n</Relevant Knowledge Components>"
-                        )
-                    elif child_question_level == "factual":
-                        state_prompt = (
-                            state_prompt
-                            + "\n\n<Relevant Knowledge Components>\n"
-                            + format_kg("definition_and_explanation", kg, phenomenon)
-                            + "\n</Relevant Knowledge Components>"
-                        )
-            elif current_state == "reflection":
-                kg = knowledge_retrieval(messages, phenomenon)
-                matched_kg = kg  # Store for database
                 print(
-                    f"Matched Knowledge Components: {matched_kg if matched_kg else 'None'}"
+                    f"[Prompting Question] Next concept: {next_concept_for_prompting if next_concept_for_prompting else 'None (all used)'}"
                 )
-                print("=" * 50)
-                if kg != "":
-                    state_prompt = (
-                        state_prompt
-                        + "\n\n<Relevant Knowledge Components>\n"
-                        + format_kg("definition_and_explanation", kg, phenomenon)
-                        + "\n</Relevant Knowledge Components>"
+                
+                # A. Knowledge Retrieval: Match concept for EXPLANATION (only for specific question levels)
+                if child_question_level in [
+                    "factual",
+                    "explanatory",
+                    "general_causal",
+                    "specific_causal",
+                ]:
+                    kg = knowledge_retrieval(messages, phenomenon, conversation.id, db)
+                    matched_kg = kg if kg else None  # Store for database and explanation
+                    print(
+                        f"[Knowledge Retrieval] Matched component for explanation: {matched_kg if matched_kg else 'None'}"
                     )
+                    
+                    # Extract definition and explanation for embedding in prompt
+                    definition = ""
+                    explanation = ""
+                    explanation_method = ""
+                    
+                    if matched_kg and matched_kg != "":
+                        definition, explanation = extract_kg_definition_and_explanation(matched_kg, phenomenon)
+                        if definition and explanation:
+                            # Matched: use the knowledge component
+                            explanation_method = f"Here are the matched knowledge component's definition: {definition} and explanation: {explanation}. Based on the conversation history, use the provided knowledge component to explain the knowledge. The definition describes the formal definition of the concept, and the explanation describes how the concept works in the image. Your knowledge explanation should combine these two parts but must be within 30 words."
+                        else:
+                            # No match: use fallback
+                            explanation_method = "Consider the conversation history to provide a simple explanation to the child's message without directly revealing the phenomenon and knowledge."
+                    else:
+                        # No match: use fallback
+                        explanation_method = "Consider the conversation history to provide a simple explanation to the child's message without directly revealing the phenomenon and knowledge."
+                    
+                    # Replace placeholders in prompt
+                    state_prompt = state_prompt.replace("{explanation_method}", explanation_method)
+                else:
+                    # For irrelevant/no_question, use fallback explanation method
+                    explanation_method = "Consider the conversation history to provide a simple explanation to the child's message without directly revealing the phenomenon and knowledge."
+                    state_prompt = state_prompt.replace("{explanation_method}", explanation_method)
+                    matched_kg = None  # No knowledge retrieval for irrelevant/no_question
+                
+                # Replace next_concept placeholder for all scienceqa questions
+                state_prompt = state_prompt.replace("{next_concept}", next_concept_for_prompting if next_concept_for_prompting else "")
+                print("=" * 50)
+                    
+            elif current_state == "reflection":
+                # For reflection, we still do knowledge retrieval for explanation
+                kg = knowledge_retrieval(messages, phenomenon, conversation.id, db)
+                matched_kg = kg if kg else None
+                print(
+                    f"[Knowledge Retrieval] Matched component for explanation: {matched_kg if matched_kg else 'None'}"
+                )
+                print("=" * 50)
+                # Extract definition and explanation for embedding in prompt
+                definition = ""
+                explanation = ""
+                explanation_method = ""
+                
+                if matched_kg and matched_kg != "":
+                    definition, explanation = extract_kg_definition_and_explanation(matched_kg, phenomenon)
+                    if definition and explanation:
+                        # Matched: use the knowledge component
+                        explanation_method = f"Here are the matched knowledge component's definition: {definition} and explanation: {explanation}. Based on the conversation history, use the provided knowledge component to explain the knowledge. The definition describes the formal definition of the concept, and the explanation describes how the concept works in the image. Your knowledge explanation should combine these two parts but must be within 30 words."
+                    else:
+                        # No match: use fallback
+                        explanation_method = "Consider the conversation history to provide a simple explanation to the child's message without directly revealing the phenomenon and knowledge."
+                else:
+                    # No match: use fallback
+                    explanation_method = "Consider the conversation history to provide a simple explanation to the child's message without directly revealing the phenomenon and knowledge."
+                
+                # Replace placeholders in prompt
+                state_prompt = state_prompt.replace("{explanation_method}", explanation_method)
+                state_prompt = state_prompt.replace("{next_concept}", "")  # No prompting question in reflection
 
         if current_state == "scienceqa" and child_question_level is not None:
             state_prompt = format_prompt(
@@ -1335,6 +1742,7 @@ def chat_completion_stream():
         # Capture variables for use inside generate() function
         saved_child_question_level = child_question_level
         saved_matched_kg = matched_kg
+        saved_next_concept_for_prompting = next_concept_for_prompting
 
         def generate():
             full_content = ""
@@ -1358,14 +1766,13 @@ def chat_completion_stream():
                         full_content += token
                         yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
 
+                # Print next concept used for this response (if in scienceqa state)
+                if current_state == "scienceqa":
+                    print(f"[Response Generated] Next concept used for prompting question: {saved_next_concept_for_prompting if saved_next_concept_for_prompting else 'None (all concepts used)'}")
+
                 # Fix bold formatting for scienceqa responses
                 if current_state == "scienceqa":
-                    original_content = full_content
                     full_content = fix_scienceqa_bold_formatting(full_content)
-                    if full_content != original_content:
-                        print("Fixed bold formatting in scienceqa streaming response")
-                        print(f"Original: {original_content[:100]}...")
-                        print(f"Fixed: {full_content[:100]}...")
 
                 # Determine assistant evaluation result (only in scienceqa phase)
                 assistant_evaluation_result = None
@@ -1801,11 +2208,22 @@ def generate_speech():
         else:
             print("⚠️  No start time found for session, cannot calculate latency")
 
-        data = request.get_json()
-        text = data.get("text", "")
+        # Validate request content type
+        if not request.is_json:
+            return jsonify({"error": "Content-Type must be application/json"}), 400
 
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Invalid JSON in request body"}), 400
+
+        text = data.get("text", "")
+        if not text or not isinstance(text, str):
+            return jsonify({"error": "No text provided or text is not a string"}), 400
+
+        # Trim and validate text is not empty after trimming
+        text = text.strip()
         if not text:
-            return jsonify({"error": "No text provided"}), 400
+            return jsonify({"error": "Text is empty after trimming"}), 400
 
         # Clean markdown formatting from text for TTS
         # This removes ** markers that can cause TTS to break

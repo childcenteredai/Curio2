@@ -485,34 +485,65 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
         throw new Error('No response body')
       }
       
+      let buffer = ''
+      let lastScrollTime = 0
+      const scrollThrottle = 100 // Throttle scrolling to every 100ms during streaming
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
         
-        const chunk = decoder.decode(value)
-        const lines = chunk.split('\n')
+        const chunk = decoder.decode(value, { stream: true })
+        buffer += chunk
+        const lines = buffer.split('\n')
+        
+        // Keep the last incomplete line in buffer
+        buffer = lines.pop() || ''
         
         for (const line of lines) {
+          if (line.trim() === '') continue
+          
           if (line.startsWith('data: ')) {
             try {
-              const data = JSON.parse(line.slice(6))
+              const jsonStr = line.slice(6).trim()
+              if (!jsonStr) continue
+              
+              const data = JSON.parse(jsonStr)
               
               if (data.type === 'token') {
-                fullText += data.content
+                fullText += data.content || ''
                 // Update content for display (will be hidden until audio plays)
                 const assistantMsg = chatHistory.value[assistantMessageIndex]
                 if (assistantMsg) {
                   assistantMsg.content = fullText
                 }
+                // Auto-scroll during streaming (throttled)
+                const now = Date.now()
+                if (now - lastScrollTime >= scrollThrottle) {
+                  await scrollToBottom()
+                  lastScrollTime = now
+                }
               } else if (data.type === 'done') {
-                fullText = data.response
+                fullText = data.response || fullText
                 nextState = data.next_state as typeof convState.value
                 convState.value = nextState
+                // Final scroll when done
+                await scrollToBottom()
               } else if (data.type === 'error') {
-                throw new Error(data.error || 'Streaming error')
+                const errorMsg = data.error || 'Streaming error'
+                console.error('Stream error received:', errorMsg)
+                // If we have partial text, continue with it; otherwise throw error
+                if (!fullText || fullText.trim().length === 0) {
+                  throw new Error(errorMsg)
+                } else {
+                  // We have partial text, log the error but continue
+                  console.warn('Stream error occurred but continuing with partial response')
+                }
               }
             } catch (e) {
-              console.error('Error parsing SSE data:', e)
+              // Only log if it's not a JSON parse error for empty/incomplete lines
+              if (line.slice(6).trim().length > 0) {
+                console.error('Error parsing SSE data:', e, 'Line:', line.substring(0, 100))
+              }
             }
           }
         }
@@ -570,6 +601,18 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
       }
     }
     
+    // Check if we have any text to display
+    if (!fullText || fullText.trim().length === 0) {
+      console.error('No text received from stream')
+      const assistantMsg = chatHistory.value[assistantMessageIndex]
+      if (assistantMsg) {
+        assistantMsg.content = 'Sorry, I encountered an error generating a response. Please try again.'
+        assistantMsg.audioReady = true // Show message even without audio
+      }
+      await scrollToBottom()
+      return
+    }
+    
     // Split text into words for printer effect
     const words = fullText.split(/(\s+)/).filter(w => w.length > 0).map(w => ({
       text: w,
@@ -603,16 +646,24 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
 
 const generateAndPlayAudio = async (text: string) => {
   try {
+    // Validate text before sending
+    if (!text || typeof text !== 'string' || text.trim().length === 0) {
+      console.error('Cannot generate speech: text is empty or invalid')
+      return
+    }
+    
     const response = await fetch('/api/speech', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ text })
+      body: JSON.stringify({ text: text.trim() })
     })
     
     if (!response.ok) {
-      throw new Error('Speech generation failed')
+      const errorText = await response.text().catch(() => 'Unknown error')
+      console.error('Speech generation failed:', response.status, errorText)
+      throw new Error(`Speech generation failed: ${response.status}`)
     }
     
     const audioBlob = await response.blob()
@@ -637,16 +688,29 @@ const generateAndPlayAudio = async (text: string) => {
 
 const generateAndPlayAudioWithPrinterEffect = async (text: string, messageIndex: number) => {
   try {
+    // Validate text before sending
+    if (!text || typeof text !== 'string' || text.trim().length === 0) {
+      console.error('Cannot generate speech: text is empty or invalid')
+      // Show message without audio
+      const message = chatHistory.value[messageIndex]
+      if (message) {
+        message.audioReady = true
+      }
+      return
+    }
+    
     const response = await fetch('/api/speech', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ text })
+      body: JSON.stringify({ text: text.trim() })
     })
     
     if (!response.ok) {
-      throw new Error('Speech generation failed')
+      const errorText = await response.text().catch(() => 'Unknown error')
+      console.error('Speech generation failed:', response.status, errorText)
+      throw new Error(`Speech generation failed: ${response.status}`)
     }
     
     const audioBlob = await response.blob()
@@ -732,6 +796,8 @@ const generateAndPlayAudioWithPrinterEffect = async (text: string, messageIndex:
       
       // Reveal words as audio plays
       let currentWordIndex = 0
+      let lastScrollTime = 0
+      const scrollThrottle = 200 // Throttle scrolling to every 200ms during printer effect
       const updateInterval = setInterval(() => {
         if (!audio || audio.paused || audio.ended) {
           clearInterval(updateInterval)
@@ -739,6 +805,7 @@ const generateAndPlayAudioWithPrinterEffect = async (text: string, messageIndex:
         }
         
         const currentAudioTime = audio.currentTime || 0
+        let wordsRevealed = false
         
         // Reveal words that should be visible at current time
         while (currentWordIndex < wordTimings.length) {
@@ -747,8 +814,18 @@ const generateAndPlayAudioWithPrinterEffect = async (text: string, messageIndex:
           const wordIdx = timing.wordIndex
           if (wordIdx !== undefined && words && words[wordIdx]) {
             words[wordIdx].visible = true
+            wordsRevealed = true
           }
           currentWordIndex++
+        }
+        
+        // Auto-scroll when new words are revealed (throttled)
+        if (wordsRevealed) {
+          const now = Date.now()
+          if (now - lastScrollTime >= scrollThrottle) {
+            scrollToBottom()
+            lastScrollTime = now
+          }
         }
       }, 50) // Update every 50ms for smooth effect
       
@@ -758,6 +835,8 @@ const generateAndPlayAudioWithPrinterEffect = async (text: string, messageIndex:
         if (words) {
           words.forEach(word => word.visible = true)
         }
+        // Final scroll when audio ends
+        scrollToBottom()
         URL.revokeObjectURL(audioUrl)
         if (currentAudio === audio) {
           currentAudio = null
@@ -852,7 +931,7 @@ const loadExistingConversation = async () => {
         
         // Restore chat history from messages
         // Filter out system messages and only include user and assistant messages
-        const greetingText = "Hi, little detective! I'm Curio, your friendly science assistant. We are going to explore the scientific mystery in the image together! What do you find odd in this picture?"
+        const greetingText = "Hi, kiddo! I'm Curio, your friendly science assistant. We are going to explore the scientific mystery in the image together! What do you find odd in this picture?"
         
         chatHistory.value = messages
           .filter((msg: any) => msg.role === 'user' || msg.role === 'assistant')
@@ -914,7 +993,7 @@ const loadExistingConversation = async () => {
 }
 
 const generateInitialGreeting = async () => {
-  const greetingText = "Hi, little detective! I'm Curio, your friendly science assistant. We are going to explore the scientific mystery in the image together! What do you find odd in this picture?"
+  const greetingText = "Hi, kiddo! I'm Curio, your friendly science assistant. We are going to explore the scientific mystery in the image together! What do you find odd in this picture?"
   
   // Prevent duplicate greeting calls - check if greeting already exists in chat history
   const hasGreeting = chatHistory.value.some(msg => 

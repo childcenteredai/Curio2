@@ -1,17 +1,17 @@
 {
     "balloon": {
-        "image_content": "In the living room, a girl wears a fleece sweater and holds an orange balloon near her hair. Suddenly, her hair stands straight up, each strand reaching away from the others like a spiky crown. The hairs are trying to get away from each other! Nearby, her sibling holds a balloon near her own hair, but nothing happens. The sibling's hair stays flat as she stares at her, amazed.",
+        "image_content": "In the living room, a girl wears a fleece sweater and holds an orange balloon near her hair. Suddenly, her hair stands straight up, each strand reaching away from the others like a spiky crown. The hairs are trying to get away from each other! Nearby, her sibling holds a balloon near her own hair, but nothing happens. The sibling's hair stays flat as she stares at her, amazed. Both siblings rub the balloon on the fleece sweater and the cotton top, respectively. ",
         "phenomenon": "The right girl’s hair stands straight up.",
         "knowledge": "When you rub the balloon, you're giving it electric energy. That energy creates a force strong enough to move the hair without touching it. The hairs also get energy and move away from each other. This shows how energy can cause motion without direct contact."
     },
     "bend": {
-        "image_content": "One child is trying to fill his bottle, while his friend is holding a comb near the water stream, making the stream bend towards the comb away from the boy’s bottle. Nearby, another child is filling his bottle normally. All the children should be wearing similar clothes, with similar skin and hair color.",
+        "image_content": "One child is trying to fill his bottle, while his friend is holding a comb near the water stream, making the stream bend towards the comb away from the boy’s bottle. Nearby, another child is filling his bottle normally. All the children should be wearing similar clothes, with similar skin and hair color. ",
         "phenomenon": "The water stream bends toward the comb.",
-        "knowledge": "When you comb dry hair with a plastic comb, you create static electricity. This electric charge can pull on the water stream without touching it, causing the water to bend toward the comb."
+        "knowledge": "The boy combs his dry hair with a plastic comb. When you comb dry hair with a plastic comb, you create static electricity. This electric charge can pull on the water stream without touching it, causing the water to bend toward the comb."
     },
     "pepper": {
         "image_content": "Two siblings are sitting next to each other, wearing fuzzy sweaters. They are each holding a plastic spoon and reaching toward small bowls that contain salt and pepper. The color of the bowls should be the same. On the left, the younger sibling is scooping salt. As he lowers the spoon toward the salt bowl, nothing happens; the grains stay still. On the right, the older sibling is scooping pepper flakes. As her spoon gets close, pepper flakes suddenly leap upward to the spoon and stick to it! Their eyes widen in surprise. ",
         "phenomenon": "The pepper jumps up to the spoon while the salt stays behind.",
-        "knowledge": "When you rub the spoon, it becomes electrically charged—kind of like a magnet, but for electric things. Some tiny bits like pepper or cereal are light and dry, so the charge pulls them up easily. Salt may be heavier, less dry, or shaped differently, so it doesn't jump. This teaches us that not all materials react the same way to electric forces, even when they look similar."
+        "knowledge": "Both siblings rub their plastic spoons on fuzzy sweaters. When you rub the spoon, it becomes electrically charged—kind of like a magnet, but for electric things. Some tiny bits like pepper or cereal are light and dry, so the charge pulls them up easily. Salt may be heavier, less dry, or shaped differently, so it doesn't jump. This teaches us that not all materials react the same way to electric forces, even when they look similar."
     }
 }

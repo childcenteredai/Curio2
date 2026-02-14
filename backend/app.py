@@ -2,6 +2,7 @@ import base64
 import io
 import json
 import os
+import re
 import time
 import uuid
 from collections import defaultdict
@@ -859,8 +860,6 @@ def fix_scienceqa_bold_formatting(text):
     if not text:
         return ""
 
-    import re
-
     # Step 1: Fix single asterisks (*text*) to double asterisks (**text**)
     # Match single asterisks that are not already part of **
     # Pattern: *word* but not **word** or *word** or **word*
@@ -1387,7 +1386,6 @@ def chat_completion():
                 # Replace placeholders for all scienceqa questions
                 # If current_concept is empty, remove the lines about evaluating current concept before replacing
                 if not current_concept:
-
                     # Remove lines that mention evaluating or reinforcing current concept
                     # Match lines starting with "-" that contain "current concept" and the placeholder
                     lines = state_prompt.split("\n")
@@ -1933,7 +1931,6 @@ def chat_completion_stream():
                 # Replace placeholders for all scienceqa questions
                 # If current_concept is empty, remove the lines about evaluating current concept before replacing
                 if not current_concept:
-
                     # Remove lines that mention evaluating or reinforcing current concept
                     # Match lines starting with "-" that contain "current concept" and the placeholder
                     lines = state_prompt.split("\n")

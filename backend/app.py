@@ -1387,7 +1387,6 @@ def chat_completion():
                 # Replace placeholders for all scienceqa questions
                 # If current_concept is empty, remove the lines about evaluating current concept before replacing
                 if not current_concept:
-                    import re
 
                     # Remove lines that mention evaluating or reinforcing current concept
                     # Match lines starting with "-" that contain "current concept" and the placeholder
@@ -1934,7 +1933,6 @@ def chat_completion_stream():
                 # Replace placeholders for all scienceqa questions
                 # If current_concept is empty, remove the lines about evaluating current concept before replacing
                 if not current_concept:
-                    import re
 
                     # Remove lines that mention evaluating or reinforcing current concept
                     # Match lines starting with "-" that contain "current concept" and the placeholder
@@ -2047,7 +2045,6 @@ def chat_completion_stream():
         saved_child_question_level = child_question_level
         saved_matched_kg = matched_kg
         saved_next_concept_for_prompting = next_concept_for_prompting
-        saved_current_concept = current_concept
 
         def generate():
             full_content = ""

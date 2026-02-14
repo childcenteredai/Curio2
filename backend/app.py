@@ -406,8 +406,6 @@ def get_matched_concepts_from_db(
     concept_names = list(concepts_dict.keys())
 
     # Query database for assistant messages with matched knowledge components
-    from models import Message
-
     assistant_messages = (
         db_session.query(Message)
         .filter(
@@ -482,8 +480,6 @@ def get_next_concept_for_prompting(
     # Calculate current index: count existing scienceqa assistant messages
     # Each scienceqa turn uses one concept for prompting question in sequential order
     # The index points to the next concept to use
-    from models import Message
-
     assistant_messages = (
         db_session.query(Message)
         .filter(
@@ -497,15 +493,6 @@ def get_next_concept_for_prompting(
 
     # Current index = number of scienceqa turns (concepts[0..index-1] have been used)
     current_index = len(assistant_messages)
-
-    # Debug: print all concepts and current index
-    print(
-        f"[Prompting Question] Debug - Total concepts: {len(concept_names)}, Concepts: {concept_names}"
-    )
-    print(
-        f"[Prompting Question] Debug - Existing scienceqa assistant messages: {current_index}"
-    )
-
     # Check if we've used all concepts
     if current_index >= len(concept_names):
         print(
@@ -1240,9 +1227,67 @@ def chat_completion():
         next_concept_for_prompting = (
             None  # For prompting question (initialized for all states)
         )
+        current_concept = None  # Current concept being discussed (initialized as empty)
 
         if current_state in ["scienceqa", "reflection"]:
             if current_state == "scienceqa":
+                # Get current_concept from the most recent assistant message with matched_kg
+                # This ensures current_concept persists across turns
+                recent_assistant_msg = (
+                    db.query(Message)
+                    .filter(
+                        Message.conversation_id == conversation.id,
+                        Message.role == "assistant",
+                        Message.state == "scienceqa",
+                        Message.matched_knowledge_components.isnot(None),
+                    )
+                    .order_by(Message.created_at.desc())
+                    .first()
+                )
+
+                if (
+                    recent_assistant_msg
+                    and recent_assistant_msg.matched_knowledge_components
+                ):
+                    try:
+                        prev_matched_kg = (
+                            recent_assistant_msg.matched_knowledge_components
+                        )
+                        kg_list = (
+                            json.loads(prev_matched_kg)
+                            if isinstance(prev_matched_kg, str)
+                            and prev_matched_kg.startswith("[")
+                            else json.loads(f'["{prev_matched_kg}"]')
+                            if isinstance(prev_matched_kg, str)
+                            else prev_matched_kg
+                        )
+                        if isinstance(kg_list, list) and len(kg_list) > 0:
+                            prev_matched_concept = kg_list[0]
+                            # Normalize the concept name
+                            knowledge_base = open("knowledge/kg.json", "r").read()
+                            knowledge_base = json.loads(knowledge_base)
+                            phenomenon_map = {
+                                "balloon": "Hair Stands Up Near a Balloon",
+                                "bend": "Bending Water Stream with a Comb",
+                                "pepper": "Pepper Leaping up to Spoon",
+                            }
+                            phenomenon_key = phenomenon_map.get(
+                                phenomenon, "Hair Stands Up Near a Balloon"
+                            )
+                            concepts_dict = knowledge_base.get(phenomenon_key, {}).get(
+                                "concepts", {}
+                            )
+                            concept_names = list(concepts_dict.keys())
+                            for cn in concept_names:
+                                if cn.lower() == prev_matched_concept.lower():
+                                    current_concept = cn
+                                    print(
+                                        f"[Current Concept] Loaded from previous message: {current_concept}"
+                                    )
+                                    break
+                    except (json.JSONDecodeError, TypeError, AttributeError):
+                        pass
+
                 # B. Get next concept for PROMPTING QUESTION (for ALL scienceqa questions)
                 # This should be called for ALL scienceqa questions, regardless of question level
                 next_concept_for_prompting = get_next_concept_for_prompting(
@@ -1266,6 +1311,45 @@ def chat_completion():
                     print(
                         f"[Knowledge Retrieval] Matched component for explanation: {matched_kg if matched_kg else 'None'}"
                     )
+
+                    # Update current_concept when a concept is matched (only if current_concept is None)
+                    # This ensures current_concept is set once from matched_kg and persists
+                    if matched_kg and matched_kg != "" and current_concept is None:
+                        try:
+                            kg_list = (
+                                json.loads(matched_kg)
+                                if isinstance(matched_kg, str)
+                                and matched_kg.startswith("[")
+                                else json.loads(f'["{matched_kg}"]')
+                                if isinstance(matched_kg, str)
+                                else matched_kg
+                            )
+                            if isinstance(kg_list, list) and len(kg_list) > 0:
+                                matched_concept = kg_list[0]
+                                # Normalize the concept name
+                                knowledge_base = open("knowledge/kg.json", "r").read()
+                                knowledge_base = json.loads(knowledge_base)
+                                phenomenon_map = {
+                                    "balloon": "Hair Stands Up Near a Balloon",
+                                    "bend": "Bending Water Stream with a Comb",
+                                    "pepper": "Pepper Leaping up to Spoon",
+                                }
+                                phenomenon_key = phenomenon_map.get(
+                                    phenomenon, "Hair Stands Up Near a Balloon"
+                                )
+                                concepts_dict = knowledge_base.get(
+                                    phenomenon_key, {}
+                                ).get("concepts", {})
+                                concept_names = list(concepts_dict.keys())
+                                for cn in concept_names:
+                                    if cn.lower() == matched_concept.lower():
+                                        current_concept = cn
+                                        print(
+                                            f"[Current Concept] Updated to: {current_concept}"
+                                        )
+                                        break
+                        except (json.JSONDecodeError, TypeError, AttributeError):
+                            pass
 
                     # Extract definition and explanation for embedding in prompt
                     definition = ""
@@ -1300,7 +1384,29 @@ def chat_completion():
                         None  # No knowledge retrieval for irrelevant/no_question
                     )
 
-                # Replace next_concept placeholder for all scienceqa questions
+                # Replace placeholders for all scienceqa questions
+                # If current_concept is empty, remove the lines about evaluating current concept before replacing
+                if not current_concept:
+                    import re
+
+                    # Remove lines that mention evaluating or reinforcing current concept
+                    # Match lines starting with "-" that contain "current concept" and the placeholder
+                    lines = state_prompt.split("\n")
+                    filtered_lines = []
+                    for line in lines:
+                        # Skip lines that contain "current concept" with the placeholder
+                        if "{current_concept}" in line and (
+                            "current concept" in line.lower()
+                            or "Current concept" in line
+                        ):
+                            continue
+                        filtered_lines.append(line)
+                    state_prompt = "\n".join(filtered_lines)
+
+                state_prompt = state_prompt.replace(
+                    "{current_concept}",
+                    current_concept if current_concept else "",
+                )
                 state_prompt = state_prompt.replace(
                     "{next_concept}",
                     next_concept_for_prompting if next_concept_for_prompting else "",
@@ -1668,9 +1774,67 @@ def chat_completion_stream():
         next_concept_for_prompting = (
             None  # For prompting question (initialized for all states)
         )
+        current_concept = None  # Current concept being discussed (initialized as empty)
 
         if current_state in ["scienceqa", "reflection"]:
             if current_state == "scienceqa":
+                # Get current_concept from the most recent assistant message with matched_kg
+                # This ensures current_concept persists across turns
+                recent_assistant_msg = (
+                    db.query(Message)
+                    .filter(
+                        Message.conversation_id == conversation.id,
+                        Message.role == "assistant",
+                        Message.state == "scienceqa",
+                        Message.matched_knowledge_components.isnot(None),
+                    )
+                    .order_by(Message.created_at.desc())
+                    .first()
+                )
+
+                if (
+                    recent_assistant_msg
+                    and recent_assistant_msg.matched_knowledge_components
+                ):
+                    try:
+                        prev_matched_kg = (
+                            recent_assistant_msg.matched_knowledge_components
+                        )
+                        kg_list = (
+                            json.loads(prev_matched_kg)
+                            if isinstance(prev_matched_kg, str)
+                            and prev_matched_kg.startswith("[")
+                            else json.loads(f'["{prev_matched_kg}"]')
+                            if isinstance(prev_matched_kg, str)
+                            else prev_matched_kg
+                        )
+                        if isinstance(kg_list, list) and len(kg_list) > 0:
+                            prev_matched_concept = kg_list[0]
+                            # Normalize the concept name
+                            knowledge_base = open("knowledge/kg.json", "r").read()
+                            knowledge_base = json.loads(knowledge_base)
+                            phenomenon_map = {
+                                "balloon": "Hair Stands Up Near a Balloon",
+                                "bend": "Bending Water Stream with a Comb",
+                                "pepper": "Pepper Leaping up to Spoon",
+                            }
+                            phenomenon_key = phenomenon_map.get(
+                                phenomenon, "Hair Stands Up Near a Balloon"
+                            )
+                            concepts_dict = knowledge_base.get(phenomenon_key, {}).get(
+                                "concepts", {}
+                            )
+                            concept_names = list(concepts_dict.keys())
+                            for cn in concept_names:
+                                if cn.lower() == prev_matched_concept.lower():
+                                    current_concept = cn
+                                    print(
+                                        f"[Current Concept] Loaded from previous message: {current_concept}"
+                                    )
+                                    break
+                    except (json.JSONDecodeError, TypeError, AttributeError):
+                        pass
+
                 # B. Get next concept for PROMPTING QUESTION (for ALL scienceqa questions)
                 # This should be called for ALL scienceqa questions, regardless of question level
                 next_concept_for_prompting = get_next_concept_for_prompting(
@@ -1694,6 +1858,45 @@ def chat_completion_stream():
                     print(
                         f"[Knowledge Retrieval] Matched component for explanation: {matched_kg if matched_kg else 'None'}"
                     )
+
+                    # Update current_concept when a concept is matched (only if current_concept is None)
+                    # This ensures current_concept is set once from matched_kg and persists
+                    if matched_kg and matched_kg != "" and current_concept is None:
+                        try:
+                            kg_list = (
+                                json.loads(matched_kg)
+                                if isinstance(matched_kg, str)
+                                and matched_kg.startswith("[")
+                                else json.loads(f'["{matched_kg}"]')
+                                if isinstance(matched_kg, str)
+                                else matched_kg
+                            )
+                            if isinstance(kg_list, list) and len(kg_list) > 0:
+                                matched_concept = kg_list[0]
+                                # Normalize the concept name
+                                knowledge_base = open("knowledge/kg.json", "r").read()
+                                knowledge_base = json.loads(knowledge_base)
+                                phenomenon_map = {
+                                    "balloon": "Hair Stands Up Near a Balloon",
+                                    "bend": "Bending Water Stream with a Comb",
+                                    "pepper": "Pepper Leaping up to Spoon",
+                                }
+                                phenomenon_key = phenomenon_map.get(
+                                    phenomenon, "Hair Stands Up Near a Balloon"
+                                )
+                                concepts_dict = knowledge_base.get(
+                                    phenomenon_key, {}
+                                ).get("concepts", {})
+                                concept_names = list(concepts_dict.keys())
+                                for cn in concept_names:
+                                    if cn.lower() == matched_concept.lower():
+                                        current_concept = cn
+                                        print(
+                                            f"[Current Concept] Updated to: {current_concept}"
+                                        )
+                                        break
+                        except (json.JSONDecodeError, TypeError, AttributeError):
+                            pass
 
                     # Extract definition and explanation for embedding in prompt
                     definition = ""
@@ -1728,7 +1931,29 @@ def chat_completion_stream():
                         None  # No knowledge retrieval for irrelevant/no_question
                     )
 
-                # Replace next_concept placeholder for all scienceqa questions
+                # Replace placeholders for all scienceqa questions
+                # If current_concept is empty, remove the lines about evaluating current concept before replacing
+                if not current_concept:
+                    import re
+
+                    # Remove lines that mention evaluating or reinforcing current concept
+                    # Match lines starting with "-" that contain "current concept" and the placeholder
+                    lines = state_prompt.split("\n")
+                    filtered_lines = []
+                    for line in lines:
+                        # Skip lines that contain "current concept" with the placeholder
+                        if "{current_concept}" in line and (
+                            "current concept" in line.lower()
+                            or "Current concept" in line
+                        ):
+                            continue
+                        filtered_lines.append(line)
+                    state_prompt = "\n".join(filtered_lines)
+
+                state_prompt = state_prompt.replace(
+                    "{current_concept}",
+                    current_concept if current_concept else "",
+                )
                 state_prompt = state_prompt.replace(
                     "{next_concept}",
                     next_concept_for_prompting if next_concept_for_prompting else "",
@@ -1822,6 +2047,7 @@ def chat_completion_stream():
         saved_child_question_level = child_question_level
         saved_matched_kg = matched_kg
         saved_next_concept_for_prompting = next_concept_for_prompting
+        saved_current_concept = current_concept
 
         def generate():
             full_content = ""

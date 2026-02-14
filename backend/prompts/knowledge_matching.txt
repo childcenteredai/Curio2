@@ -1,13 +1,8 @@
-You are given a knowledge graph (KG) of scientific components. Your task is to determine whether the child's latest question can be explained using a concept that exists in the KG.
+You are given a knowledge graph (KG) of scientific components. Your task is to determine whether the child's latest question/response can be explained using a concept that exists in the KG.
 
 <Retrieval Rules>
-1. Check question validity
-- If the child's latest message is NOT a question, return an empty string ('') immediately.
-
-2. Match against the KG
-- Focus only on the child's most recent question.
-
-- Only match when a component in the KG can directly answer the child's question.
+- Focus only on the child's most recent question/response.
+- Only match when a component in the KG can directly answer the child's question, or match a component that can be used as an initial information to guide the child's exploration of the scientific phenomenon. 
 - **Select the SINGLE most relevant component. Return only one component, not multiple.**
 - **If no component is strongly relevant, return an empty string ('').**
 </Retrieval Rules>

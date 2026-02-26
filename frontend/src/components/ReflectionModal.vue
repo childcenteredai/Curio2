@@ -182,10 +182,15 @@ const openingSentenceWords = ref<Array<{text: string, visible: boolean, isBold?:
 const bulletPointsWords = ref<Array<{words: Array<{text: string, visible: boolean, isBold?: boolean, isFirstBold?: boolean, isLastBold?: boolean}>}>>([])
 const defaultOpeningSentence = ref('')
 
-// Get a random opening sentence, prefixed with "You've spotted [x] out of [N] clues!"
+// Get a random opening sentence, prefixed with "You've spotted [x] out of [N] clues!" when x > 0
 const getRandomOpeningSentence = (bulletCount: number, totalConcepts: number): string => {
   const n = Math.max(0, totalConcepts || 0)
   const x = Math.max(0, bulletCount)
+  if (x === 0) {
+    return n > 0
+      ? `Our mission is just beginning! ${n} clues are still out there for us to explore!`
+      : "Our mission is just beginning! There are still clues out there for us to explore!"
+  }
   const cluePrefix = n > 0 ? `You've spotted ${x} out of ${n} clues! ` : ''
   const options: string[] = [
     "Here are the pieces of the puzzles of what we have explored so far!",

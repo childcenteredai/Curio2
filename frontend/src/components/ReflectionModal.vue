@@ -158,6 +158,7 @@ const props = defineProps<{
   isVisible: boolean
   summary: string
   summaryWords?: Array<{text: string, visible: boolean}>
+  totalConcepts?: number
 }>()
 
 const emit = defineEmits<{
@@ -181,14 +182,18 @@ const openingSentenceWords = ref<Array<{text: string, visible: boolean, isBold?:
 const bulletPointsWords = ref<Array<{words: Array<{text: string, visible: boolean, isBold?: boolean, isFirstBold?: boolean, isLastBold?: boolean}>}>>([])
 const defaultOpeningSentence = ref('')
 
-// Get a random opening sentence
-const getRandomOpeningSentence = (): string => {
+// Get a random opening sentence, prefixed with "You've spotted [x] out of [N] clues!"
+const getRandomOpeningSentence = (bulletCount: number, totalConcepts: number): string => {
+  const n = Math.max(0, totalConcepts || 0)
+  const x = Math.max(0, bulletCount)
+  const cluePrefix = n > 0 ? `You've spotted ${x} out of ${n} clues! ` : ''
   const options: string[] = [
     "Here are the pieces of the puzzles of what we have explored so far!",
     "Let's think about what we have explored so far!"
   ]
   const index = Math.floor(Math.random() * options.length)
-  return options[index] ?? options[0] ?? ""
+  const base = options[index] ?? options[0] ?? ""
+  return cluePrefix + base
 }
 
 // Check if summary contains bullet points
@@ -806,8 +811,8 @@ watch(() => props.isVisible, async (newVal) => {
       // Parse bullet points from summary
       const { bulletPoints } = parseSummaryWithBulletPoints(props.summary)
       
-      // Use hardcoded opening sentence (randomly selected)
-      defaultOpeningSentence.value = getRandomOpeningSentence()
+      // Use hardcoded opening sentence (randomly selected), prefixed with "You've spotted x out of N clues!"
+      defaultOpeningSentence.value = getRandomOpeningSentence(bulletPoints.length, props.totalConcepts ?? 0)
       
       // Initialize opening sentence words
       openingSentenceWords.value = defaultOpeningSentence.value.split(/(\s+)/).filter(w => w.length > 0).map(w => ({

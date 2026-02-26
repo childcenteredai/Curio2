@@ -2338,7 +2338,22 @@ def reflection_summary():
                     db_session.rollback()
                     print(f"Error committing reflection summary: {commit_error}")
 
-                yield f"data: {json.dumps({'type': 'done', 'response': full_content})}\n\n"
+                # Get total concept count from kg.json for this phenomenon
+                phenomenon_map = {
+                    "balloon": "Hair Stands Up Near a Balloon",
+                    "bend": "Bending Water Stream with a Comb",
+                    "pepper": "Pepper Leaping up to Spoon",
+                }
+                phenomenon_key = phenomenon_map.get(
+                    phenomenon, "Hair Stands Up Near a Balloon"
+                )
+                knowledge_base = json.load(open("knowledge/kg.json", "r"))
+                concepts_dict = knowledge_base.get(phenomenon_key, {}).get(
+                    "concepts", {}
+                )
+                total_concepts = len(concepts_dict) if concepts_dict else 0
+
+                yield f"data: {json.dumps({'type': 'done', 'response': full_content, 'total_concepts': total_concepts})}\n\n"
             except Exception as e:
                 db_session.rollback()
                 print(f"Reflection summary streaming error: {e}")

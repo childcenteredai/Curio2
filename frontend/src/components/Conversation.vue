@@ -63,11 +63,20 @@
         </button>
       </div>
     </div>
+
+    <!-- Reflection summary modal (shows after reflection response) -->
+    <ReflectionModal
+      :isVisible="showReflectionModal"
+      :summary="reflectionSummary"
+      :totalConcepts="reflectionTotalConcepts"
+      @close="closeReflectionModal"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import ReflectionModal from './ReflectionModal.vue'
 // Use relative paths - works with nginx reverse proxy (local) and Ingress (prod)
 
 // Props
@@ -100,6 +109,9 @@ const getOrCreateSessionId = (): string => {
 }
 const sessionId = ref<string>(getOrCreateSessionId())
 const isGeneratingGreeting = ref(false)
+const showReflectionModal = ref(false)
+const reflectionSummary = ref('')
+const reflectionTotalConcepts = ref(0)
 
 // Audio recording
 let mediaRecorder: MediaRecorder | null = null
@@ -299,6 +311,73 @@ const renderTextWithBoldState = (text: string): string => {
   return result
 }
 
+const closeReflectionModal = () => {
+  showReflectionModal.value = false
+  reflectionSummary.value = ''
+  reflectionTotalConcepts.value = 0
+}
+
+const fetchReflectionSummaryAndShowModal = async () => {
+  try {
+    const messages = chatHistory.value.map(msg => ({
+      role: msg.role,
+      content: msg.content
+    }))
+    const response = await fetch('/api/reflection/summary', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages,
+        image_path: props.selectedImagePath || '/imgs/balloon.jpg',
+        conversation_id: conversationId.value
+      })
+    })
+    if (!response.ok) {
+      console.error('Reflection summary failed:', response.status)
+      return
+    }
+    const reader = response.body?.getReader()
+    const decoder = new TextDecoder()
+    if (!reader) return
+    let fullSummary = ''
+    let totalConcepts = 0
+    let buffer = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        try {
+          const jsonStr = line.slice(6).trim()
+          if (!jsonStr) continue
+          const data = JSON.parse(jsonStr)
+          if (data.type === 'token') {
+            fullSummary += data.content || ''
+          } else if (data.type === 'done') {
+            fullSummary = data.response || fullSummary
+            totalConcepts = data.total_concepts ?? 0
+          } else if (data.type === 'error') {
+            console.error('Reflection summary error:', data.error)
+            return
+          }
+        } catch {
+          // ignore parse errors
+        }
+      }
+    }
+    if (fullSummary.trim()) {
+      reflectionSummary.value = fullSummary.trim()
+      reflectionTotalConcepts.value = totalConcepts
+      showReflectionModal.value = true
+    }
+  } catch (e) {
+    console.error('Error fetching reflection summary:', e)
+  }
+}
+
 const scrollToBottom = async () => {
   await nextTick()
   if (messagesContainer.value) {
@@ -453,6 +532,7 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
     
     let fullText = ''
     let nextState: typeof convState.value = convState.value
+    const stateSentWithRequest = convState.value
     
     try {
       const response = await fetch('/api/chat/stream', {
@@ -552,6 +632,7 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
       console.error('Error in streaming:', error)
       // Fallback to regular non-streaming endpoint
       try {
+        const fallbackStateSent = convState.value
         const chatResponse = await fetch('/api/chat', {
           method: 'POST',
           headers: {
@@ -594,6 +675,11 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
         
         await scrollToBottom()
         await generateAndPlayAudioWithPrinterEffect(fullText, assistantMessageIndex)
+        
+        // After reflection response, fetch and show reflection summary modal
+        if (fallbackStateSent === 'reflection' || nextState === 'reflection') {
+          await fetchReflectionSummaryAndShowModal()
+        }
         return
       } catch (fallbackError) {
         console.error('Fallback also failed:', fallbackError)
@@ -630,6 +716,12 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
     
     // Generate and play audio with printer effect
     await generateAndPlayAudioWithPrinterEffect(fullText, assistantMessageIndex)
+    
+    // After reflection response is displayed, fetch and show reflection summary modal
+    // Trigger when: (1) we sent reflection state, or (2) backend transitioned to reflection (next_state)
+    if (stateSentWithRequest === 'reflection' || nextState === 'reflection') {
+      await fetchReflectionSummaryAndShowModal()
+    }
     
   } catch (error) {
     console.error('Error processing audio:', error)
@@ -778,7 +870,12 @@ const generateAndPlayAudioWithPrinterEffect = async (text: string, messageIndex:
       }
       
       if (wordIndices.length === 0) {
-        // No words to reveal, just play audio
+        // No words to reveal, just play audio - still resolve when audio ends
+        audio.onended = () => {
+          URL.revokeObjectURL(audioUrl)
+          if (currentAudio === audio) currentAudio = null
+          resolveAudioEnded()
+        }
         return
       }
       
@@ -841,12 +938,17 @@ const generateAndPlayAudioWithPrinterEffect = async (text: string, messageIndex:
         if (currentAudio === audio) {
           currentAudio = null
         }
+        resolveAudioEnded()
       }
     }
+    
+    let resolveAudioEnded!: () => void
+    const audioEndedPromise = new Promise<void>(r => { resolveAudioEnded = r })
     
     setupPrinterEffect()
     
     await audio.play()
+    await audioEndedPromise
   } catch (error) {
     console.error('Error playing audio with printer effect:', error)
     // Fallback to regular playback
@@ -1098,6 +1200,9 @@ const generateInitialGreeting = async () => {
 const startNewChat = async () => {
   if (isLoading.value) return
   
+  // Close reflection modal if open
+  closeReflectionModal()
+  
   // Create a new conversation ID but keep the same session ID
   conversationId.value = crypto.randomUUID()
   
@@ -1143,7 +1248,8 @@ watch(() => props.selectedImagePath, async (newPath, oldPath) => {
       currentAudio = null
     }
     
-    // Clear current state
+    // Close reflection modal and clear current state
+    closeReflectionModal()
     chatHistory.value = []
     convState.value = 'greet'
     

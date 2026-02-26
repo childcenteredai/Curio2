@@ -91,7 +91,7 @@ if not openai_api_key:
 client = OpenAI(api_key=openai_api_key)
 
 # OpenAI Model Configuration
-OPENAI_CHAT_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-5.2")
+OPENAI_CHAT_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-4.1-2025-04-14")
 OPENAI_WHISPER_MODEL = os.getenv("OPENAI_WHISPER_MODEL", "whisper-1")
 OPENAI_TTS_MODEL = os.getenv("OPENAI_TTS_MODEL", "tts-1")
 OPENAI_TTS_VOICE = os.getenv("OPENAI_TTS_VOICE", "alloy")
@@ -153,6 +153,10 @@ You are Curio, a friendly and encouraging science chatbot for children aged 8-10
 
 state_history = defaultdict(list)
 scienceqa_history = defaultdict(list)
+matched_concepts_history = defaultdict(list)  # Track matched concepts for each conversation
+scienceqa_turn_count = defaultdict(int)  # Track number of scienceqa turns since last reflection
+all_concepts_matched_flag = defaultdict(bool)  # Flag to indicate if all concepts have been matched
+scienceqa_turn_count = defaultdict(int)  # Track number of scienceqa turns since last reflection
 
 
 def state_classification(state, messages, phenomenon):
@@ -202,16 +206,21 @@ def state_update(current_state, eval_state, state_history_list):
             #     next_state = "scienceqa"
             next_state = "scienceqa"
         else:
-            # reflection_index = state_history_list.index("reflection")
-            # post_ref_sci = state_history_list[reflection_index:].count("scienceqa")
+            reflection_index = state_history_list.index("reflection")
+            post_ref_sci = state_history_list[reflection_index:].count("scienceqa")
             num_of_reflection = state_history_list.count("reflection")
             if num_of_reflection >= 2:
                 next_state = "close"
             else:
-                # next_state = "reflection" if post_ref_sci >= 2 else "scienceqa"
+                next_state = "reflection" if post_ref_sci >= 2 else "scienceqa"
                 next_state = "scienceqa"
     elif eval_state == "reflection":
-        next_state = "reflection"
+        # After reflection, return to scienceqa (unless all concepts matched, which is handled outside)
+        # Check if we just finished a reflection - if so, go back to scienceqa
+        if len(state_history_list) > 0 and state_history_list[-1] == "reflection":
+            next_state = "scienceqa"
+        else:
+            next_state = "reflection"
     elif eval_state == "scaffolding":
         num_of_scaffolding = state_history_list.count("scaffolding")
         if num_of_scaffolding >= 1:
@@ -247,12 +256,20 @@ def state_prompt_classification(state, child_question_level=None):
             return level_3
         elif child_question_level == "specific_causal":
             return level_4
+        else:
+            # If child_question_level is None or unknown, this should not happen
+            # as state_classification should always be called first
+            # Use level_0 as fallback
+            print(f"WARNING: state_prompt_classification called for scienceqa with child_question_level={child_question_level}, using level_0 as fallback")
+            return level_0
     elif state == "reflection":
-        return open("prompts/reflection.txt", "r").read()
+        return open("prompts/reflection_response.txt", "r").read()
     elif state == "close":
         return open("prompts/close.txt", "r").read()
     else:
-        return open("prompts/scienceqa.txt", "r").read()
+        # Unknown state, use level_0 as fallback
+        print(f"WARNING: state_prompt_classification called with unknown state={state}, using level_0 as fallback")
+        return level_0
 
 
 def format_prompt(
@@ -260,6 +277,11 @@ def format_prompt(
 ):
     if messages is None:
         messages = []
+    
+    # Check if state_prompt is None or empty
+    if not state_prompt or not isinstance(state_prompt, str):
+        print(f"WARNING: state_prompt is None or invalid in format_prompt: {state_prompt}")
+        return "Respond to the child's question."
 
     phenomenon_json = json.load(open("prompts/phenomenon.json", "r"))
     phenomenon_data = phenomenon_json.get(phenomenon, {})
@@ -1063,9 +1085,6 @@ def chat_completion():
                 print(f"Error committing conversation: {commit_error}")
                 raise
         else:
-            print(
-                f"Found existing conversation {conversation_id} with session_id: {conversation.session_id}"
-            )
             # Backfill user info if it is missing and we have it from JWT
             if user_info and not conversation.user_id:
                 conversation.user_id = user_info.get("userId")
@@ -1149,6 +1168,8 @@ def chat_completion():
                     role="assistant",
                     content=safe_response,
                     state=state,
+                    matched_knowledge_components=None,
+                    next_concept=None,
                 )
                 db.add(assistant_message_record)
 
@@ -1167,9 +1188,13 @@ def chat_completion():
             eval_state = state_classification(state, messages, phenomenon)
             current_state = state_update(state, eval_state, conv_state_history)
 
-            # If transitioning to scienceqa, classify the question level immediately
+            # If transitioning to scienceqa, reset turn count and classify question level
             if current_state == "scienceqa":
-                child_question_level = state_classification(state, messages, phenomenon)
+                # Reset turn count when entering scienceqa from another state (e.g., after reflection)
+                if conv_state_history and conv_state_history[-1] != "scienceqa":
+                    scienceqa_turn_count[conversation_id] = 0
+                # Classify the child's question level (always use the scienceqa evaluator prompt)
+                child_question_level = state_classification("scienceqa", messages, phenomenon)
                 conv_scienceqa_history.append(child_question_level)
                 print("\n=== Turn Evaluation (Non-Stream) ===")
                 print(f"Child's Question: {latest_user_message}")
@@ -1178,6 +1203,10 @@ def chat_completion():
                 state_prompt = state_prompt_classification(
                     current_state, child_question_level
                 )
+            elif current_state == "reflection":
+                # In reflection state - will return to scienceqa after (unless all concepts matched)
+                child_question_level = None
+                state_prompt = state_prompt_classification(current_state)
             else:
                 child_question_level = None
                 if latest_user_message:
@@ -1187,33 +1216,40 @@ def chat_completion():
                     print("=" * 50)
                 state_prompt = state_prompt_classification(current_state)
         else:
-            # Check if we should move to reflection based on qualified questions
-            qualified_question_num = sum(
-                1
-                for question in conv_scienceqa_history
-                if question in ["explanatory", "general_causal", "specific_causal"]
-            )
-
-            if qualified_question_num > 2:
+            # In scienceqa state - check if we should move to reflection
+            # Rule: Every 3 turns in scienceqa, enter reflection
+            # Note: All concepts matched case is handled in Response Generation phase
+            scienceqa_turn_count[conversation_id] += 1
+            turn_count = scienceqa_turn_count[conversation_id]
+            
+            # Enter reflection if 3 turns passed
+            if turn_count >= 2:
                 current_state = "reflection"
+                # Update state history
+                if not conv_state_history or conv_state_history[-1] != current_state:
+                    conv_state_history.append(current_state)
+                # Reset turn count when entering reflection
+                scienceqa_turn_count[conversation_id] = 0
                 state_prompt = state_prompt_classification(current_state)
                 child_question_level = None
                 if latest_user_message:
                     print("\n=== Turn Evaluation (Non-Stream) ===")
                     print(f"Child's Question: {latest_user_message}")
-                    print("Evaluation Result: reflection")
+                    print(f"Evaluation Result: reflection (turn_count: {turn_count})")
                     print("=" * 50)
             else:
-                # Classify the child's question level
-                child_question_level = state_classification(state, messages, phenomenon)
+                # Stay in scienceqa state, classify the child's question level
+                child_question_level = state_classification("scienceqa", messages, phenomenon)
                 conv_scienceqa_history.append(child_question_level)
-                print("\n=== Turn Evaluation (Non-Stream) ===")
-                print(f"Child's Question: {latest_user_message}")
-                print(f"Evaluation Result: {child_question_level}")
-                current_state = "scienceqa"  # Stay in scienceqa state
+                current_state = "scienceqa"
                 state_prompt = state_prompt_classification(
                     current_state, child_question_level
                 )
+                if latest_user_message:
+                    print("\n=== Turn Evaluation (Non-Stream) ===")
+                    print(f"Child's Question: {latest_user_message}")
+                    print(f"Evaluation Result: {child_question_level} (turn {turn_count}/3)")
+                    print("=" * 50)
             if not conv_state_history or conv_state_history[-1] != current_state:
                 conv_state_history.append(current_state)
             eval_state = current_state
@@ -1226,75 +1262,26 @@ def chat_completion():
         next_concept_for_prompting = (
             None  # For prompting question (initialized for all states)
         )
-        current_concept = None  # Current concept being discussed (initialized as empty)
+        matched_concept = None  # Matched concept from knowledge retrieval
 
         if current_state in ["scienceqa", "reflection"]:
             if current_state == "scienceqa":
-                # Get current_concept from the most recent assistant message with matched_kg
-                # This ensures current_concept persists across turns
-                recent_assistant_msg = (
-                    db.query(Message)
-                    .filter(
-                        Message.conversation_id == conversation.id,
-                        Message.role == "assistant",
-                        Message.state == "scienceqa",
-                        Message.matched_knowledge_components.isnot(None),
-                    )
-                    .order_by(Message.created_at.desc())
-                    .first()
+                # Load knowledge base to get concept list
+                knowledge_base = open("knowledge/kg.json", "r").read()
+                knowledge_base = json.loads(knowledge_base)
+                phenomenon_map = {
+                    "balloon": "Hair Stands Up Near a Balloon",
+                    "bend": "Bending Water Stream with a Comb",
+                    "pepper": "Pepper Leaping up to Spoon",
+                }
+                phenomenon_key = phenomenon_map.get(
+                    phenomenon, "Hair Stands Up Near a Balloon"
                 )
+                concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
+                concept_names = list(concepts_dict.keys())
 
-                if (
-                    recent_assistant_msg
-                    and recent_assistant_msg.matched_knowledge_components
-                ):
-                    try:
-                        prev_matched_kg = (
-                            recent_assistant_msg.matched_knowledge_components
-                        )
-                        kg_list = (
-                            json.loads(prev_matched_kg)
-                            if isinstance(prev_matched_kg, str)
-                            and prev_matched_kg.startswith("[")
-                            else json.loads(f'["{prev_matched_kg}"]')
-                            if isinstance(prev_matched_kg, str)
-                            else prev_matched_kg
-                        )
-                        if isinstance(kg_list, list) and len(kg_list) > 0:
-                            prev_matched_concept = kg_list[0]
-                            # Normalize the concept name
-                            knowledge_base = open("knowledge/kg.json", "r").read()
-                            knowledge_base = json.loads(knowledge_base)
-                            phenomenon_map = {
-                                "balloon": "Hair Stands Up Near a Balloon",
-                                "bend": "Bending Water Stream with a Comb",
-                                "pepper": "Pepper Leaping up to Spoon",
-                            }
-                            phenomenon_key = phenomenon_map.get(
-                                phenomenon, "Hair Stands Up Near a Balloon"
-                            )
-                            concepts_dict = knowledge_base.get(phenomenon_key, {}).get(
-                                "concepts", {}
-                            )
-                            concept_names = list(concepts_dict.keys())
-                            for cn in concept_names:
-                                if cn.lower() == prev_matched_concept.lower():
-                                    current_concept = cn
-                                    print(
-                                        f"[Current Concept] Loaded from previous message: {current_concept}"
-                                    )
-                                    break
-                    except (json.JSONDecodeError, TypeError, AttributeError):
-                        pass
-
-                # B. Get next concept for PROMPTING QUESTION (for ALL scienceqa questions)
-                # This should be called for ALL scienceqa questions, regardless of question level
-                next_concept_for_prompting = get_next_concept_for_prompting(
-                    conversation.id, phenomenon, db
-                )
-                print(
-                    f"[Prompting Question] Next concept: {next_concept_for_prompting if next_concept_for_prompting else 'None (all used)'}"
-                )
+                # Get matched concepts history for this conversation
+                matched_concepts = matched_concepts_history[conversation.id]
 
                 # A. Knowledge Retrieval: Match concept for EXPLANATION (only for specific question levels)
                 if child_question_level in [
@@ -1311,9 +1298,8 @@ def chat_completion():
                         f"[Knowledge Retrieval] Matched component for explanation: {matched_kg if matched_kg else 'None'}"
                     )
 
-                    # Update current_concept when a concept is matched (only if current_concept is None)
-                    # This ensures current_concept is set once from matched_kg and persists
-                    if matched_kg and matched_kg != "" and current_concept is None:
+                    # Parse matched concept and add to history if not already present
+                    if matched_kg and matched_kg != "":
                         try:
                             kg_list = (
                                 json.loads(matched_kg)
@@ -1324,31 +1310,41 @@ def chat_completion():
                                 else matched_kg
                             )
                             if isinstance(kg_list, list) and len(kg_list) > 0:
-                                matched_concept = kg_list[0]
+                                matched_concept_raw = kg_list[0]
                                 # Normalize the concept name
-                                knowledge_base = open("knowledge/kg.json", "r").read()
-                                knowledge_base = json.loads(knowledge_base)
-                                phenomenon_map = {
-                                    "balloon": "Hair Stands Up Near a Balloon",
-                                    "bend": "Bending Water Stream with a Comb",
-                                    "pepper": "Pepper Leaping up to Spoon",
-                                }
-                                phenomenon_key = phenomenon_map.get(
-                                    phenomenon, "Hair Stands Up Near a Balloon"
-                                )
-                                concepts_dict = knowledge_base.get(
-                                    phenomenon_key, {}
-                                ).get("concepts", {})
-                                concept_names = list(concepts_dict.keys())
                                 for cn in concept_names:
-                                    if cn.lower() == matched_concept.lower():
-                                        current_concept = cn
-                                        print(
-                                            f"[Current Concept] Updated to: {current_concept}"
-                                        )
+                                    if cn.lower() == matched_concept_raw.lower():
+                                        matched_concept = cn
+                                        # Add to matched concepts history if not already present
+                                        if matched_concept not in matched_concepts:
+                                            matched_concepts.append(matched_concept)
+                                            print(
+                                                f"[Concept Logic] Added to matched history: {matched_concept}"
+                                            )
                                         break
                         except (json.JSONDecodeError, TypeError, AttributeError):
                             pass
+
+                    # Find next concept: lowest order concept that hasn't been matched
+                    next_concept_for_prompting = None
+                    for concept_name in concept_names:
+                        if concept_name not in matched_concepts:
+                            next_concept_for_prompting = concept_name
+                            break
+
+                    # If all concepts have been matched, set flag and transition to reflection
+                    if next_concept_for_prompting is None:
+                        print(
+                            "[Concept Logic] All concepts matched! Setting flag and transitioning to reflection state."
+                        )
+                        all_concepts_matched_flag[conversation_id] = True
+                        current_state = "reflection"
+                        # Update state history
+                        if not conv_state_history or conv_state_history[-1] != current_state:
+                            conv_state_history.append(current_state)
+                        state_prompt = state_prompt_classification(current_state)
+                        child_question_level = None
+                        # Continue to reflection handling below
 
                     # Extract definition and explanation for embedding in prompt
                     definition = ""
@@ -1360,19 +1356,17 @@ def chat_completion():
                             matched_kg, phenomenon
                         )
                         if definition and explanation:
-                            # Matched: use the knowledge component
                             explanation_method = f"Here are the matched knowledge component's definition: {definition} and explanation: {explanation}. Based on the conversation history, use the provided knowledge component to explain the knowledge. The definition describes the formal definition of the concept, and the explanation describes how the concept works in the image. Your knowledge explanation should combine these two parts but must be within 30 words."
                         else:
-                            # No match: use fallback
                             explanation_method = "Consider the conversation history to provide a simple explanation to the child's message without directly revealing the phenomenon and knowledge."
                     else:
-                        # No match: use fallback
                         explanation_method = "Consider the conversation history to provide a simple explanation to the child's message without directly revealing the phenomenon and knowledge."
 
-                    # Replace placeholders in prompt
-                    state_prompt = state_prompt.replace(
-                        "{explanation_method}", explanation_method
-                    )
+                    # Replace placeholders in prompt (only if still in scienceqa state)
+                    if current_state == "scienceqa":
+                        state_prompt = state_prompt.replace(
+                            "{explanation_method}", explanation_method
+                        )
                 else:
                     # For irrelevant/no_question, use fallback explanation method
                     explanation_method = "Consider the conversation history to provide a simple explanation to the child's message without directly revealing the phenomenon and knowledge."
@@ -1382,35 +1376,50 @@ def chat_completion():
                     matched_kg = (
                         None  # No knowledge retrieval for irrelevant/no_question
                     )
+                    # Find next concept: lowest order concept that hasn't been matched
+                    next_concept_for_prompting = None
+                    for concept_name in concept_names:
+                        if concept_name not in matched_concepts:
+                            next_concept_for_prompting = concept_name
+                            break
+
+                    # If all concepts have been matched, transition to reflection
+                    if next_concept_for_prompting is None:
+                        print(
+                            "[Concept Logic] All concepts matched! Transitioning to reflection state."
+                        )
+                        current_state = "reflection"
+                        # Update state history
+                        if not conv_state_history or conv_state_history[-1] != current_state:
+                            conv_state_history.append(current_state)
+                        state_prompt = state_prompt_classification(current_state)
+                        child_question_level = None
 
                 # Replace placeholders for all scienceqa questions
-                # If current_concept is empty, remove the lines about evaluating current concept before replacing
-                if not current_concept:
-                    # Remove lines that mention evaluating or reinforcing current concept
-                    # Match lines starting with "-" that contain "current concept" and the placeholder
+                if current_state == "scienceqa":
+                    # Remove lines about current concept if any
                     lines = state_prompt.split("\n")
                     filtered_lines = []
                     for line in lines:
-                        # Skip lines that contain "current concept" with the placeholder
-                        if "{current_concept}" in line and (
-                            "current concept" in line.lower()
-                            or "Current concept" in line
-                        ):
+                        if "{current_concept}" in line:
                             continue
                         filtered_lines.append(line)
                     state_prompt = "\n".join(filtered_lines)
 
-                state_prompt = state_prompt.replace(
-                    "{current_concept}",
-                    current_concept if current_concept else "",
-                )
-                state_prompt = state_prompt.replace(
-                    "{next_concept}",
-                    next_concept_for_prompting if next_concept_for_prompting else "",
-                )
+                    state_prompt = state_prompt.replace(
+                        "{next_concept}",
+                        next_concept_for_prompting if next_concept_for_prompting else "",
+                    )
+                    print(
+                        f"[Concept Logic] Next concept: {next_concept_for_prompting}, Matched concepts: {matched_concepts}"
+                    )
                 print("=" * 50)
 
             elif current_state == "reflection":
+                # Ensure state_prompt is initialized
+                if not state_prompt:
+                    state_prompt = state_prompt_classification(current_state)
+                
                 # For reflection, we still do knowledge retrieval for explanation
                 kg = knowledge_retrieval(messages, phenomenon, conversation.id, db)
                 matched_kg = kg if kg else None
@@ -1437,13 +1446,29 @@ def chat_completion():
                     # No match: use fallback
                     explanation_method = "Consider the conversation history to provide a simple explanation to the child's message without directly revealing the phenomenon and knowledge."
 
-                # Replace placeholders in prompt
-                state_prompt = state_prompt.replace(
-                    "{explanation_method}", explanation_method
-                )
-                state_prompt = state_prompt.replace(
-                    "{next_concept}", ""
-                )  # No prompting question in reflection
+                # Replace placeholders in prompt only if state_prompt is valid and contains the placeholder
+                if state_prompt and isinstance(state_prompt, str):
+                    if "{explanation_method}" in state_prompt:
+                        state_prompt = state_prompt.replace(
+                            "{explanation_method}", explanation_method
+                        )
+                    if "{next_concept}" in state_prompt:
+                        state_prompt = state_prompt.replace(
+                            "{next_concept}", ""
+                        )  # No prompting question in reflection
+                else:
+                    print("ERROR: state_prompt is None or invalid for reflection state! Re-initializing...")
+                    state_prompt = state_prompt_classification(current_state)
+                    if not state_prompt:
+                        # Ultimate fallback
+                        state_prompt = "Respond to the child's question and summarize what has been discovered so far."
+
+        # Ensure state_prompt is not None before calling format_prompt
+        if not state_prompt:
+            print(f"WARNING: state_prompt is None before format_prompt (non-stream), current_state: {current_state}")
+            state_prompt = state_prompt_classification(current_state, child_question_level)
+            if not state_prompt:
+                state_prompt = "Respond to the child's question."
 
         if current_state == "scienceqa" and child_question_level is not None:
             state_prompt = format_prompt(
@@ -1487,6 +1512,9 @@ def chat_completion():
         if current_state == "close":
             state_history.pop(conversation_id, None)
             scienceqa_history.pop(conversation_id, None)
+            matched_concepts_history.pop(conversation_id, None)
+            scienceqa_turn_count.pop(conversation_id, None)
+            all_concepts_matched_flag.pop(conversation_id, None)
 
         system_message = {"role": "system", "content": CURIO_SYSTEM_PROMPT}
 
@@ -1530,6 +1558,7 @@ def chat_completion():
             state=current_state,
             evaluation_result=assistant_evaluation_result,
             matched_knowledge_components=matched_kg if matched_kg else None,
+            next_concept=next_concept_for_prompting if next_concept_for_prompting else None,
         )
         db.add(assistant_message_record)
 
@@ -1692,6 +1721,8 @@ def chat_completion_stream():
                     role="assistant",
                     content=safe_response,
                     state=state,
+                    matched_knowledge_components=None,
+                    next_concept=None,
                 )
                 db.add(assistant_message_record)
 
@@ -1714,16 +1745,33 @@ def chat_completion_stream():
         if state != "scienceqa":
             eval_state = state_classification(state, messages, phenomenon)
             current_state = state_update(state, eval_state, conv_state_history)
+            
+            # Special handling: if coming from reflection and all concepts matched, go to close
+            if state == "reflection" and all_concepts_matched_flag[conversation_id]:
+                current_state = "close"
+                # Update state history
+                if not conv_state_history or conv_state_history[-1] != current_state:
+                    conv_state_history.append(current_state)
 
+            # If transitioning to scienceqa, reset turn count and classify question level
             if current_state == "scienceqa":
-                child_question_level = state_classification(state, messages, phenomenon)
+                # Reset turn count when entering scienceqa from another state (e.g., after reflection)
+                if conv_state_history and conv_state_history[-1] != "scienceqa":
+                    scienceqa_turn_count[conversation_id] = 0
+                # Classify the child's question level (always use the scienceqa evaluator prompt)
+                child_question_level = state_classification("scienceqa", messages, phenomenon)
                 conv_scienceqa_history.append(child_question_level)
                 print("\n=== Turn Evaluation (Stream) ===")
                 print(f"Child's Question: {latest_user_message}")
                 print(f"Evaluation Result: {child_question_level}")
+                print("=" * 50)
                 state_prompt = state_prompt_classification(
                     current_state, child_question_level
                 )
+            elif current_state == "reflection":
+                # In reflection state - will return to scienceqa after (unless all concepts matched)
+                child_question_level = None
+                state_prompt = state_prompt_classification(current_state)
             else:
                 child_question_level = None
                 if latest_user_message:
@@ -1733,32 +1781,40 @@ def chat_completion_stream():
                     print("=" * 50)
                 state_prompt = state_prompt_classification(current_state)
         else:
-            qualified_question_num = sum(
-                1
-                for question in conv_scienceqa_history
-                if question in ["explanatory", "general_causal", "specific_causal"]
-            )
-
-            if qualified_question_num > 2:
+            # In scienceqa state - check if we should move to reflection
+            # Rule: Every 3 turns in scienceqa, enter reflection
+            # Note: All concepts matched case is handled in Response Generation phase
+            scienceqa_turn_count[conversation_id] += 1
+            turn_count = scienceqa_turn_count[conversation_id]
+            
+            # Enter reflection if 3 turns passed
+            if turn_count >= 2:
                 current_state = "reflection"
+                # Update state history
+                if not conv_state_history or conv_state_history[-1] != current_state:
+                    conv_state_history.append(current_state)
+                # Reset turn count when entering reflection
+                scienceqa_turn_count[conversation_id] = 0
                 state_prompt = state_prompt_classification(current_state)
                 child_question_level = None
                 if latest_user_message:
                     print("\n=== Turn Evaluation (Stream) ===")
                     print(f"Child's Question: {latest_user_message}")
-                    print("Evaluation Result: reflection")
+                    print(f"Evaluation Result: reflection (turn_count: {turn_count})")
                     print("=" * 50)
             else:
-                child_question_level = state_classification(state, messages, phenomenon)
+                # Stay in scienceqa state, classify the child's question level
+                child_question_level = state_classification("scienceqa", messages, phenomenon)
                 conv_scienceqa_history.append(child_question_level)
-                print("\n=== Turn Evaluation (Stream) ===")
-                print(f"Child's Question: {latest_user_message}")
-                print(f"Evaluation Result: {child_question_level}")
-                print("=" * 50)
                 current_state = "scienceqa"
                 state_prompt = state_prompt_classification(
                     current_state, child_question_level
                 )
+                if latest_user_message:
+                    print("\n=== Turn Evaluation (Stream) ===")
+                    print(f"Child's Question: {latest_user_message}")
+                    print(f"Evaluation Result: {child_question_level} (turn {turn_count}/3)")
+                    print("=" * 50)
             if not conv_state_history or conv_state_history[-1] != current_state:
                 conv_state_history.append(current_state)
             eval_state = current_state
@@ -1771,75 +1827,26 @@ def chat_completion_stream():
         next_concept_for_prompting = (
             None  # For prompting question (initialized for all states)
         )
-        current_concept = None  # Current concept being discussed (initialized as empty)
+        matched_concept = None  # Matched concept from knowledge retrieval
 
         if current_state in ["scienceqa", "reflection"]:
             if current_state == "scienceqa":
-                # Get current_concept from the most recent assistant message with matched_kg
-                # This ensures current_concept persists across turns
-                recent_assistant_msg = (
-                    db.query(Message)
-                    .filter(
-                        Message.conversation_id == conversation.id,
-                        Message.role == "assistant",
-                        Message.state == "scienceqa",
-                        Message.matched_knowledge_components.isnot(None),
-                    )
-                    .order_by(Message.created_at.desc())
-                    .first()
+                # Load knowledge base to get concept list
+                knowledge_base = open("knowledge/kg.json", "r").read()
+                knowledge_base = json.loads(knowledge_base)
+                phenomenon_map = {
+                    "balloon": "Hair Stands Up Near a Balloon",
+                    "bend": "Bending Water Stream with a Comb",
+                    "pepper": "Pepper Leaping up to Spoon",
+                }
+                phenomenon_key = phenomenon_map.get(
+                    phenomenon, "Hair Stands Up Near a Balloon"
                 )
+                concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
+                concept_names = list(concepts_dict.keys())
 
-                if (
-                    recent_assistant_msg
-                    and recent_assistant_msg.matched_knowledge_components
-                ):
-                    try:
-                        prev_matched_kg = (
-                            recent_assistant_msg.matched_knowledge_components
-                        )
-                        kg_list = (
-                            json.loads(prev_matched_kg)
-                            if isinstance(prev_matched_kg, str)
-                            and prev_matched_kg.startswith("[")
-                            else json.loads(f'["{prev_matched_kg}"]')
-                            if isinstance(prev_matched_kg, str)
-                            else prev_matched_kg
-                        )
-                        if isinstance(kg_list, list) and len(kg_list) > 0:
-                            prev_matched_concept = kg_list[0]
-                            # Normalize the concept name
-                            knowledge_base = open("knowledge/kg.json", "r").read()
-                            knowledge_base = json.loads(knowledge_base)
-                            phenomenon_map = {
-                                "balloon": "Hair Stands Up Near a Balloon",
-                                "bend": "Bending Water Stream with a Comb",
-                                "pepper": "Pepper Leaping up to Spoon",
-                            }
-                            phenomenon_key = phenomenon_map.get(
-                                phenomenon, "Hair Stands Up Near a Balloon"
-                            )
-                            concepts_dict = knowledge_base.get(phenomenon_key, {}).get(
-                                "concepts", {}
-                            )
-                            concept_names = list(concepts_dict.keys())
-                            for cn in concept_names:
-                                if cn.lower() == prev_matched_concept.lower():
-                                    current_concept = cn
-                                    print(
-                                        f"[Current Concept] Loaded from previous message: {current_concept}"
-                                    )
-                                    break
-                    except (json.JSONDecodeError, TypeError, AttributeError):
-                        pass
-
-                # B. Get next concept for PROMPTING QUESTION (for ALL scienceqa questions)
-                # This should be called for ALL scienceqa questions, regardless of question level
-                next_concept_for_prompting = get_next_concept_for_prompting(
-                    conversation.id, phenomenon, db
-                )
-                print(
-                    f"[Prompting Question] Next concept: {next_concept_for_prompting if next_concept_for_prompting else 'None (all used)'}"
-                )
+                # Get matched concepts history for this conversation
+                matched_concepts = matched_concepts_history[conversation.id]
 
                 # A. Knowledge Retrieval: Match concept for EXPLANATION (only for specific question levels)
                 if child_question_level in [
@@ -1856,9 +1863,8 @@ def chat_completion_stream():
                         f"[Knowledge Retrieval] Matched component for explanation: {matched_kg if matched_kg else 'None'}"
                     )
 
-                    # Update current_concept when a concept is matched (only if current_concept is None)
-                    # This ensures current_concept is set once from matched_kg and persists
-                    if matched_kg and matched_kg != "" and current_concept is None:
+                    # Parse matched concept and add to history if not already present
+                    if matched_kg and matched_kg != "":
                         try:
                             kg_list = (
                                 json.loads(matched_kg)
@@ -1869,31 +1875,41 @@ def chat_completion_stream():
                                 else matched_kg
                             )
                             if isinstance(kg_list, list) and len(kg_list) > 0:
-                                matched_concept = kg_list[0]
+                                matched_concept_raw = kg_list[0]
                                 # Normalize the concept name
-                                knowledge_base = open("knowledge/kg.json", "r").read()
-                                knowledge_base = json.loads(knowledge_base)
-                                phenomenon_map = {
-                                    "balloon": "Hair Stands Up Near a Balloon",
-                                    "bend": "Bending Water Stream with a Comb",
-                                    "pepper": "Pepper Leaping up to Spoon",
-                                }
-                                phenomenon_key = phenomenon_map.get(
-                                    phenomenon, "Hair Stands Up Near a Balloon"
-                                )
-                                concepts_dict = knowledge_base.get(
-                                    phenomenon_key, {}
-                                ).get("concepts", {})
-                                concept_names = list(concepts_dict.keys())
                                 for cn in concept_names:
-                                    if cn.lower() == matched_concept.lower():
-                                        current_concept = cn
-                                        print(
-                                            f"[Current Concept] Updated to: {current_concept}"
-                                        )
+                                    if cn.lower() == matched_concept_raw.lower():
+                                        matched_concept = cn
+                                        # Add to matched concepts history if not already present
+                                        if matched_concept not in matched_concepts:
+                                            matched_concepts.append(matched_concept)
+                                            print(
+                                                f"[Concept Logic] Added to matched history: {matched_concept}"
+                                            )
                                         break
                         except (json.JSONDecodeError, TypeError, AttributeError):
                             pass
+
+                    # Find next concept: lowest order concept that hasn't been matched
+                    next_concept_for_prompting = None
+                    for concept_name in concept_names:
+                        if concept_name not in matched_concepts:
+                            next_concept_for_prompting = concept_name
+                            break
+
+                    # If all concepts have been matched, set flag and transition to reflection
+                    if next_concept_for_prompting is None:
+                        print(
+                            "[Concept Logic] All concepts matched! Setting flag and transitioning to reflection state."
+                        )
+                        all_concepts_matched_flag[conversation_id] = True
+                        current_state = "reflection"
+                        # Update state history
+                        if not conv_state_history or conv_state_history[-1] != current_state:
+                            conv_state_history.append(current_state)
+                        state_prompt = state_prompt_classification(current_state)
+                        child_question_level = None
+                        # Continue to reflection handling below
 
                     # Extract definition and explanation for embedding in prompt
                     definition = ""
@@ -1905,19 +1921,17 @@ def chat_completion_stream():
                             matched_kg, phenomenon
                         )
                         if definition and explanation:
-                            # Matched: use the knowledge component
                             explanation_method = f"Here are the matched knowledge component's definition: {definition} and explanation: {explanation}. Based on the conversation history, use the provided knowledge component to explain the knowledge. The definition describes the formal definition of the concept, and the explanation describes how the concept works in the image. Your knowledge explanation should combine these two parts but must be within 30 words."
                         else:
-                            # No match: use fallback
                             explanation_method = "Consider the conversation history to provide a simple explanation to the child's message without directly revealing the phenomenon and knowledge."
                     else:
-                        # No match: use fallback
                         explanation_method = "Consider the conversation history to provide a simple explanation to the child's message without directly revealing the phenomenon and knowledge."
 
-                    # Replace placeholders in prompt
-                    state_prompt = state_prompt.replace(
-                        "{explanation_method}", explanation_method
-                    )
+                    # Replace placeholders in prompt (only if still in scienceqa state)
+                    if current_state == "scienceqa":
+                        state_prompt = state_prompt.replace(
+                            "{explanation_method}", explanation_method
+                        )
                 else:
                     # For irrelevant/no_question, use fallback explanation method
                     explanation_method = "Consider the conversation history to provide a simple explanation to the child's message without directly revealing the phenomenon and knowledge."
@@ -1927,35 +1941,50 @@ def chat_completion_stream():
                     matched_kg = (
                         None  # No knowledge retrieval for irrelevant/no_question
                     )
+                    # Find next concept: lowest order concept that hasn't been matched
+                    next_concept_for_prompting = None
+                    for concept_name in concept_names:
+                        if concept_name not in matched_concepts:
+                            next_concept_for_prompting = concept_name
+                            break
+
+                    # If all concepts have been matched, transition to reflection
+                    if next_concept_for_prompting is None:
+                        print(
+                            "[Concept Logic] All concepts matched! Transitioning to reflection state."
+                        )
+                        current_state = "reflection"
+                        # Update state history
+                        if not conv_state_history or conv_state_history[-1] != current_state:
+                            conv_state_history.append(current_state)
+                        state_prompt = state_prompt_classification(current_state)
+                        child_question_level = None
 
                 # Replace placeholders for all scienceqa questions
-                # If current_concept is empty, remove the lines about evaluating current concept before replacing
-                if not current_concept:
-                    # Remove lines that mention evaluating or reinforcing current concept
-                    # Match lines starting with "-" that contain "current concept" and the placeholder
+                if current_state == "scienceqa":
+                    # Remove lines about current concept if any
                     lines = state_prompt.split("\n")
                     filtered_lines = []
                     for line in lines:
-                        # Skip lines that contain "current concept" with the placeholder
-                        if "{current_concept}" in line and (
-                            "current concept" in line.lower()
-                            or "Current concept" in line
-                        ):
+                        if "{current_concept}" in line:
                             continue
                         filtered_lines.append(line)
                     state_prompt = "\n".join(filtered_lines)
 
-                state_prompt = state_prompt.replace(
-                    "{current_concept}",
-                    current_concept if current_concept else "",
-                )
-                state_prompt = state_prompt.replace(
-                    "{next_concept}",
-                    next_concept_for_prompting if next_concept_for_prompting else "",
-                )
+                    state_prompt = state_prompt.replace(
+                        "{next_concept}",
+                        next_concept_for_prompting if next_concept_for_prompting else "",
+                    )
+                    print(
+                        f"[Concept Logic] Next concept: {next_concept_for_prompting}, Matched concepts: {matched_concepts}"
+                    )
                 print("=" * 50)
 
             elif current_state == "reflection":
+                # Ensure state_prompt is initialized
+                if not state_prompt:
+                    state_prompt = state_prompt_classification(current_state)
+                
                 # For reflection, we still do knowledge retrieval for explanation
                 kg = knowledge_retrieval(messages, phenomenon, conversation.id, db)
                 matched_kg = kg if kg else None
@@ -1982,13 +2011,30 @@ def chat_completion_stream():
                     # No match: use fallback
                     explanation_method = "Consider the conversation history to provide a simple explanation to the child's message without directly revealing the phenomenon and knowledge."
 
-                # Replace placeholders in prompt
-                state_prompt = state_prompt.replace(
-                    "{explanation_method}", explanation_method
-                )
-                state_prompt = state_prompt.replace(
-                    "{next_concept}", ""
-                )  # No prompting question in reflection
+                # Replace placeholders in prompt only if state_prompt is valid and contains the placeholder
+                if state_prompt and isinstance(state_prompt, str):
+                    if "{explanation_method}" in state_prompt:
+                        state_prompt = state_prompt.replace(
+                            "{explanation_method}", explanation_method
+                        )
+                    if "{next_concept}" in state_prompt:
+                        state_prompt = state_prompt.replace(
+                            "{next_concept}", ""
+                        )  # No prompting question in reflection
+                else:
+                    print("ERROR: state_prompt is None or invalid for reflection state! Re-initializing...")
+                    state_prompt = state_prompt_classification(current_state)
+                    if not state_prompt:
+                        # Ultimate fallback
+                        state_prompt = "Respond to the child's question and summarize what has been discovered so far."
+
+        if not state_prompt:
+            if current_state == "scienceqa" and not child_question_level:
+                # Always use the scienceqa evaluator prompt for child-question level classification
+                child_question_level = state_classification("scienceqa", messages, phenomenon)
+            state_prompt = state_prompt_classification(current_state, child_question_level)
+            if not state_prompt:
+                state_prompt = "Respond to the child's question."
 
         if current_state == "scienceqa" and child_question_level is not None:
             state_prompt = format_prompt(
@@ -2032,6 +2078,9 @@ def chat_completion_stream():
         if current_state == "close":
             state_history.pop(conversation_id, None)
             scienceqa_history.pop(conversation_id, None)
+            matched_concepts_history.pop(conversation_id, None)
+            scienceqa_turn_count.pop(conversation_id, None)
+            all_concepts_matched_flag.pop(conversation_id, None)
 
         system_message = {"role": "system", "content": CURIO_SYSTEM_PROMPT}
         all_messages = (
@@ -2091,6 +2140,9 @@ def chat_completion_stream():
                     matched_knowledge_components=saved_matched_kg
                     if saved_matched_kg
                     else None,
+                    next_concept=saved_next_concept_for_prompting
+                    if saved_next_concept_for_prompting
+                    else None,
                 )
                 db_session.add(assistant_message_record)
                 # Commit assistant message (user message already committed above)
@@ -2126,6 +2178,116 @@ def chat_completion_stream():
     except Exception as e:
         db.rollback()
         print(f"Chat completion stream error: {e}")
+        error_message = str(e)
+
+        def error_generate():
+            yield f"data: {json.dumps({'type': 'error', 'error': error_message})}\n\n"
+
+        return Response(
+            stream_with_context(error_generate()), mimetype="text/event-stream"
+        )
+    finally:
+        if db:
+            db.close()
+
+
+@app.route("/api/reflection/summary", methods=["POST"])
+def reflection_summary():
+    """Generate a reflection summary of the recent conversation (streaming)"""
+    db = SessionLocal()
+    try:
+        data = request.get_json()
+        messages = data.get("messages", [])
+        image_path = data.get("image_path", "")
+        conversation_id = (data.get("conversation_id") or str(uuid.uuid4())).strip()
+
+        # Determine the phenomenon based on image path
+        if "balloon.jpg" in image_path:
+            phenomenon = "balloon"
+        elif "bend.jpg" in image_path:
+            phenomenon = "bend"
+        elif "pepper.jpg" in image_path:
+            phenomenon = "pepper"
+        else:
+            phenomenon = "balloon"
+
+        # Load and format the summary-only prompt
+        summary_prompt = open("prompts/reflection_summary.txt", "r").read()
+
+        # Inject matched knowledge components (from conversation history) into the prompt
+        matched_concepts = []
+        try:
+            matched_concepts = get_matched_concepts_from_db(
+                conversation_id, phenomenon=phenomenon, db_session=db
+            )
+        except Exception as e:
+            print(f"Error getting matched concepts for reflection summary: {e}")
+            matched_concepts = []
+
+        if "{matched_concepts}" in summary_prompt:
+            matched_concepts_str = ", ".join(matched_concepts) if matched_concepts else ""
+            summary_prompt = summary_prompt.replace(
+                "{matched_concepts}", matched_concepts_str
+            )
+
+        summary_prompt = format_prompt(summary_prompt, phenomenon, messages)
+
+        system_message = {"role": "system", "content": CURIO_SYSTEM_PROMPT}
+        all_messages = (
+            [system_message] + messages + [{"role": "user", "content": summary_prompt}]
+        )
+
+        saved_conversation_id = conversation_id
+
+        def generate():
+            full_content = ""
+            db_session = SessionLocal()
+            try:
+                stream = client.chat.completions.create(
+                    model=OPENAI_CHAT_MODEL,
+                    messages=all_messages,
+                    max_tokens=OPENAI_MAX_TOKENS,
+                    stream=True,
+                )
+
+                for chunk in stream:
+                    if chunk.choices[0].delta.content:
+                        token = chunk.choices[0].delta.content
+                        full_content += token
+                        yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+
+                # Save summary message to database
+                summary_message_record = Message(
+                    conversation_id=saved_conversation_id,
+                    role="assistant",
+                    content=full_content,
+                    state="reflection_summary",
+                    evaluation_result=None,
+                    matched_knowledge_components=None,
+                    next_concept=None,
+                )
+                db_session.add(summary_message_record)
+                try:
+                    db_session.commit()
+                    print(f"Saved reflection summary for conversation {saved_conversation_id}")
+                except Exception as commit_error:
+                    db_session.rollback()
+                    print(f"Error committing reflection summary: {commit_error}")
+
+                yield f"data: {json.dumps({'type': 'done', 'response': full_content})}\n\n"
+            except Exception as e:
+                db_session.rollback()
+                print(f"Reflection summary streaming error: {e}")
+                import traceback
+                print(traceback.format_exc())
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+            finally:
+                db_session.close()
+
+        return Response(stream_with_context(generate()), mimetype="text/event-stream")
+
+    except Exception as e:
+        print(f"Reflection summary error: {e}")
         error_message = str(e)
 
         def error_generate():
@@ -2175,14 +2337,6 @@ def get_conversations():
                 f"Found {len(conversations)} conversations for session_id: {session_id}"
             )
 
-        # Debug: Check all conversations to see what session_ids exist
-        all_convs = db.query(Conversation).limit(10).all()
-        if all_convs:
-            print("Sample of all conversations (first 10):")
-            for conv in all_convs:
-                print(
-                    f"  Conversation {conv.id}: session_id={conv.session_id}, image_path={conv.image_path}"
-                )
 
         result = []
         for conv in conversations:
@@ -2239,6 +2393,23 @@ def get_conversation_messages(conversation_id):
         result = []
         state_history_list = []
         scienceqa_history_list = []
+        matched_concepts_list = []
+
+        # Load knowledge base to normalize concept names
+        knowledge_base = open("knowledge/kg.json", "r").read()
+        knowledge_base = json.loads(knowledge_base)
+        phenomenon_map = {
+            "balloon": "Hair Stands Up Near a Balloon",
+            "bend": "Bending Water Stream with a Comb",
+            "pepper": "Pepper Leaping up to Spoon",
+        }
+        phenomenon_key = (
+            phenomenon_map.get(conversation.phenomenon, "Hair Stands Up Near a Balloon")
+            if conversation.phenomenon
+            else "Hair Stands Up Near a Balloon"
+        )
+        concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
+        concept_names = list(concepts_dict.keys())
 
         for msg in messages:
             result.append(
@@ -2272,9 +2443,47 @@ def get_conversation_messages(conversation_id):
             ]:
                 scienceqa_history_list.append(msg.evaluation_result)
 
+            # Reconstruct matched_concepts_history from assistant messages with matched_knowledge_components
+            if (
+                msg.role == "assistant"
+                and msg.state == "scienceqa"
+                and msg.matched_knowledge_components
+            ):
+                try:
+                    matched_kg = msg.matched_knowledge_components
+                    kg_list = (
+                        json.loads(matched_kg)
+                        if isinstance(matched_kg, str) and matched_kg.startswith("[")
+                        else json.loads(f'["{matched_kg}"]')
+                        if isinstance(matched_kg, str)
+                        else matched_kg
+                    )
+                    if isinstance(kg_list, list) and len(kg_list) > 0:
+                        matched_concept_raw = kg_list[0]
+                        # Normalize the concept name
+                        for cn in concept_names:
+                            if cn.lower() == matched_concept_raw.lower():
+                                if cn not in matched_concepts_list:
+                                    matched_concepts_list.append(cn)
+                                break
+                except (json.JSONDecodeError, TypeError, AttributeError):
+                    pass
+
         # Restore state history in memory for this conversation
         state_history[conversation_id] = state_history_list
         scienceqa_history[conversation_id] = scienceqa_history_list
+        matched_concepts_history[conversation_id] = matched_concepts_list
+        # Initialize scienceqa_turn_count and all_concepts_matched_flag
+        # Count scienceqa turns since last reflection
+        if "reflection" in state_history_list:
+            last_reflection_index = len(state_history_list) - 1 - state_history_list[::-1].index("reflection")
+            scienceqa_turn_count[conversation_id] = state_history_list[last_reflection_index:].count("scienceqa")
+        else:
+            scienceqa_turn_count[conversation_id] = state_history_list.count("scienceqa")
+        # Check if all concepts matched (if we have all concepts in matched_concepts_list)
+        all_concepts_matched_flag[conversation_id] = (
+            len(matched_concepts_list) >= len(concept_names) if concept_names else False
+        )
 
         return jsonify(
             {
@@ -2395,15 +2604,6 @@ def create_message(conversation_id):
             db.query(Conversation).filter(Conversation.id == conversation_id).first()
         )
         if not conversation:
-            # Log for debugging
-            print(
-                f"Conversation {conversation_id} not found when trying to create message"
-            )
-            # Check if conversation exists at all (for debugging)
-            all_conv_ids = [str(c.id) for c in db.query(Conversation.id).all()]
-            print(
-                f"Available conversation IDs: {all_conv_ids[:5]}..."
-            )  # Print first 5 for debugging
             return jsonify({"error": "Conversation not found"}), 404
 
         data = request.get_json()

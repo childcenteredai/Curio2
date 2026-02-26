@@ -1,0 +1,41 @@
+Now, your task is to summarize what you and the child have discovered together in the recent conversation.
+
+<Image Content>
+</Image Content>
+
+<Scientific Phenomenon>
+</Scientific Phenomenon>
+
+<Scientific Knowledge>
+</Scientific Knowledge>
+
+<Matched Knowledge Components>
+{matched_concepts}
+</Matched Knowledge Components>
+
+<How to summarize>
+- Review the entire conversation history between you and the child.
+- Focus only on the knowledge components listed in <Matched Knowledge Components>.
+- Treat each distinct knowledge component in that list as one item to summarize.
+- For each distinct knowledge component, create exactly one bullet point summary.
+- Do not create multiple bullet points for the same knowledge component.
+- Each bullet point should describe what the child has learned or discovered about that component.
+- Format your response as bullet points using "- " at the start of each line.
+- Each bullet point must be no more than 15 words.
+- Do not mention turn numbers in your summary.
+</How to summarize>
+
+<Reminders>
+- Do not include any questions in your response.
+- Do not include any introductory text before the bullet points.
+- Start directly with the first bullet point.
+- Each bullet point should summarize one knowledge component from the list, without duplication.
+- Count words carefully - each bullet point must be 15 words or fewer.
+</Reminders>
+
+<Language>
+- Talk to the child using natural, friendly, peer-like language.
+- Avoid words that are too complex or formal for young children.
+- Ensure the dialogue feels like everyday conversation—smooth, relaxed, and never stiff or unnatural.
+</Language>
+

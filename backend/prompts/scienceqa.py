@@ -66,9 +66,7 @@ no_question = (
 
 <Instruction for prompting question>
 - The prompting question should be an open-ended question that encourages the child to ask you a question.
-- Based on the conversation history, evaluate whether your current explanation has sufficiently covered the current concept: "{current_concept}". 
-- If your explanation is detailed enough compared to the corresponding definition/explanation in the knowledge graph, you can prompt the child to explore the next concept: "{next_concept}".
-- Otherwise, reinforce the current concept: "{current_concept}" by prompting the child to explore it in more detail.
+- Prompt the child to explore the next concept: "{next_concept}".
 - Use forms like:
   - "Is there anything you are wondering about [phenomenon]?"
   - "What are you curious about to explore [phenomenon] further?"
@@ -107,10 +105,8 @@ level_0 = (
 </Instruction for explanation>
 
 <Instruction for prompting question>
-- Based on the conversation history, evaluate whether your current explanation has sufficiently covered the current concept: "{current_concept}". 
-- If your explanation is detailed enough compared to the corresponding definition/explanation in the knowledge graph, you can prompt the child to explore the next concept: "{next_concept}".
-- Otherwise, reinforce the current concept: "{current_concept}" by prompting the child to explore it in more detail.
 - The prompting question should be an open-ended question that encourages the child to ask you a question focused on the phenomenon.
+- Prompt the child to explore the next concept: "{next_concept}".
 - Use forms like:
     - "What is your hypothesis?" 
     - "What's your next question to find the clue of ...?"
@@ -148,10 +144,8 @@ level_1 = (
 </Instruction for explanation>
 
 <Instruction for prompting question>
-- Based on the conversation history, evaluate whether your current explanation has sufficiently covered the current concept: "{current_concept}". 
-- If your explanation is detailed enough compared to the corresponding definition/explanation in the knowledge graph, you can prompt the child to explore the next concept: "{next_concept}".
-- Otherwise, reinforce the current concept: "{current_concept}" by prompting the child to explore it in more detail.
 - The prompting question should be an open-ended question that encourages the child to ask you a question.
+- Prompt the child to explore the next concept: "{next_concept}".
 - Use forms like:
   - "Is there anything you are wondering about [phenomenon]?"
   - "What are you curious about to explore [phenomenon] further?"
@@ -192,10 +186,7 @@ level_2 = (
 
 <Instruction for prompting question>
 - Ask ONE open-ended, natural-sounding question that continues the child's investigation.
-- Based on the conversation history, evaluate whether your current explanation has sufficiently covered the current concept: "{current_concept}". 
-- If your explanation is detailed enough compared to the corresponding definition/explanation in the knowledge graph, you can prompt the child to explore the next concept: "{next_concept}".
-- Otherwise, reinforce the current concept: "{current_concept}" by prompting the child to explore it in more detail.
-- Your question should connect logically to your explanation and lead the child toward exploring the knowledge component or the underlying cause.
+- Prompt the child to explore the next concept: "{next_concept}".
 - If the conversation with the child is within the first 5 turns, do not expand the question to real-life examples. Focus on the image itself.
 - This question should encourage the child to ask you a question, not to answer your question. 
 - Use varied phrasing, such as:
@@ -231,10 +222,8 @@ level_3 = (
 
 <Instruction for prompting question>
 - End with ONE open-ended question that naturally follows your explanation.
-- Based on the conversation history, evaluate whether your current explanation has sufficiently covered the current concept: "{current_concept}". 
-- If your explanation is detailed enough compared to the corresponding definition/explanation in the knowledge graph, you can prompt the child to explore the next concept: "{next_concept}".
-- Otherwise, reinforce the current concept: "{current_concept}" by prompting the child to explore it in more detail.
 - This question should guide the child to explore the cause or influencing factors behind the phenomenon.
+- Prompt the child to explore the next concept: "{next_concept}".
 - If the conversation with the child is within the first 5 turns, do not expand the question to real-life examples. Focus on the image itself.
 - This question should encourage the child to ask you a question, not to answer your question. 
 - Keep your prompting question in one sentence.
@@ -272,10 +261,8 @@ level_4 = (
 
 <Instruction for prompting question>
 - End your response with ONE open-ended question that naturally extends from your explanation.
-- Based on the conversation history, evaluate whether your current explanation has sufficiently covered the current concept: "{current_concept}". 
-- If your explanation is detailed enough compared to the corresponding definition/explanation in the knowledge graph, you can prompt the child to explore the next concept: "{next_concept}".
-- Otherwise, reinforce the current concept: "{current_concept}" by prompting the child to explore it in more detail.
 - This question should guide the child to ask you a question about how changing measurable factors might affect the outcome of the phenomenon.
+- Prompt the child to explore the next concept: "{next_concept}".
 - If the conversation with the child is within the first 5 turns, do not expand the question to real-life examples. Focus on the image itself.
 - This question should encourage the child to ask you a question, not to answer your question. 
 - Keep your prompting question in one sentence.

@@ -11,18 +11,17 @@ Now, your task is to respond to the child's question (if any), summarize the chi
 
 
 <How to Prompt>
-- You should (1) acknowledge the child's response, (2) answer the child's question (if any), (3) provide a summary of what you and the child has discovered, and (4) ask "Are we getting closer to explaining why this happens?" (! DO NOT ASK OTHER QUESTION)
+- You should (1) acknowledge the child's response, (2) concisely answer the child's question (if any), (3) provide a summary of what you and the child has discovered.
 - When answering the child's question, you can use the provided content in knowledge components as a reference.
-- Keep your conversation brief and use simple words that children can comprehend.
+- The summary should be concise, within 25 words and no more than three sentences.
 
 Sample phrases for summary (vary, don’t always reuse):
-- “Here is the summary of what we have explored so far! [summary]”
+- “Here are the pieces of the puzzles of what we have explored so far! [summary]”
 - "Let's think about what we have explored so far! [summary]"
 </How to Prompt>
 
 <Reminders>
-- Only include ONE question in your response.
-- Do not use a Yes/No question (e.g., Do you xxx? Can you xxx?). Instead, use an open-ended question.
+- Do not include any questions in your response.
 </Reminders>
 
 <Language>

@@ -56,6 +56,7 @@ class Message(Base):
     matched_knowledge_components = Column(
         Text
     )  # JSON string of matched knowledge component names
+    next_concept = Column(String)  # Next concept used for prompting question
     audio_data = Column(LargeBinary)
     audio_mime_type = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

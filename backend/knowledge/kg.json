@@ -43,6 +43,10 @@
         "definition": "Charged objects can push or pull on other objects without touching them.",
         "explanation": "The charged plastic spoon pushes and pulls on the charges inside the pepper flakes, even though it does not touch them. This invisible force is called static electricity, and it is strong enough to lift the light pepper flakes up to the spoon."
       },
+      "Energy from Rubbing": {
+        "definition": "Rubbing gives energy that helps electrons, tiny negative charges, move from one material to another. This movement of these charges is what builds up static electricity we see, like objects pulling or pushing without touching.",
+        "explanation": "Rubbing the spoon on the sweater gives electrons enough energy to move from the sweater onto the spoon. Without rubbing, the electrons would stay mostly in place, and the spoon would not be able to pull pepper flakes upward."
+      },
       "Charges": {
         "definition": "All objects are made of tiny particles that have an electric charge. There are two kinds of charge: positive and negative. Most of the time, objects have equal amounts of both, so the charges are balanced and nothing special happens.",
         "explanation": "The spoon, sweater, pepper, and salt all contain tiny positive and negative charges. Before rubbing, these charges are balanced, so the pepper and salt stay still in the bowl."
@@ -50,10 +54,6 @@
       "Electrons": {
         "definition": "Electrons are tiny particles that carry a negative charge. Negative does not mean bad—it just means this is one of the two kinds of charge. Electrons can move from one object to another, especially when objects rub together.",
         "explanation": "When the plastic spoon is rubbed on the fuzzy sweater, electrons move from the sweater onto the spoon. Because electrons have moved, the spoon and the sweater no longer have the same amount of negative charge."
-      },
-      "Energy from Rubbing": {
-        "definition": "Rubbing gives energy that helps electrons, tiny negative charges, move from one material to another. This movement of these charges is what builds up static electricity we see, like objects pulling or pushing without touching.",
-        "explanation": "Rubbing the spoon on the sweater gives electrons enough energy to move from the sweater onto the spoon. Without rubbing, the electrons would stay mostly in place, and the spoon would not be able to pull pepper flakes upward."
       },
       "Imbalance of Charges": {
         "definition": "An imbalance of charges happens when electrons move so that one object has more negative charge and another has less. When this happens, the object is said to be charged. This charged state, which is called static electricity, lasts for a short time before it slowly goes away.",
@@ -80,6 +80,10 @@
         "definition": "Charged objects can push or pull on other objects without touching them.",
         "explanation": "The charged comb pushes and pulls on the charges inside the water, even though it does not touch the water. This invisible force is called static electricity, and it is strong enough to change the water’s path and make the stream bend toward the comb."
       },
+      "Energy from Rubbing": {
+        "definition": "Rubbing gives energy that helps electrons, tiny negative charges, move from one material to another. This movement of these charges is what builds up static electricity we see, like objects pulling or pushing without touching.",
+        "explanation": "Rubbing the comb through dry hair gives electrons enough energy to move from the hair onto the comb. Without rubbing, the electrons would stay mostly in place, and the comb would not affect the water."
+      },
       "Charges": {
         "definition": "All objects are made of tiny particles that have an electric charge. There are two kinds of charge: positive and negative. Most of the time, objects have equal amounts of both, so the charges are balanced and nothing special happens.",
         "explanation": "The hair, comb, and water all contain tiny positive and negative charges. When these charges are balanced, the objects do not push or pull on each other in noticeable ways."
@@ -87,10 +91,6 @@
       "Electrons": {
         "definition": "Electrons are tiny particles that carry a negative charge. Negative does not mean bad—it just means this is one of the two kinds of charge. Electrons can move from one object to another, especially when objects rub together.",
         "explanation": "When the plastic comb is rubbed on dry hair, electrons move from the hair onto the plastic comb. Because electrons have moved, the comb and the hair no longer have the same amount of negative charge."
-      },
-      "Energy from Rubbing": {
-        "definition": "Rubbing gives energy that helps electrons, tiny negative charges, move from one material to another. This movement of these charges is what builds up static electricity we see, like objects pulling or pushing without touching.",
-        "explanation": "Rubbing the comb through dry hair gives electrons enough energy to move from the hair onto the comb. Without rubbing, the electrons would stay mostly in place, and the comb would not affect the water."
       },
       "Imbalance of Charges": {
         "definition": "An imbalance of charges happens when electrons move so that one object has more negative charge and another has less. When this happens, the object is said to be charged. This charged state, which is called static electricity, lasts for a short time before it slowly goes away.",

@@ -153,10 +153,18 @@ You are Curio, a friendly and encouraging science chatbot for children aged 8-10
 
 state_history = defaultdict(list)
 scienceqa_history = defaultdict(list)
-matched_concepts_history = defaultdict(list)  # Track matched concepts for each conversation
-scienceqa_turn_count = defaultdict(int)  # Track number of scienceqa turns since last reflection
-all_concepts_matched_flag = defaultdict(bool)  # Flag to indicate if all concepts have been matched
-scienceqa_turn_count = defaultdict(int)  # Track number of scienceqa turns since last reflection
+matched_concepts_history = defaultdict(
+    list
+)  # Track matched concepts for each conversation
+scienceqa_turn_count = defaultdict(
+    int
+)  # Track number of scienceqa turns since last reflection
+all_concepts_matched_flag = defaultdict(
+    bool
+)  # Flag to indicate if all concepts have been matched
+scienceqa_turn_count = defaultdict(
+    int
+)  # Track number of scienceqa turns since last reflection
 
 
 def state_classification(state, messages, phenomenon):
@@ -260,7 +268,9 @@ def state_prompt_classification(state, child_question_level=None):
             # If child_question_level is None or unknown, this should not happen
             # as state_classification should always be called first
             # Use level_0 as fallback
-            print(f"WARNING: state_prompt_classification called for scienceqa with child_question_level={child_question_level}, using level_0 as fallback")
+            print(
+                f"WARNING: state_prompt_classification called for scienceqa with child_question_level={child_question_level}, using level_0 as fallback"
+            )
             return level_0
     elif state == "reflection":
         return open("prompts/reflection_response.txt", "r").read()
@@ -268,7 +278,9 @@ def state_prompt_classification(state, child_question_level=None):
         return open("prompts/close.txt", "r").read()
     else:
         # Unknown state, use level_0 as fallback
-        print(f"WARNING: state_prompt_classification called with unknown state={state}, using level_0 as fallback")
+        print(
+            f"WARNING: state_prompt_classification called with unknown state={state}, using level_0 as fallback"
+        )
         return level_0
 
 
@@ -277,10 +289,12 @@ def format_prompt(
 ):
     if messages is None:
         messages = []
-    
+
     # Check if state_prompt is None or empty
     if not state_prompt or not isinstance(state_prompt, str):
-        print(f"WARNING: state_prompt is None or invalid in format_prompt: {state_prompt}")
+        print(
+            f"WARNING: state_prompt is None or invalid in format_prompt: {state_prompt}"
+        )
         return "Respond to the child's question."
 
     phenomenon_json = json.load(open("prompts/phenomenon.json", "r"))
@@ -1194,7 +1208,9 @@ def chat_completion():
                 if conv_state_history and conv_state_history[-1] != "scienceqa":
                     scienceqa_turn_count[conversation_id] = 0
                 # Classify the child's question level (always use the scienceqa evaluator prompt)
-                child_question_level = state_classification("scienceqa", messages, phenomenon)
+                child_question_level = state_classification(
+                    "scienceqa", messages, phenomenon
+                )
                 conv_scienceqa_history.append(child_question_level)
                 print("\n=== Turn Evaluation (Non-Stream) ===")
                 print(f"Child's Question: {latest_user_message}")
@@ -1221,7 +1237,7 @@ def chat_completion():
             # Note: All concepts matched case is handled in Response Generation phase
             scienceqa_turn_count[conversation_id] += 1
             turn_count = scienceqa_turn_count[conversation_id]
-            
+
             # Enter reflection if 3 turns passed
             if turn_count >= 2:
                 current_state = "reflection"
@@ -1239,7 +1255,9 @@ def chat_completion():
                     print("=" * 50)
             else:
                 # Stay in scienceqa state, classify the child's question level
-                child_question_level = state_classification("scienceqa", messages, phenomenon)
+                child_question_level = state_classification(
+                    "scienceqa", messages, phenomenon
+                )
                 conv_scienceqa_history.append(child_question_level)
                 current_state = "scienceqa"
                 state_prompt = state_prompt_classification(
@@ -1248,7 +1266,9 @@ def chat_completion():
                 if latest_user_message:
                     print("\n=== Turn Evaluation (Non-Stream) ===")
                     print(f"Child's Question: {latest_user_message}")
-                    print(f"Evaluation Result: {child_question_level} (turn {turn_count}/3)")
+                    print(
+                        f"Evaluation Result: {child_question_level} (turn {turn_count}/3)"
+                    )
                     print("=" * 50)
             if not conv_state_history or conv_state_history[-1] != current_state:
                 conv_state_history.append(current_state)
@@ -1277,7 +1297,9 @@ def chat_completion():
                 phenomenon_key = phenomenon_map.get(
                     phenomenon, "Hair Stands Up Near a Balloon"
                 )
-                concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
+                concepts_dict = knowledge_base.get(phenomenon_key, {}).get(
+                    "concepts", {}
+                )
                 concept_names = list(concepts_dict.keys())
 
                 # Get matched concepts history for this conversation
@@ -1340,7 +1362,10 @@ def chat_completion():
                         all_concepts_matched_flag[conversation_id] = True
                         current_state = "reflection"
                         # Update state history
-                        if not conv_state_history or conv_state_history[-1] != current_state:
+                        if (
+                            not conv_state_history
+                            or conv_state_history[-1] != current_state
+                        ):
                             conv_state_history.append(current_state)
                         state_prompt = state_prompt_classification(current_state)
                         child_question_level = None
@@ -1390,7 +1415,10 @@ def chat_completion():
                         )
                         current_state = "reflection"
                         # Update state history
-                        if not conv_state_history or conv_state_history[-1] != current_state:
+                        if (
+                            not conv_state_history
+                            or conv_state_history[-1] != current_state
+                        ):
                             conv_state_history.append(current_state)
                         state_prompt = state_prompt_classification(current_state)
                         child_question_level = None
@@ -1408,7 +1436,9 @@ def chat_completion():
 
                     state_prompt = state_prompt.replace(
                         "{next_concept}",
-                        next_concept_for_prompting if next_concept_for_prompting else "",
+                        next_concept_for_prompting
+                        if next_concept_for_prompting
+                        else "",
                     )
                     print(
                         f"[Concept Logic] Next concept: {next_concept_for_prompting}, Matched concepts: {matched_concepts}"
@@ -1419,7 +1449,7 @@ def chat_completion():
                 # Ensure state_prompt is initialized
                 if not state_prompt:
                     state_prompt = state_prompt_classification(current_state)
-                
+
                 # For reflection, we still do knowledge retrieval for explanation
                 kg = knowledge_retrieval(messages, phenomenon, conversation.id, db)
                 matched_kg = kg if kg else None
@@ -1457,7 +1487,9 @@ def chat_completion():
                             "{next_concept}", ""
                         )  # No prompting question in reflection
                 else:
-                    print("ERROR: state_prompt is None or invalid for reflection state! Re-initializing...")
+                    print(
+                        "ERROR: state_prompt is None or invalid for reflection state! Re-initializing..."
+                    )
                     state_prompt = state_prompt_classification(current_state)
                     if not state_prompt:
                         # Ultimate fallback
@@ -1465,8 +1497,12 @@ def chat_completion():
 
         # Ensure state_prompt is not None before calling format_prompt
         if not state_prompt:
-            print(f"WARNING: state_prompt is None before format_prompt (non-stream), current_state: {current_state}")
-            state_prompt = state_prompt_classification(current_state, child_question_level)
+            print(
+                f"WARNING: state_prompt is None before format_prompt (non-stream), current_state: {current_state}"
+            )
+            state_prompt = state_prompt_classification(
+                current_state, child_question_level
+            )
             if not state_prompt:
                 state_prompt = "Respond to the child's question."
 
@@ -1558,7 +1594,9 @@ def chat_completion():
             state=current_state,
             evaluation_result=assistant_evaluation_result,
             matched_knowledge_components=matched_kg if matched_kg else None,
-            next_concept=next_concept_for_prompting if next_concept_for_prompting else None,
+            next_concept=next_concept_for_prompting
+            if next_concept_for_prompting
+            else None,
         )
         db.add(assistant_message_record)
 
@@ -1745,7 +1783,7 @@ def chat_completion_stream():
         if state != "scienceqa":
             eval_state = state_classification(state, messages, phenomenon)
             current_state = state_update(state, eval_state, conv_state_history)
-            
+
             # Special handling: if coming from reflection and all concepts matched, go to close
             if state == "reflection" and all_concepts_matched_flag[conversation_id]:
                 current_state = "close"
@@ -1759,7 +1797,9 @@ def chat_completion_stream():
                 if conv_state_history and conv_state_history[-1] != "scienceqa":
                     scienceqa_turn_count[conversation_id] = 0
                 # Classify the child's question level (always use the scienceqa evaluator prompt)
-                child_question_level = state_classification("scienceqa", messages, phenomenon)
+                child_question_level = state_classification(
+                    "scienceqa", messages, phenomenon
+                )
                 conv_scienceqa_history.append(child_question_level)
                 print("\n=== Turn Evaluation (Stream) ===")
                 print(f"Child's Question: {latest_user_message}")
@@ -1786,7 +1826,7 @@ def chat_completion_stream():
             # Note: All concepts matched case is handled in Response Generation phase
             scienceqa_turn_count[conversation_id] += 1
             turn_count = scienceqa_turn_count[conversation_id]
-            
+
             # Enter reflection if 3 turns passed
             if turn_count >= 2:
                 current_state = "reflection"
@@ -1804,7 +1844,9 @@ def chat_completion_stream():
                     print("=" * 50)
             else:
                 # Stay in scienceqa state, classify the child's question level
-                child_question_level = state_classification("scienceqa", messages, phenomenon)
+                child_question_level = state_classification(
+                    "scienceqa", messages, phenomenon
+                )
                 conv_scienceqa_history.append(child_question_level)
                 current_state = "scienceqa"
                 state_prompt = state_prompt_classification(
@@ -1813,7 +1855,9 @@ def chat_completion_stream():
                 if latest_user_message:
                     print("\n=== Turn Evaluation (Stream) ===")
                     print(f"Child's Question: {latest_user_message}")
-                    print(f"Evaluation Result: {child_question_level} (turn {turn_count}/3)")
+                    print(
+                        f"Evaluation Result: {child_question_level} (turn {turn_count}/3)"
+                    )
                     print("=" * 50)
             if not conv_state_history or conv_state_history[-1] != current_state:
                 conv_state_history.append(current_state)
@@ -1842,7 +1886,9 @@ def chat_completion_stream():
                 phenomenon_key = phenomenon_map.get(
                     phenomenon, "Hair Stands Up Near a Balloon"
                 )
-                concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
+                concepts_dict = knowledge_base.get(phenomenon_key, {}).get(
+                    "concepts", {}
+                )
                 concept_names = list(concepts_dict.keys())
 
                 # Get matched concepts history for this conversation
@@ -1905,7 +1951,10 @@ def chat_completion_stream():
                         all_concepts_matched_flag[conversation_id] = True
                         current_state = "reflection"
                         # Update state history
-                        if not conv_state_history or conv_state_history[-1] != current_state:
+                        if (
+                            not conv_state_history
+                            or conv_state_history[-1] != current_state
+                        ):
                             conv_state_history.append(current_state)
                         state_prompt = state_prompt_classification(current_state)
                         child_question_level = None
@@ -1955,7 +2004,10 @@ def chat_completion_stream():
                         )
                         current_state = "reflection"
                         # Update state history
-                        if not conv_state_history or conv_state_history[-1] != current_state:
+                        if (
+                            not conv_state_history
+                            or conv_state_history[-1] != current_state
+                        ):
                             conv_state_history.append(current_state)
                         state_prompt = state_prompt_classification(current_state)
                         child_question_level = None
@@ -1973,7 +2025,9 @@ def chat_completion_stream():
 
                     state_prompt = state_prompt.replace(
                         "{next_concept}",
-                        next_concept_for_prompting if next_concept_for_prompting else "",
+                        next_concept_for_prompting
+                        if next_concept_for_prompting
+                        else "",
                     )
                     print(
                         f"[Concept Logic] Next concept: {next_concept_for_prompting}, Matched concepts: {matched_concepts}"
@@ -1984,7 +2038,7 @@ def chat_completion_stream():
                 # Ensure state_prompt is initialized
                 if not state_prompt:
                     state_prompt = state_prompt_classification(current_state)
-                
+
                 # For reflection, we still do knowledge retrieval for explanation
                 kg = knowledge_retrieval(messages, phenomenon, conversation.id, db)
                 matched_kg = kg if kg else None
@@ -2022,7 +2076,9 @@ def chat_completion_stream():
                             "{next_concept}", ""
                         )  # No prompting question in reflection
                 else:
-                    print("ERROR: state_prompt is None or invalid for reflection state! Re-initializing...")
+                    print(
+                        "ERROR: state_prompt is None or invalid for reflection state! Re-initializing..."
+                    )
                     state_prompt = state_prompt_classification(current_state)
                     if not state_prompt:
                         # Ultimate fallback
@@ -2031,8 +2087,12 @@ def chat_completion_stream():
         if not state_prompt:
             if current_state == "scienceqa" and not child_question_level:
                 # Always use the scienceqa evaluator prompt for child-question level classification
-                child_question_level = state_classification("scienceqa", messages, phenomenon)
-            state_prompt = state_prompt_classification(current_state, child_question_level)
+                child_question_level = state_classification(
+                    "scienceqa", messages, phenomenon
+                )
+            state_prompt = state_prompt_classification(
+                current_state, child_question_level
+            )
             if not state_prompt:
                 state_prompt = "Respond to the child's question."
 
@@ -2225,7 +2285,9 @@ def reflection_summary():
             matched_concepts = []
 
         if "{matched_concepts}" in summary_prompt:
-            matched_concepts_str = ", ".join(matched_concepts) if matched_concepts else ""
+            matched_concepts_str = (
+                ", ".join(matched_concepts) if matched_concepts else ""
+            )
             summary_prompt = summary_prompt.replace(
                 "{matched_concepts}", matched_concepts_str
             )
@@ -2269,7 +2331,9 @@ def reflection_summary():
                 db_session.add(summary_message_record)
                 try:
                     db_session.commit()
-                    print(f"Saved reflection summary for conversation {saved_conversation_id}")
+                    print(
+                        f"Saved reflection summary for conversation {saved_conversation_id}"
+                    )
                 except Exception as commit_error:
                     db_session.rollback()
                     print(f"Error committing reflection summary: {commit_error}")
@@ -2279,6 +2343,7 @@ def reflection_summary():
                 db_session.rollback()
                 print(f"Reflection summary streaming error: {e}")
                 import traceback
+
                 print(traceback.format_exc())
                 yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
             finally:
@@ -2336,7 +2401,6 @@ def get_conversations():
             print(
                 f"Found {len(conversations)} conversations for session_id: {session_id}"
             )
-
 
         result = []
         for conv in conversations:
@@ -2476,10 +2540,18 @@ def get_conversation_messages(conversation_id):
         # Initialize scienceqa_turn_count and all_concepts_matched_flag
         # Count scienceqa turns since last reflection
         if "reflection" in state_history_list:
-            last_reflection_index = len(state_history_list) - 1 - state_history_list[::-1].index("reflection")
-            scienceqa_turn_count[conversation_id] = state_history_list[last_reflection_index:].count("scienceqa")
+            last_reflection_index = (
+                len(state_history_list)
+                - 1
+                - state_history_list[::-1].index("reflection")
+            )
+            scienceqa_turn_count[conversation_id] = state_history_list[
+                last_reflection_index:
+            ].count("scienceqa")
         else:
-            scienceqa_turn_count[conversation_id] = state_history_list.count("scienceqa")
+            scienceqa_turn_count[conversation_id] = state_history_list.count(
+                "scienceqa"
+            )
         # Check if all concepts matched (if we have all concepts in matched_concepts_list)
         all_concepts_matched_flag[conversation_id] = (
             len(matched_concepts_list) >= len(concept_names) if concept_names else False

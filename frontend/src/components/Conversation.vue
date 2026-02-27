@@ -70,6 +70,7 @@
       :summary="reflectionSummary"
       :totalConcepts="reflectionTotalConcepts"
       @close="closeReflectionModal"
+      @voiceResponse="handleReflectionVoiceResponse"
     />
   </div>
 </template>
@@ -315,6 +316,108 @@ const closeReflectionModal = () => {
   showReflectionModal.value = false
   reflectionSummary.value = ''
   reflectionTotalConcepts.value = 0
+}
+
+const handleReflectionVoiceResponse = async (userMessage: string) => {
+  if (!userMessage?.trim()) return
+  isLoading.value = true
+  try {
+    chatHistory.value.push({
+      role: 'user',
+      content: userMessage.trim(),
+      time: getCurrentTime()
+    })
+    await scrollToBottom()
+
+    const assistantMessageIndex = chatHistory.value.length
+    chatHistory.value.push({
+      role: 'assistant',
+      content: '',
+      time: getCurrentTime(),
+      words: [],
+      audioReady: false
+    })
+
+    let fullText = ''
+
+    const response = await fetch('/api/chat/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: chatHistory.value.slice(0, -1).map(msg => ({ role: msg.role, content: msg.content })),
+        state: convState.value,
+        image_path: props.selectedImagePath,
+        conversation_id: conversationId.value,
+        session_id: sessionId.value,
+        user_audio: null,
+        user_audio_mime_type: null
+      })
+    })
+
+    if (!response.ok) throw new Error('Chat completion failed')
+
+    const reader = response.body?.getReader()
+    const decoder = new TextDecoder()
+    if (!reader) throw new Error('No response body')
+
+    let buffer = ''
+    let nextState: typeof convState.value = convState.value
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      for (const line of lines) {
+        if (line.trim() === '' || !line.startsWith('data: ')) continue
+        try {
+          const jsonStr = line.slice(6).trim()
+          if (!jsonStr) continue
+          const data = JSON.parse(jsonStr)
+          if (data.type === 'token') {
+            fullText += data.content || ''
+            const assistantMsg = chatHistory.value[assistantMessageIndex]
+            if (assistantMsg) assistantMsg.content = fullText
+          } else if (data.type === 'done') {
+            fullText = data.response || fullText
+            nextState = data.next_state as typeof convState.value
+            convState.value = nextState
+          }
+        } catch { /* ignore */ }
+      }
+    }
+
+    if (!fullText?.trim()) {
+      const assistantMsg = chatHistory.value[assistantMessageIndex]
+      if (assistantMsg) {
+        assistantMsg.content = 'Sorry, I encountered an error. Please try again.'
+        assistantMsg.audioReady = true
+      }
+      await scrollToBottom()
+      return
+    }
+
+    const words = fullText.split(/(\s+)/).filter(w => w.length > 0).map(w => ({ text: w, visible: false }))
+    const assistantMsg = chatHistory.value[assistantMessageIndex]
+    if (assistantMsg) {
+      assistantMsg.words = words
+      assistantMsg.content = fullText
+    }
+    await scrollToBottom()
+
+    closeReflectionModal()
+    await generateAndPlayAudioWithPrinterEffect(fullText, assistantMessageIndex)
+  } catch (error) {
+    console.error('Error processing reflection voice response:', error)
+    chatHistory.value.push({
+      role: 'assistant',
+      content: 'Sorry, I encountered an error. Please try again.',
+      time: getCurrentTime()
+    })
+    await scrollToBottom()
+  } finally {
+    isLoading.value = false
+  }
 }
 
 const fetchReflectionSummaryAndShowModal = async () => {
@@ -677,7 +780,8 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
         await generateAndPlayAudioWithPrinterEffect(fullText, assistantMessageIndex)
         
         // After reflection response, fetch and show reflection summary modal
-        if (fallbackStateSent === 'reflection' || nextState === 'reflection') {
+        // Only when transitioning FROM scienceqa TO reflection (every 3 turns), not when already in reflection
+        if (nextState === 'reflection' && fallbackStateSent === 'scienceqa') {
           await fetchReflectionSummaryAndShowModal()
         }
         return
@@ -718,8 +822,8 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
     await generateAndPlayAudioWithPrinterEffect(fullText, assistantMessageIndex)
     
     // After reflection response is displayed, fetch and show reflection summary modal
-    // Trigger when: (1) we sent reflection state, or (2) backend transitioned to reflection (next_state)
-    if (stateSentWithRequest === 'reflection' || nextState === 'reflection') {
+    // Only when transitioning FROM scienceqa TO reflection (every 3 turns), not when already in reflection
+    if (nextState === 'reflection' && stateSentWithRequest === 'scienceqa') {
       await fetchReflectionSummaryAndShowModal()
     }
     

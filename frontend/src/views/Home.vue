@@ -5,13 +5,22 @@
       <button @click="handleSwitchImage" class="switch-image-button">
         <p class="switch-image-button-text">Choose Image</p>
       </button>
-      <div class="image-container">
-        <img 
-          :src="currentImage" 
-          :alt="imageAlt"
-          class="main-image"
-          @error="handleImageError"
-        />
+      <div class="image-and-bubbles">
+        <div class="image-container">
+          <img 
+            :src="currentImage" 
+            :alt="imageAlt"
+            class="main-image"
+            @error="handleImageError"
+          />
+        </div>
+        <div class="bubbles-slot">
+          <ConceptBubbles
+            :conceptOrder="CONCEPT_ORDER"
+            :matchedConcepts="matchedConcepts"
+            :phenomenon="phenomenonFromImage"
+          />
+        </div>
       </div>
     </div>
 
@@ -24,23 +33,49 @@
       >
         <img :src="refreshIcon" alt="Refresh" class="new-chat-icon" />
       </button>
-      <Conversation ref="conversationRef" :selectedImagePath="currentImage" />
+      <Conversation
+        ref="conversationRef"
+        :selectedImagePath="currentImage"
+        @firstTimeMatchedConcepts="onFirstTimeMatchedConcepts"
+      />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Conversation from '../components/Conversation.vue'
+import ConceptBubbles from '../components/ConceptBubbles.vue'
 import refreshIcon from '../assets/imgs/refresh.png'
+import { CONCEPT_ORDER } from '../constants/conceptOrder'
 
 const route = useRoute()
 const router = useRouter()
 
 const currentImage = ref('/imgs/balloon.jpg')
 const imageAlt = ref('Two girls with pink balloons - friendly cartoon illustration')
+
+const phenomenonFromImage = computed(() => {
+  const path = currentImage.value || ''
+  if (path.includes('bend.jpg')) return 'bend'
+  if (path.includes('pepper.jpg') || path.includes('salt.jpg')) return 'pepper'
+  return 'balloon'
+})
 const conversationRef = ref<InstanceType<typeof Conversation> | null>(null)
+
+// Concept bubbles: first-time matched concepts (Set, fixed order from slot index)
+const matchedConcepts = ref<Set<string>>(new Set())
+const onFirstTimeMatchedConcepts = (concepts: string[]) => {
+  if (!concepts?.length) return
+  const next = new Set(matchedConcepts.value)
+  for (const c of concepts) {
+    if (c?.trim()) next.add(c.trim())
+  }
+  if (next.size !== matchedConcepts.value.size) {
+    matchedConcepts.value = next
+  }
+}
 
 const handleImageError = () => {
   console.log('Image failed to load, using fallback')
@@ -54,11 +89,16 @@ const handleSwitchImage = () => {
 
 const handleNewChat = async () => {
   if (conversationRef.value) {
-    // Use isLoading from the conversation component
     if (conversationRef.value.isLoading) return
+    matchedConcepts.value = new Set()
     await conversationRef.value.startNewChat()
   }
 }
+
+// Clear concept bubbles when image changes (new conversation context)
+watch(currentImage, () => {
+      matchedConcepts.value = new Set()
+})
 
 // Get image from route query parameter
 onMounted(() => {
@@ -89,22 +129,43 @@ onMounted(() => {
   font-family: 'Comic Sans MS', cursive, sans-serif;
 }
 
-/* Image Section */
+/* Image Section - reserve space for bubbles so image size stays fixed */
 .image-section {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   padding: 20px;
   background: #FFD000;
-  position: relative;
+  gap: 12px;
+  min-height: 0;
+}
+
+.image-and-bubbles {
+  flex: 1;
+  display: grid;
+  grid-template-rows: 1fr minmax(340px, auto);
+  gap: 12px;
+  min-height: 0;
+  width: 100%;
+  max-width: 580px;
+}
+
+.image-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+}
+
+.bubbles-slot {
+  min-height: 340px;
 }
 
 .switch-image-button {
-  position: absolute;
-  top: 20px;
-  left: 20px;
+  align-self: flex-start;
+  margin: 0;
   background: #59A7F6;
   color: white;
   border: 6px solid #88E7FA;
@@ -135,16 +196,10 @@ onMounted(() => {
   transform: scale(0.95);
 }
 
-.image-container {
-  position: relative;
-  max-width: 100%;
-  max-height: 100%;
-}
 
 .main-image {
-  width: 90%;
   height: auto;
-  max-height: 80vh;
+  max-height: 100%;
   object-fit: contain;
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
   transition: transform 0.3s ease;
@@ -224,8 +279,6 @@ onMounted(() => {
   }
   
   .switch-image-button {
-    top: 10px;
-    left: 10px;
     padding: 8px 16px;
     font-size: 0.9em;
   }
@@ -235,7 +288,7 @@ onMounted(() => {
   }
   
   .main-image {
-    max-height: 35vh;
+    max-height: 32vh;
   }
   
   .new-chat-button {

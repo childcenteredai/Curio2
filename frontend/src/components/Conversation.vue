@@ -2,7 +2,11 @@
   <div class="chat-container">
     <!-- Character image - inside chat-container but outside chat-messages -->
     <div class="curio-character">
-      <img src="/imgs/curio-character.png" alt="Curio" class="curio-character-image">
+      <img
+        :src="isPlayingResponseAudio ? '/imgs/Speaking Owl.gif' : idleCharacterImage"
+        alt="Curio"
+        class="curio-character-image"
+      >
     </div>
 
     <!-- Chat messages area -->
@@ -42,42 +46,33 @@
       </div>
     </div>
 
-    <!-- Push-to-talk area -->
+    <!-- Voice input: click to start, click again to send -->
     <div class="chat-input-area">
-      <div class="push-to-talk-container">
+      <div class="voice-input-container">
         <button 
-          @mousedown="handleMouseDown"
-          @mouseup="handleMouseUp"
-          @mouseleave="handleMouseLeave"
+          @click="handleVoiceClick"
           :disabled="isLoading"
-          :class="`push-to-talk-button ${isRecording ? 'recording' : ''} ${isLoading ? 'loading' : ''}`"
+          :class="`voice-input-button ${isRecording ? 'recording' : ''} ${isLoading ? 'loading' : ''}`"
+          :title="isLoading ? 'Processing...' : isRecording ? 'Click to send' : 'Click to speak'"
         >
-          <div class="button-content">
-            <span v-if="isLoading" class="loading-icon">⏳</span>
-            <span v-else-if="isRecording" class="recording-icon">🎤</span>
-            <span v-else class="mic-icon">🎤</span>
-            <div class="button-text">
-              {{ isLoading ? 'Processing...' : isRecording ? 'Recording...' : 'Hold to Speak' }}
-            </div>
-          </div>
+          <svg v-if="isLoading" class="voice-icon loading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <circle cx="12" cy="12" r="10" stroke-dasharray="32 48" stroke-dashoffset="16" />
+          </svg>
+          <svg v-else :class="['voice-icon', 'mic-icon', { 'recording-icon': isRecording }]" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2a3 3 0 013 3v6a3 3 0 01-6 0V5a3 3 0 013-3z" />
+            <path d="M17 10v2a5 5 0 01-10 0v-2H5v2a7 7 0 0014 0v-2h-2z" />
+            <rect x="10" y="19" width="4" height="3" rx="1" />
+          </svg>
         </button>
       </div>
     </div>
 
-    <!-- Reflection summary modal (shows after reflection response) -->
-    <ReflectionModal
-      :isVisible="showReflectionModal"
-      :summary="reflectionSummary"
-      :totalConcepts="reflectionTotalConcepts"
-      @close="closeReflectionModal"
-      @voiceResponse="handleReflectionVoiceResponse"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import ReflectionModal from './ReflectionModal.vue'
+import { CURIO_APP_VERSION, loadAppConfig } from '../constants/appConfig'
 // Use relative paths - works with nginx reverse proxy (local) and Ingress (prod)
 
 // Props
@@ -110,9 +105,25 @@ const getOrCreateSessionId = (): string => {
 }
 const sessionId = ref<string>(getOrCreateSessionId())
 const isGeneratingGreeting = ref(false)
-const showReflectionModal = ref(false)
-const reflectionSummary = ref('')
-const reflectionTotalConcepts = ref(0)
+
+// Character image: Speaking Owl when playing audio, Wave 1/2 alternating when idle
+const isPlayingResponseAudio = ref(false)
+const idleCharacterImage = ref('/imgs/Wave 1.png')
+let idleImageTimeout: ReturnType<typeof setTimeout> | null = null
+const scheduleNextIdleImageToggle = () => {
+  const delay = 1500 + Math.random() * 2000 // 1.5–3.5 seconds
+  idleImageTimeout = setTimeout(() => {
+    idleCharacterImage.value = idleCharacterImage.value.includes('Wave 1')
+      ? '/imgs/Wave 2.png'
+      : '/imgs/Wave 1.png'
+    scheduleNextIdleImageToggle()
+  }, delay)
+}
+
+// Emit first-time matched concepts for concept bubbles (displayed in Home)
+const emit = defineEmits<{
+  (e: 'firstTimeMatchedConcepts', concepts: string[]): void
+}>()
 
 // Audio recording
 let mediaRecorder: MediaRecorder | null = null
@@ -229,8 +240,9 @@ const renderWordsWithBoldState = (words: Array<{text: string, visible: boolean}>
           isBold = false
         }
       } else {
-        // Even count: opening and closing in same word, state doesn't change
-        wordIsBold = isBold
+        // Even count: **word** - content between markers is bold
+        wordIsBold = true
+        isBold = false  // closed
       }
       
       processedWords.push({
@@ -239,11 +251,12 @@ const renderWordsWithBoldState = (words: Array<{text: string, visible: boolean}>
         isBold: wordIsBold
       })
     } else {
-      // No marker, use current bold state (including for whitespace)
+      // No marker - don't highlight whitespace
+      const isWhitespace = /^\s+$/.test(wordText)
       processedWords.push({
         text: wordText,
         visible: word.visible,
-        isBold: isBold
+        isBold: isWhitespace ? false : isBold
       })
     }
   }
@@ -312,174 +325,6 @@ const renderTextWithBoldState = (text: string): string => {
   return result
 }
 
-const closeReflectionModal = () => {
-  showReflectionModal.value = false
-  reflectionSummary.value = ''
-  reflectionTotalConcepts.value = 0
-}
-
-const handleReflectionVoiceResponse = async (userMessage: string) => {
-  if (!userMessage?.trim()) return
-  isLoading.value = true
-  try {
-    chatHistory.value.push({
-      role: 'user',
-      content: userMessage.trim(),
-      time: getCurrentTime()
-    })
-    await scrollToBottom()
-
-    const assistantMessageIndex = chatHistory.value.length
-    chatHistory.value.push({
-      role: 'assistant',
-      content: '',
-      time: getCurrentTime(),
-      words: [],
-      audioReady: false
-    })
-
-    let fullText = ''
-
-    const response = await fetch('/api/chat/stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messages: chatHistory.value.slice(0, -1).map(msg => ({ role: msg.role, content: msg.content })),
-        state: convState.value,
-        image_path: props.selectedImagePath,
-        conversation_id: conversationId.value,
-        session_id: sessionId.value,
-        user_audio: null,
-        user_audio_mime_type: null
-      })
-    })
-
-    if (!response.ok) throw new Error('Chat completion failed')
-
-    const reader = response.body?.getReader()
-    const decoder = new TextDecoder()
-    if (!reader) throw new Error('No response body')
-
-    let buffer = ''
-    let nextState: typeof convState.value = convState.value
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-      for (const line of lines) {
-        if (line.trim() === '' || !line.startsWith('data: ')) continue
-        try {
-          const jsonStr = line.slice(6).trim()
-          if (!jsonStr) continue
-          const data = JSON.parse(jsonStr)
-          if (data.type === 'token') {
-            fullText += data.content || ''
-            const assistantMsg = chatHistory.value[assistantMessageIndex]
-            if (assistantMsg) assistantMsg.content = fullText
-          } else if (data.type === 'done') {
-            fullText = data.response || fullText
-            nextState = data.next_state as typeof convState.value
-            convState.value = nextState
-          }
-        } catch { /* ignore */ }
-      }
-    }
-
-    if (!fullText?.trim()) {
-      const assistantMsg = chatHistory.value[assistantMessageIndex]
-      if (assistantMsg) {
-        assistantMsg.content = 'Sorry, I encountered an error. Please try again.'
-        assistantMsg.audioReady = true
-      }
-      await scrollToBottom()
-      return
-    }
-
-    const words = fullText.split(/(\s+)/).filter(w => w.length > 0).map(w => ({ text: w, visible: false }))
-    const assistantMsg = chatHistory.value[assistantMessageIndex]
-    if (assistantMsg) {
-      assistantMsg.words = words
-      assistantMsg.content = fullText
-    }
-    await scrollToBottom()
-
-    closeReflectionModal()
-    await generateAndPlayAudioWithPrinterEffect(fullText, assistantMessageIndex)
-  } catch (error) {
-    console.error('Error processing reflection voice response:', error)
-    chatHistory.value.push({
-      role: 'assistant',
-      content: 'Sorry, I encountered an error. Please try again.',
-      time: getCurrentTime()
-    })
-    await scrollToBottom()
-  } finally {
-    isLoading.value = false
-  }
-}
-
-const fetchReflectionSummaryAndShowModal = async () => {
-  try {
-    const messages = chatHistory.value.map(msg => ({
-      role: msg.role,
-      content: msg.content
-    }))
-    const response = await fetch('/api/reflection/summary', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messages,
-        image_path: props.selectedImagePath || '/imgs/balloon.jpg',
-        conversation_id: conversationId.value
-      })
-    })
-    if (!response.ok) {
-      console.error('Reflection summary failed:', response.status)
-      return
-    }
-    const reader = response.body?.getReader()
-    const decoder = new TextDecoder()
-    if (!reader) return
-    let fullSummary = ''
-    let totalConcepts = 0
-    let buffer = ''
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue
-        try {
-          const jsonStr = line.slice(6).trim()
-          if (!jsonStr) continue
-          const data = JSON.parse(jsonStr)
-          if (data.type === 'token') {
-            fullSummary += data.content || ''
-          } else if (data.type === 'done') {
-            fullSummary = data.response || fullSummary
-            totalConcepts = data.total_concepts ?? 0
-          } else if (data.type === 'error') {
-            console.error('Reflection summary error:', data.error)
-            return
-          }
-        } catch {
-          // ignore parse errors
-        }
-      }
-    }
-    if (fullSummary.trim()) {
-      reflectionSummary.value = fullSummary.trim()
-      reflectionTotalConcepts.value = totalConcepts
-      showReflectionModal.value = true
-    }
-  } catch (e) {
-    console.error('Error fetching reflection summary:', e)
-  }
-}
 
 const scrollToBottom = async () => {
   await nextTick()
@@ -543,21 +388,12 @@ const updateScrollState = () => {
   }
 }
 
-const handleMouseDown = async () => {
-  if (!isRecording.value && !isLoading.value) {
+const handleVoiceClick = async () => {
+  if (isLoading.value) return
+  if (isRecording.value) {
+    stopRecording()
+  } else {
     await startRecording()
-  }
-}
-
-const handleMouseUp = () => {
-  if (isRecording.value) {
-    stopRecording()
-  }
-}
-
-const handleMouseLeave = () => {
-  if (isRecording.value) {
-    stopRecording()
   }
 }
 
@@ -635,7 +471,7 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
     
     let fullText = ''
     let nextState: typeof convState.value = convState.value
-    const stateSentWithRequest = convState.value
+    let lastFirstTimeMatched: string[] = []
     
     try {
       const response = await fetch('/api/chat/stream', {
@@ -653,7 +489,8 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
           conversation_id: conversationId.value,
           session_id: sessionId.value,
           user_audio: audioBase64,
-          user_audio_mime_type: mimeType
+          user_audio_mime_type: mimeType,
+          curio_app_version: CURIO_APP_VERSION.value
         })
       })
       
@@ -709,6 +546,10 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
                 fullText = data.response || fullText
                 nextState = data.next_state as typeof convState.value
                 convState.value = nextState
+                lastFirstTimeMatched = Array.isArray(data.first_time_matched_concepts)
+                  ? data.first_time_matched_concepts
+                  : []
+                // Emit when audio starts playing (not here)
                 // Final scroll when done
                 await scrollToBottom()
               } else if (data.type === 'error') {
@@ -735,7 +576,6 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
       console.error('Error in streaming:', error)
       // Fallback to regular non-streaming endpoint
       try {
-        const fallbackStateSent = convState.value
         const chatResponse = await fetch('/api/chat', {
           method: 'POST',
           headers: {
@@ -751,7 +591,8 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
             conversation_id: conversationId.value,
             session_id: sessionId.value,
             user_audio: audioBase64,
-            user_audio_mime_type: mimeType
+            user_audio_mime_type: mimeType,
+            curio_app_version: CURIO_APP_VERSION.value
           })
         })
         
@@ -777,13 +618,8 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
         }
         
         await scrollToBottom()
-        await generateAndPlayAudioWithPrinterEffect(fullText, assistantMessageIndex)
-        
-        // After reflection response, fetch and show reflection summary modal
-        // Only when transitioning FROM scienceqa TO reflection (every 3 turns), not when already in reflection
-        if (nextState === 'reflection' && fallbackStateSent === 'scienceqa') {
-          await fetchReflectionSummaryAndShowModal()
-        }
+        const firstTime = chatData.first_time_matched_concepts
+        await generateAndPlayAudioWithPrinterEffect(fullText, assistantMessageIndex, firstTime)
         return
       } catch (fallbackError) {
         console.error('Fallback also failed:', fallbackError)
@@ -818,14 +654,8 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
     
     await scrollToBottom()
     
-    // Generate and play audio with printer effect
-    await generateAndPlayAudioWithPrinterEffect(fullText, assistantMessageIndex)
-    
-    // After reflection response is displayed, fetch and show reflection summary modal
-    // Only when transitioning FROM scienceqa TO reflection (every 3 turns), not when already in reflection
-    if (nextState === 'reflection' && stateSentWithRequest === 'scienceqa') {
-      await fetchReflectionSummaryAndShowModal()
-    }
+    // Generate and play audio with printer effect (emit bubbles when audio starts)
+    await generateAndPlayAudioWithPrinterEffect(fullText, assistantMessageIndex, lastFirstTimeMatched)
     
   } catch (error) {
     console.error('Error processing audio:', error)
@@ -870,19 +700,26 @@ const generateAndPlayAudio = async (text: string) => {
     currentAudio = audio
     
     audio.onended = () => {
+      isPlayingResponseAudio.value = false
       URL.revokeObjectURL(audioUrl)
       if (currentAudio === audio) {
         currentAudio = null
       }
     }
     
+    isPlayingResponseAudio.value = true
     await audio.play()
   } catch (error) {
+    isPlayingResponseAudio.value = false
     console.error('Error playing audio:', error)
   }
 }
 
-const generateAndPlayAudioWithPrinterEffect = async (text: string, messageIndex: number) => {
+const generateAndPlayAudioWithPrinterEffect = async (
+  text: string,
+  messageIndex: number,
+  firstTimeMatchedConcepts?: string[]
+) => {
   try {
     // Validate text before sending
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
@@ -976,6 +813,7 @@ const generateAndPlayAudioWithPrinterEffect = async (text: string, messageIndex:
       if (wordIndices.length === 0) {
         // No words to reveal, just play audio - still resolve when audio ends
         audio.onended = () => {
+          isPlayingResponseAudio.value = false
           URL.revokeObjectURL(audioUrl)
           if (currentAudio === audio) currentAudio = null
           resolveAudioEnded()
@@ -1031,6 +869,7 @@ const generateAndPlayAudioWithPrinterEffect = async (text: string, messageIndex:
       }, 50) // Update every 50ms for smooth effect
       
       audio.onended = () => {
+        isPlayingResponseAudio.value = false
         clearInterval(updateInterval)
         // Make sure all words are visible at the end
         if (words) {
@@ -1051,9 +890,15 @@ const generateAndPlayAudioWithPrinterEffect = async (text: string, messageIndex:
     
     setupPrinterEffect()
     
+    // Emit concept bubbles when audio starts playing
+    if (firstTimeMatchedConcepts?.length) {
+      emit('firstTimeMatchedConcepts', firstTimeMatchedConcepts)
+    }
+    isPlayingResponseAudio.value = true
     await audio.play()
     await audioEndedPromise
   } catch (error) {
+    isPlayingResponseAudio.value = false
     console.error('Error playing audio with printer effect:', error)
     // Fallback to regular playback
     await generateAndPlayAudio(text)
@@ -1130,6 +975,7 @@ const loadExistingConversation = async () => {
       if (messagesResponse.ok) {
         const messagesData = await messagesResponse.json()
         const messages = messagesData.messages || []
+        const restoredMatchedConcepts = messagesData.matched_concepts || []
         
         if (messages.length === 0) {
           return false
@@ -1182,6 +1028,11 @@ const loadExistingConversation = async () => {
         if (convResponse.ok) {
           const convData = await convResponse.json()
           convState.value = convData.current_state || 'greet'
+        }
+
+        // Restore concept bubbles from matched concepts in this conversation
+        if (restoredMatchedConcepts.length > 0) {
+          emit('firstTimeMatchedConcepts', restoredMatchedConcepts)
         }
         
         await scrollToBottom()
@@ -1304,8 +1155,16 @@ const generateInitialGreeting = async () => {
 const startNewChat = async () => {
   if (isLoading.value) return
   
-  // Close reflection modal if open
-  closeReflectionModal()
+  // Stop any playing audio
+  isPlayingResponseAudio.value = false
+  if (currentAudio) {
+    currentAudio.pause()
+    currentAudio.currentTime = 0
+    if (currentAudio.src && currentAudio.src.startsWith('blob:')) {
+      URL.revokeObjectURL(currentAudio.src)
+    }
+    currentAudio = null
+  }
   
   // Create a new conversation ID but keep the same session ID
   conversationId.value = crypto.randomUUID()
@@ -1319,16 +1178,13 @@ const startNewChat = async () => {
 }
 
 const handleKeyDown = (e: KeyboardEvent) => {
-  if (e.code === 'Space' && !isRecording.value && !isLoading.value) {
+  if (e.code === 'Space' && !e.repeat && !isLoading.value) {
     e.preventDefault()
-    startRecording()
-  }
-}
-
-const handleKeyUp = (e: KeyboardEvent) => {
-  if (e.code === 'Space' && isRecording.value) {
-    e.preventDefault()
-    stopRecording()
+    if (isRecording.value) {
+      stopRecording()
+    } else {
+      startRecording()
+    }
   }
 }
 
@@ -1343,6 +1199,7 @@ watch(() => props.selectedImagePath, async (newPath, oldPath) => {
   // If image path changes, always reload conversation for the new image
   if (newPath !== oldPath) {
     // Stop any playing audio first
+    isPlayingResponseAudio.value = false
     if (currentAudio) {
       currentAudio.pause()
       currentAudio.currentTime = 0
@@ -1352,8 +1209,7 @@ watch(() => props.selectedImagePath, async (newPath, oldPath) => {
       currentAudio = null
     }
     
-    // Close reflection modal and clear current state
-    closeReflectionModal()
+    // Clear current state
     chatHistory.value = []
     convState.value = 'greet'
     
@@ -1369,8 +1225,9 @@ watch(() => props.selectedImagePath, async (newPath, oldPath) => {
 
 onMounted(async () => {
   document.addEventListener('keydown', handleKeyDown)
-  document.addEventListener('keyup', handleKeyUp)
-  
+  scheduleNextIdleImageToggle()
+  await loadAppConfig()
+
   // Wait for props to be set (may take a moment if parent sets them in onMounted)
   let attempts = 0
   while (!props.selectedImagePath && attempts < 10) {
@@ -1395,13 +1252,17 @@ onMounted(async () => {
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeyDown)
-  document.removeEventListener('keyup', handleKeyUp)
+  if (idleImageTimeout) {
+    clearTimeout(idleImageTimeout)
+    idleImageTimeout = null
+  }
   
   if (mediaRecorder && mediaRecorder.state === 'recording') {
     mediaRecorder.stop()
   }
   
   // Stop any playing audio
+  isPlayingResponseAudio.value = false
   if (currentAudio) {
     currentAudio.pause()
     currentAudio.currentTime = 0
@@ -1454,6 +1315,7 @@ defineExpose({
   height: fit-content;
   object-fit: contain;
   pointer-events: auto; /* Re-enable pointer events for the image itself */
+  transform: scaleX(-1); /* 左右翻转 */
 }
 
 .chat-title {
@@ -1535,22 +1397,27 @@ defineExpose({
 .message-text .bold-highlight {
   font-weight: 700;
   color: #FFE600;
-  background: rgba(255, 230, 0, 0.2);
-  padding: 1px 0;
   font-family: 'Roboto', sans-serif;
-  display: inline;
-}
 
-.message-text :deep(.bold-highlight.bold-first),
-.message-text .bold-highlight.bold-first {
-  border-top-left-radius: 3px;
-  border-bottom-left-radius: 3px;
-}
+  display: inline-block;
+  line-height: 1.05;
 
-.message-text :deep(.bold-highlight.bold-last),
-.message-text .bold-highlight.bold-last {
-  border-top-right-radius: 3px;
-  border-bottom-right-radius: 3px;
+  padding: 0.08em 0.22em;
+
+  border-radius: 0.8em;
+
+  background-color: transparent;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 100%;
+
+  background-image: radial-gradient(
+    ellipse 85% 75% at 50% 50%,
+    rgba(255, 230, 0, 0.30) 0%,
+    rgba(255, 230, 0, 0.18) 35%,
+    rgba(255, 230, 0, 0.08) 58%,
+    rgba(255, 230, 0, 0.00) 78%
+  );
 }
 
 .word-visible {
@@ -1600,22 +1467,24 @@ defineExpose({
   z-index: 200; /* Same as messages - above character */
 }
 
-.push-to-talk-container {
+.voice-input-container {
   display: flex;
   justify-content: center;
   align-items: center;
 }
 
-.push-to-talk-button {
+.voice-input-button {
   font-family: 'Peachy Kink';
   color: #FFE600;
   font-size: 2em;
-  width: min(90%, 380px);
-  height: 100px;
-  border: none;
-  border-radius: 100px;
-  background: #686DF4;
+  width: 120px;
+  height: 120px;
+  min-width: 120px;
+  min-height: 120px;
+  padding: 0;
   border: 6px solid #D4C5FA;
+  border-radius: 50%;
+  background: #686DF4;
   cursor: pointer;
   transition: all 0.3s ease;
   display: flex;
@@ -1624,49 +1493,43 @@ defineExpose({
   box-shadow: 0 6px 0 0 #3F4296;
   position: relative;
   overflow: hidden;
+  box-sizing: border-box;
+  aspect-ratio: 1;
 }
 
-.push-to-talk-button:hover:not(:disabled) {
+.voice-input-button:hover:not(:disabled) {
   transform: scale(1.05);
   box-shadow: 0 6px 0 0 #3F4296;
 }
 
-.push-to-talk-button:active {
+.voice-input-button:active {
   transform: scale(0.95);
 }
 
-.push-to-talk-button.recording {
+.voice-input-button.recording {
   background: linear-gradient(135deg, #ff6b9d 0%, #c44569 100%);
   border: 6px solid #ffbdcb;
   animation: pulse 1.5s infinite;
   box-shadow: 0 6px 0 0 #d73475;
 }
 
-.push-to-talk-button.loading {
+.voice-input-button.loading {
   background: linear-gradient(135deg, #ffa726 0%, #ff7043 100%);
   border: 6px solid #fdc77b;
   box-shadow: 0 6px 0 0 #ffa323;
   cursor: not-allowed;
 }
 
-.push-to-talk-button:disabled {
+.voice-input-button:disabled {
   cursor: not-allowed;
   transform: none;
 }
 
-.button-content {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-}
-
-.mic-icon, .recording-icon, .loading-icon {
-  font-size: 1.5em;
-  margin-bottom: 10px;
-  display: block;
-  margin-right: 10px;
+.voice-icon {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  color: currentColor;
 }
 
 .recording-icon {
@@ -1675,18 +1538,6 @@ defineExpose({
 
 .loading-icon {
   animation: spin 1s linear infinite;
-}
-
-.button-text {
-  font-size: 1.2em;
-  font-weight: bold;
-  margin-bottom: 5px;
-}
-
-.keyboard-hint {
-  font-size: 0.9em;
-  opacity: 0.8;
-  font-style: italic;
 }
 
 @keyframes pulse {
@@ -1729,20 +1580,23 @@ defineExpose({
   
   .curio-character-image {
     width: 15vw;
+    transform: scaleX(-1);
   }
-  
+
   .chat-messages {
     padding: 30px 15px 30px 50px;
   }
   
-  .push-to-talk-button {
-    width: 320px;
-    height: 90px;
-    font-size: 1.8em;
+  .voice-input-button {
+    width: 100px;
+    height: 100px;
+    min-width: 100px;
+    min-height: 100px;
   }
   
-  .button-text {
-    font-size: 1.1em;
+  .voice-icon {
+    width: 48px;
+    height: 48px;
   }
 }
 
@@ -1763,8 +1617,9 @@ defineExpose({
   
   .curio-character-image {
     width: 25vw;
+    transform: scaleX(-1);
   }
-  
+
   .chat-messages {
     padding: 30px 15px 30px 40px;
     height: 60vh;
@@ -1792,31 +1647,17 @@ defineExpose({
     padding: 15px;
   }
   
-  .push-to-talk-button {
-    width: min(90%, 280px);
-    height: 80px;
-    font-size: 1.5em;
+  .voice-input-button {
+    width: 96px;
+    height: 96px;
+    min-width: 96px;
+    min-height: 96px;
     border-width: 4px;
   }
   
-  .button-content {
-    flex-direction: column;
-    gap: 5px;
-  }
-  
-  .mic-icon, .recording-icon, .loading-icon {
-    font-size: 1.2em;
-    margin-right: 0;
-    margin-bottom: 0;
-  }
-  
-  .button-text {
-    font-size: 0.9em;
-    margin-bottom: 0;
-  }
-  
-  .keyboard-hint {
-    font-size: 0.75em;
+  .voice-icon {
+    width: 44px;
+    height: 44px;
   }
 }
 
@@ -1836,8 +1677,9 @@ defineExpose({
   
   .curio-character-image {
     width: 30vw;
+    transform: scaleX(-1);
   }
-  
+
   .chat-messages {
     padding: 25px 10px 25px 35px;
     height: 65vh;
@@ -1871,20 +1713,17 @@ defineExpose({
     padding: 10px;
   }
   
-  .push-to-talk-button {
-    width: min(95%, 250px);
-    height: 70px;
-    font-size: 1.3em;
+  .voice-input-button {
+    width: 88px;
+    height: 88px;
+    min-width: 88px;
+    min-height: 88px;
     border-width: 3px;
-    border-radius: 80px;
   }
   
-  .mic-icon, .recording-icon, .loading-icon {
-    font-size: 1em;
-  }
-  
-  .button-text {
-    font-size: 0.8em;
+  .voice-icon {
+    width: 40px;
+    height: 40px;
   }
 }
 

@@ -3,6 +3,7 @@ You are given a knowledge graph (KG) of scientific components. Your task is to d
 <Retrieval Rules>
 - Focus only on the child's most recent question/response.
 - Only match when a component in the KG can directly answer the child's question, or match a component that can be used as an initial information to guide the child's exploration of the scientific phenomenon. 
+- **Special Case** If the child's question is: 'What is static electricity?', match ['Invisible Force'] only.
 - **Select the SINGLE most relevant component. Return only one component, not multiple.**
 - **If no component is strongly relevant, return an empty string ('').**
 </Retrieval Rules>
@@ -14,7 +15,7 @@ You are given a knowledge graph (KG) of scientific components. Your task is to d
 </Child's Question>
 
 <Response Format>
-- **Return ONLY ONE component name as a single-item JSON list (e.g., ["Force at a Distance"]).**
+- **Return ONLY ONE component name as a single-item JSON list (e.g., ["Invisible Force"]).**
 - **The component name must match exactly as it appears in the Knowledge Graph (use the concept name).**
 - If no component is strongly relevant, return an empty string ('').
 </Response Format>

@@ -129,20 +129,19 @@
           <div class="voice-input-container" v-show="question2AudioFinished">
             <button 
               id="modal-voice-button"
-              @mousedown="handleMouseDown"
-              @mouseup="handleMouseUp"
-              @mouseleave="handleMouseLeave"
+              @click="handleVoiceClick"
               :disabled="isLoading"
               :class="`voice-input-button ${isRecording ? 'recording' : ''} ${isLoading ? 'loading' : ''}`"
+              :title="isLoading ? 'Processing...' : isRecording ? 'Click to send' : 'Click to speak'"
             >
-              <div class="button-content">
-                <span v-if="isLoading" class="loading-icon">⏳</span>
-                <span v-else-if="isRecording" class="recording-icon">🎤</span>
-                <span v-else class="mic-icon">🎤</span>
-                <div class="button-text">
-                  {{ isLoading ? 'Processing...' : isRecording ? 'Recording...' : 'Hold to Speak' }}
-                </div>
-              </div>
+              <svg v-if="isLoading" class="voice-icon loading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <circle cx="12" cy="12" r="10" stroke-dasharray="32 48" stroke-dashoffset="16" />
+              </svg>
+              <svg v-else :class="['voice-icon', 'mic-icon', { 'recording-icon': isRecording }]" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2a3 3 0 013 3v6a3 3 0 01-6 0V5a3 3 0 013-3z" />
+                <path d="M17 10v2a5 5 0 01-10 0v-2H5v2a7 7 0 0014 0v-2h-2z" />
+                <rect x="10" y="19" width="4" height="3" rx="1" />
+              </svg>
             </button>
           </div>
         </div>
@@ -284,7 +283,8 @@ const renderWordsWithBoldState = (words: Array<{text: string, visible: boolean}>
           isBold = false
         }
       } else {
-        wordIsBold = isBold
+        wordIsBold = true
+        isBold = false
       }
       
       processedWords.push({
@@ -293,10 +293,11 @@ const renderWordsWithBoldState = (words: Array<{text: string, visible: boolean}>
         isBold: wordIsBold
       })
     } else {
+      const isWhitespace = /^\s+$/.test(wordText)
       processedWords.push({
         text: wordText,
         visible: word.visible,
-        isBold: isBold
+        isBold: isWhitespace ? false : isBold
       })
     }
   }
@@ -415,51 +416,27 @@ const handleOverlayClick = () => {
   // Don't close on overlay click - user must interact with the modal
 }
 
-const handleMouseDown = async (event: MouseEvent) => {
+const handleVoiceClick = async (event: MouseEvent) => {
   event.preventDefault()
   event.stopPropagation()
-  if (!isRecording.value && !isLoading.value) {
+  if (isLoading.value) return
+  if (isRecording.value) {
+    stopRecording()
+  } else {
     await startRecording()
   }
 }
 
-const handleMouseUp = (event: MouseEvent) => {
-  event.preventDefault()
-  event.stopPropagation()
-  if (isRecording.value) {
-    stopRecording()
-  }
-}
-
-const handleMouseLeave = (event: MouseEvent) => {
-  event.preventDefault()
-  event.stopPropagation()
-  if (isRecording.value) {
-    stopRecording()
-  }
-}
-
-// Keyboard event handlers for spacebar
+// Keyboard event handlers for spacebar - click to toggle
 const handleKeyDown = async (event: KeyboardEvent) => {
-  // Only handle spacebar when modal is visible, question 2 is shown, and not loading
-  if (event.code === 'Space' && props.isVisible && showQuestion2.value && question2AudioFinished.value && !isLoading.value) {
-    // Prevent default spacebar behavior (scrolling)
+  if (event.code === 'Space' && !event.repeat && props.isVisible && showQuestion2.value && question2AudioFinished.value && !isLoading.value) {
     event.preventDefault()
     event.stopPropagation()
-    
-    // Only start recording if not already recording
-    if (!isRecording.value) {
+    if (isRecording.value) {
+      stopRecording()
+    } else {
       await startRecording()
     }
-  }
-}
-
-const handleKeyUp = (event: KeyboardEvent) => {
-  // Only handle spacebar when modal is visible and recording
-  if (event.code === 'Space' && props.isVisible && isRecording.value) {
-    event.preventDefault()
-    event.stopPropagation()
-    stopRecording()
   }
 }
 
@@ -846,7 +823,6 @@ watch(() => props.isVisible, async (newVal) => {
     
     // Add keyboard event listeners when modal opens
     window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('keyup', handleKeyUp)
     
     // Play summary with printer effect
     await playSummaryWithPrinterEffect()
@@ -856,7 +832,6 @@ watch(() => props.isVisible, async (newVal) => {
   } else {
     // Remove keyboard event listeners when modal closes
     window.removeEventListener('keydown', handleKeyDown)
-    window.removeEventListener('keyup', handleKeyUp)
     
     // Stop any playing audio when modal closes
     if (currentAudio) {
@@ -905,7 +880,6 @@ watch(() => props.summary, (newSummary) => {
 // Clean up event listeners on component unmount
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown)
-  window.removeEventListener('keyup', handleKeyUp)
 })
 </script>
 
@@ -1022,22 +996,27 @@ onUnmounted(() => {
 .summary-text .bold-highlight {
   font-weight: 700;
   color: #FFE600;
-  background: rgba(255, 230, 0, 0.2);
-  padding: 1px 0;
   font-family: 'Roboto', sans-serif;
-  display: inline;
-}
 
-.summary-text :deep(.bold-highlight.bold-first),
-.summary-text .bold-highlight.bold-first {
-  border-top-left-radius: 3px;
-  border-bottom-left-radius: 3px;
-}
+  display: inline-block;
+  line-height: 1.05;
 
-.summary-text :deep(.bold-highlight.bold-last),
-.summary-text .bold-highlight.bold-last {
-  border-top-right-radius: 3px;
-  border-bottom-right-radius: 3px;
+  padding: 0.08em 0.22em;
+
+  border-radius: 0.8em;
+
+  background-color: transparent;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 100%;
+
+  background-image: radial-gradient(
+    ellipse 85% 75% at 50% 50%,
+    rgba(255, 230, 0, 0.30) 0%,
+    rgba(255, 230, 0, 0.18) 35%,
+    rgba(255, 230, 0, 0.08) 58%,
+    rgba(255, 230, 0, 0.00) 78%
+  );
 }
 
 .summary-text :deep(.opening-sentence),
@@ -1175,7 +1154,7 @@ onUnmounted(() => {
 }
 
 
-/* Voice Input Styles */
+/* Voice Input Styles - circular button with mic icon */
 .voice-input-container {
   display: flex;
   justify-content: center;
@@ -1187,12 +1166,14 @@ onUnmounted(() => {
   font-family: 'Peachy Kink', 'Roboto', sans-serif;
   color: #FFE600;
   font-size: 1.5em;
-  width: min(90%, 350px);
-  height: 80px;
-  border: none;
-  border-radius: 100px;
-  background: #686DF4;
+  width: 120px;
+  height: 120px;
+  min-width: 120px;
+  min-height: 120px;
+  padding: 0;
   border: 6px solid #D4C5FA;
+  border-radius: 50%;
+  background: #686DF4;
   cursor: pointer;
   transition: all 0.3s ease;
   display: flex;
@@ -1201,6 +1182,8 @@ onUnmounted(() => {
   box-shadow: 0 6px 0 0 #3F4296;
   position: relative;
   overflow: hidden;
+  box-sizing: border-box;
+  aspect-ratio: 1;
 }
 
 .voice-input-button:hover:not(:disabled) {
@@ -1231,18 +1214,11 @@ onUnmounted(() => {
   transform: none;
 }
 
-.button-content {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-}
-
-.mic-icon, .recording-icon, .loading-icon {
-  font-size: 1.3em;
-  margin-right: 10px;
-  display: block;
+.voice-icon {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  color: currentColor;
 }
 
 .recording-icon {
@@ -1251,11 +1227,6 @@ onUnmounted(() => {
 
 .loading-icon {
   animation: spin 1s linear infinite;
-}
-
-.button-text {
-  font-size: 1em;
-  font-weight: bold;
 }
 
 @keyframes pulse {
@@ -1344,9 +1315,15 @@ onUnmounted(() => {
   }
   
   .voice-input-button {
-    width: min(95%, 300px);
-    height: 70px;
-    font-size: 1.3em;
+    width: 96px;
+    height: 96px;
+    min-width: 96px;
+    min-height: 96px;
+  }
+  
+  .voice-icon {
+    width: 44px;
+    height: 44px;
   }
 }
 
@@ -1375,9 +1352,15 @@ onUnmounted(() => {
   }
   
   .voice-input-button {
-    width: min(98%, 250px);
-    height: 60px;
-    font-size: 1.1em;
+    width: 88px;
+    height: 88px;
+    min-width: 88px;
+    min-height: 88px;
+  }
+  
+  .voice-icon {
+    width: 40px;
+    height: 40px;
   }
 }
 </style>

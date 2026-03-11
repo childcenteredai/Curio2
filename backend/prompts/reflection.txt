@@ -21,7 +21,7 @@ Sample phrases for summary:
 </How to Prompt>
 
 <Reminders>
-- Do not include any questions in your response.
+- The summary should be completed based on the conversation history to reflect the child's exploration content. You should not reveal the knowledge.
 </Reminders>
 
 <Language>

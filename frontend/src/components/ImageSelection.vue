@@ -38,19 +38,6 @@
           <p class="confirm-button-text">Start</p>
         </button>
       </div>
-
-      <div class="version-switch-wrapper">
-        <label class="version-switch-label">Version</label>
-        <button
-          type="button"
-          class="version-switch"
-          :class="{ active: appVersion === 2 }"
-          @click="toggleVersion"
-        >
-          <span class="version-option" :class="{ active: appVersion === 1 }">1</span>
-          <span class="version-option" :class="{ active: appVersion === 2 }">2</span>
-        </button>
-      </div>
     </div>
   </div>
 </template>
@@ -58,22 +45,14 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { CURIO_APP_VERSION, setCurioAppVersion, loadAppConfig } from '../constants/appConfig'
+import { setCurioAppVersion, loadAppConfig } from '../constants/appConfig'
 
 const router = useRouter()
 
-const appVersion = ref<1 | 2>(1)
-
 onMounted(async () => {
   await loadAppConfig()
-  appVersion.value = CURIO_APP_VERSION.value
+  setCurioAppVersion(1)
 })
-
-const toggleVersion = () => {
-  const next = appVersion.value === 1 ? 2 : 1
-  appVersion.value = next
-  setCurioAppVersion(next)
-}
 
 interface ImageOption {
   path: string
@@ -164,7 +143,6 @@ const handleConfirm = () => {
   color: #FAE100;
   border-color: #0011BB;
   -webkit-text-stroke: clamp(1px, 0.5vw, 4px) #0011BB;
-  text-stroke: clamp(1px, 0.5vw, 4px) #0011BB;
   margin-bottom: 10px;
   text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.3);
 }
@@ -289,49 +267,6 @@ const handleConfirm = () => {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
-}
-
-.version-switch-wrapper {
-  position: absolute;
-  bottom: 24px;
-  right: 24px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.version-switch-label {
-  font-size: 0.95em;
-  color: rgba(255, 255, 255, 0.9);
-  font-weight: bold;
-}
-
-.version-switch {
-  display: flex;
-  background: rgba(255, 255, 255, 0.3);
-  border: 3px solid white;
-  border-radius: 24px;
-  padding: 4px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.version-switch:hover {
-  background: rgba(255, 255, 255, 0.5);
-}
-
-.version-switch .version-option {
-  padding: 6px 16px;
-  border-radius: 18px;
-  font-weight: bold;
-  font-size: 1em;
-  color: rgba(255, 255, 255, 0.7);
-  transition: all 0.2s ease;
-}
-
-.version-switch .version-option.active {
-  background: #FFD000;
-  color: #1266FF;
 }
 
 /* Responsive Design */

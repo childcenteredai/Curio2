@@ -108,7 +108,6 @@ level_0 = (
 - Use forms like:
     - "What is your hypothesis?" 
     - "What's your next question to find the clue of ...?"
-    - "Why do you think this happens?"
 </Instruction for prompting question>
 """
     + COMMON_FORMAT
@@ -146,8 +145,8 @@ level_1 = (
 - Prompt the child to explore the next concept: "{next_concept}".
 - Use forms like:
   - "Is there anything you are wondering about ...?"
-  - "What could we check next to find more clues about ...?"
-  - "How would you investigate what's really going on with ...?"
+  - "What question would you ask to find more clues about ...?"
+  - "What question would you ask to investigate what's really going on with ...?"
 </Instruction for prompting question>
 """
     + COMMON_FORMAT
@@ -187,8 +186,8 @@ level_2 = (
 - If the conversation with the child is within the first 5 turns, do not expand the question to real-life examples. Focus on the image itself.
 - This question should encourage the child to ask you a question, not to answer your question. 
 - Use varied phrasing, such as:
-    - "What could we check next to find more clues about ...?"
-    - "How would you investigate what's really going on with ...?"
+    - "What question would you ask to find more clues about ...?"
+    - "What question would you ask to investigate what's really going on with ...?"
 </Instruction for prompting question>
 """
     + COMMON_FORMAT
@@ -224,8 +223,8 @@ level_3 = (
 - This question should encourage the child to ask you a question, not to answer your question. 
 - Keep your prompting question in one sentence.
 - Use varied and engaging phrasing, such as:
-    - "What could we check next to find more clues about ...?"
-    - "How would you investigate what's really going on with ...?"
+    - "What question would you ask to find more clues about ...?"
+    - "What question would you ask to investigate what's really going on with ...?"
 </Instruction for prompting question>
 """
     + COMMON_FORMAT
@@ -262,8 +261,8 @@ level_4 = (
 - This question should encourage the child to ask you a question, not to answer your question. 
 - Keep your prompting question in one sentence.
 - Use varied phrasing such as:
-    - "What could we check next to find more clues about ...?"
-    - "How would you investigate what's really going on with ...?"
+    - "What question would you ask to find more clues about ...?"
+    - "What question would you ask to investigate what's really going on with ...?"
 </Instruction for prompting question>
 """
     + COMMON_FORMAT

@@ -115,7 +115,6 @@ onMounted(() => {
   padding-top: 8vh;
   min-height: 0;
   width: 100%;
-  max-width: 580px;
 }
 
 .image-container {

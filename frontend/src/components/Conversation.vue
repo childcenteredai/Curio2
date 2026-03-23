@@ -67,11 +67,34 @@
       </div>
     </div>
 
+    <!-- 10-min room choice popup -->
+    <div
+      v-if="showRoomChoicePopup"
+      class="room-choice-overlay"
+      @click.self.stop
+    >
+      <div class="room-choice-container" role="dialog" aria-modal="true" aria-label="Room choice">
+        <div class="room-choice-title">Quick check-in</div>
+        <div class="room-choice-question">
+          Do you want to explore another room or continue exploring this room?
+        </div>
+        <div class="room-choice-actions">
+          <button class="room-choice-button secondary" @click="handleExploreAnotherRoom">
+            Explore another room
+          </button>
+          <button class="room-choice-button primary" @click="handleContinueThisRoom">
+            Continue exploring this room
+          </button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { CURIO_APP_VERSION, loadAppConfig } from '../constants/appConfig'
 // Use relative paths - works with nginx reverse proxy (local) and Ingress (prod)
 
@@ -105,6 +128,29 @@ const getOrCreateSessionId = (): string => {
 }
 const sessionId = ref<string>(getOrCreateSessionId())
 const isGeneratingGreeting = ref(false)
+
+const router = useRouter()
+
+// 10-minute popup: ask whether to explore another room
+const showRoomChoicePopup = ref(false)
+let roomChoiceTimeout: ReturnType<typeof setTimeout> | null = null
+const startRoomChoiceTimer = () => {
+  if (roomChoiceTimeout) {
+    clearTimeout(roomChoiceTimeout)
+    roomChoiceTimeout = null
+  }
+  roomChoiceTimeout = setTimeout(() => {
+    showRoomChoicePopup.value = true
+  }, 10 * 60 * 1000)
+}
+const handleExploreAnotherRoom = () => {
+  showRoomChoicePopup.value = false
+  startRoomChoiceTimer() // reset when child re-enters a (new) room
+  router.push('/')
+}
+const handleContinueThisRoom = () => {
+  showRoomChoicePopup.value = false
+}
 
 // Character image: Speaking Owl when playing audio, Wave 1/2 alternating when idle
 const isPlayingResponseAudio = ref(false)
@@ -493,11 +539,11 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
           curio_app_version: CURIO_APP_VERSION.value
         })
       })
-      
+
       if (!response.ok) {
         throw new Error('Chat completion failed')
       }
-      
+
       const reader = response.body?.getReader()
       const decoder = new TextDecoder()
       
@@ -1198,6 +1244,7 @@ watch(chatHistory, async () => {
 watch(() => props.selectedImagePath, async (newPath, oldPath) => {
   // If image path changes, always reload conversation for the new image
   if (newPath !== oldPath) {
+    startRoomChoiceTimer()
     // Stop any playing audio first
     isPlayingResponseAudio.value = false
     if (currentAudio) {
@@ -1227,6 +1274,7 @@ onMounted(async () => {
   document.addEventListener('keydown', handleKeyDown)
   scheduleNextIdleImageToggle()
   await loadAppConfig()
+  startRoomChoiceTimer()
 
   // Wait for props to be set (may take a moment if parent sets them in onMounted)
   let attempts = 0
@@ -1255,6 +1303,11 @@ onUnmounted(() => {
   if (idleImageTimeout) {
     clearTimeout(idleImageTimeout)
     idleImageTimeout = null
+  }
+
+  if (roomChoiceTimeout) {
+    clearTimeout(roomChoiceTimeout)
+    roomChoiceTimeout = null
   }
   
   if (mediaRecorder && mediaRecorder.state === 'recording') {
@@ -1297,6 +1350,93 @@ defineExpose({
   position: relative;
   z-index: 200; /* Higher z-index to ensure messages are above character */
   padding: 10px;
+}
+
+.room-choice-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 12000;
+  animation: fadeIn 0.25s ease;
+}
+
+.room-choice-container {
+  background: #FFEC99;
+  border: 8px solid white;
+  border-radius: 40px;
+  width: min(680px, 92vw);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  padding: 26px 26px 22px;
+  animation: slideUp 0.25s ease;
+}
+
+.room-choice-title {
+  font-family: 'Roboto', sans-serif;
+  font-size: 2em;
+  font-weight: 700;
+  color: #008CBB;
+  margin-bottom: 12px;
+}
+
+.room-choice-question {
+  font-family: 'Roboto', sans-serif;
+  font-size: 1.35em;
+  font-weight: 500;
+  color: #008CBB;
+  line-height: 1.25;
+  margin-bottom: 18px;
+}
+
+.room-choice-actions {
+  display: flex;
+  gap: 14px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.room-choice-button {
+  font-family: 'Peachy Kink', 'Roboto', sans-serif;
+  font-size: 1.2em;
+  padding: 10px 18px;
+  border-radius: 999px;
+  cursor: pointer;
+  border: 6px solid #88E7FA;
+  box-shadow: 0 6px 0 0 #008CBB;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.room-choice-button:hover {
+  transform: scale(1.03);
+}
+
+.room-choice-button:active {
+  transform: scale(0.98);
+}
+
+.room-choice-button.primary {
+  background: #59A7F6;
+  color: #FFE600;
+}
+
+.room-choice-button.secondary {
+  background: #FFFFFF;
+  color: #008CBB;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }
 
 .curio-character{

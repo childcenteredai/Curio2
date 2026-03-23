@@ -18,25 +18,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import scoped_session, sessionmaker
 
 from models import Conversation, Message
-from prompts.eval import reflection, scaffolding, scienceqa
-from prompts.reflection import (
-    level_0 as reflection_level_0,
-)
-from prompts.reflection import (
-    level_1 as reflection_level_1,
-)
-from prompts.reflection import (
-    level_2 as reflection_level_2,
-)
-from prompts.reflection import (
-    level_3 as reflection_level_3,
-)
-from prompts.reflection import (
-    level_4 as reflection_level_4,
-)
-from prompts.reflection import (
-    no_question as reflection_no_question,
-)
+from prompts.eval import scaffolding, scienceqa
 from prompts.scienceqa import level_0, level_1, level_2, level_3, level_4, no_question
 
 load_dotenv()
@@ -177,15 +159,11 @@ scienceqa_history = defaultdict(list)
 matched_concepts_history = defaultdict(
     list
 )  # Track matched concepts for each conversation
-scienceqa_turn_count = defaultdict(
-    int
-)  # Track number of scienceqa turns since last reflection
+scienceqa_turn_count = defaultdict(int)  # Track number of scienceqa turns
 all_concepts_matched_flag = defaultdict(
     bool
 )  # Flag to indicate if all concepts have been matched
-scienceqa_turn_count = defaultdict(
-    int
-)  # Track number of scienceqa turns since last reflection
+scienceqa_turn_count = defaultdict(int)  # Track number of scienceqa turns
 
 
 def state_classification(state, messages, phenomenon):
@@ -194,8 +172,9 @@ def state_classification(state, messages, phenomenon):
         eval_prompt = format_prompt(scaffolding, phenomenon, messages)
     elif state in ["discover", "scienceqa"]:
         eval_prompt = format_prompt(scienceqa, phenomenon, messages)
-    elif state in ["reflection"]:
-        eval_prompt = format_prompt(reflection, phenomenon, messages)
+    else:
+        # Unknown state: default to scienceqa evaluator
+        eval_prompt = format_prompt(scienceqa, phenomenon, messages)
 
     messages = [{"role": "system", "content": eval_prompt}]
     # print(f"messages: {messages}")
@@ -220,36 +199,15 @@ def state_classification(state, messages, phenomenon):
 
 
 def state_update(current_state, eval_state, state_history_list):
-    ## removed reflection state for pilot testing
     next_state = eval_state
     if eval_state == "discover":
         next_state = "discover"
     elif eval_state == "scienceqa":
         if len(state_history_list) > 0 and state_history_list[-1] == "scaffolding":
             next_state = "discover"
-        elif "reflection" not in state_history_list:
-            # total_sci = state_history_list.count("scienceqa")
-            # if total_sci >= 2:
-            #     next_state = "reflection"
-            # else:
-            #     next_state = "scienceqa"
-            next_state = "scienceqa"
         else:
-            reflection_index = state_history_list.index("reflection")
-            post_ref_sci = state_history_list[reflection_index:].count("scienceqa")
-            num_of_reflection = state_history_list.count("reflection")
-            if num_of_reflection >= 2:
-                next_state = "close"
-            else:
-                next_state = "reflection" if post_ref_sci >= 2 else "scienceqa"
-                next_state = "scienceqa"
-    elif eval_state == "reflection":
-        # After reflection, return to scienceqa (unless all concepts matched, which is handled outside)
-        # Check if we just finished a reflection - if so, go back to scienceqa
-        if len(state_history_list) > 0 and state_history_list[-1] == "reflection":
+            # Closing should be driven by knowledge-component completion logic.
             next_state = "scienceqa"
-        else:
-            next_state = "reflection"
     elif eval_state == "scaffolding":
         num_of_scaffolding = state_history_list.count("scaffolding")
         if num_of_scaffolding >= 1:
@@ -293,26 +251,6 @@ def state_prompt_classification(state, child_question_level=None):
                 f"WARNING: state_prompt_classification called for scienceqa with child_question_level={child_question_level}, using level_0 as fallback"
             )
             return level_0
-    elif state == "reflection":
-        # Reflection: use scienceqa-style per-level prompts, but fixed prompting question
-        if child_question_level == "no_question":
-            return reflection_no_question
-        elif child_question_level == "irrelevant":
-            return reflection_level_0
-        elif child_question_level == "factual":
-            return reflection_level_1
-        elif child_question_level == "explanatory":
-            return reflection_level_2
-        elif child_question_level == "general_causal":
-            return reflection_level_3
-        elif child_question_level == "specific_causal":
-            return reflection_level_4
-        else:
-            # If child_question_level is None/unknown, fall back to reflection_level_0
-            print(
-                f"WARNING: state_prompt_classification called for reflection with child_question_level={child_question_level}, using reflection_level_0 as fallback"
-            )
-            return reflection_level_0
     elif state == "close":
         return open("prompts/close.txt", "r").read()
     else:
@@ -858,7 +796,7 @@ def get_explanation_method_and_matched_kg(
     run_for_any_question=False,
 ):
     """
-    Shared helper for scienceqa/reflection:
+    Shared helper for scienceqa:
     - Optionally run knowledge retrieval for EXPLANATION depending on question level
     - Build explanation_method string for {explanation_method} placeholder
 
@@ -1340,20 +1278,10 @@ def chat_completion():
             scienceqa_history[conversation_id] = loaded_scienceqa_history
             matched_concepts_history[conversation_id] = loaded_matched_concepts
 
-            # Reconstruct scienceqa_turn_count and all_concepts_matched_flag
-            if "reflection" in loaded_state_history:
-                last_reflection_index = (
-                    len(loaded_state_history)
-                    - 1
-                    - loaded_state_history[::-1].index("reflection")
-                )
-                scienceqa_turn_count[conversation_id] = loaded_state_history[
-                    last_reflection_index:
-                ].count("scienceqa")
-            else:
-                scienceqa_turn_count[conversation_id] = loaded_state_history.count(
-                    "scienceqa"
-                )
+            # Reflection stage removed: count all scienceqa turns
+            scienceqa_turn_count[conversation_id] = loaded_state_history.count(
+                "scienceqa"
+            )
 
             knowledge_base = json.load(open("knowledge/kg.json", "r"))
             phenomenon_map = {
@@ -1467,7 +1395,7 @@ def chat_completion():
 
             # If transitioning to scienceqa, reset turn count and classify question level
             if current_state == "scienceqa":
-                # Reset turn count when entering scienceqa from another state (e.g., after reflection)
+                # Reset turn count when entering scienceqa from another state
                 if conv_state_history and conv_state_history[-1] != "scienceqa":
                     scienceqa_turn_count[conversation_id] = 0
                 # Classify the child's question level (always use the scienceqa evaluator prompt)
@@ -1482,10 +1410,6 @@ def chat_completion():
                 state_prompt = state_prompt_classification(
                     current_state, child_question_level
                 )
-            elif current_state == "reflection":
-                # In reflection state - will return to scienceqa after (unless all concepts matched)
-                child_question_level = None
-                state_prompt = state_prompt_classification(current_state)
             else:
                 child_question_level = None
                 if latest_user_message:
@@ -1528,154 +1452,106 @@ def chat_completion():
         matched_concept = None  # Matched concept from knowledge retrieval
         first_time_matched_concepts = []  # Concepts newly matched this turn (for concept bubbles)
 
-        if current_state in ["scienceqa", "reflection"]:
+        if current_state == "scienceqa":
+            # Load knowledge base to get concept list
+            knowledge_base = open("knowledge/kg.json", "r").read()
+            knowledge_base = json.loads(knowledge_base)
+            phenomenon_map = {
+                "balloon": "Hair Stands Up Near a Balloon",
+                "bend": "Bending Water Stream with a Comb",
+                "pepper": "Pepper Leaping up to Spoon",
+            }
+            phenomenon_key = phenomenon_map.get(
+                phenomenon, "Hair Stands Up Near a Balloon"
+            )
+            concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
+            concept_names = list(concepts_dict.keys())
+
+            # Get matched concepts history for this conversation
+            matched_concepts = matched_concepts_history[conversation.id]
+
+            # A. Knowledge Retrieval (EXPLANATION only) + explanation placeholder
+            matched_kg, explanation_method = get_explanation_method_and_matched_kg(
+                child_question_level,
+                messages,
+                phenomenon,
+                conversation.id,
+                db,
+                log_prefix="[Knowledge Retrieval]",
+            )
+
+            # Parse matched concept and add to history if not already present
+            if matched_kg and matched_kg != "":
+                try:
+                    kg_list = (
+                        json.loads(matched_kg)
+                        if isinstance(matched_kg, str) and matched_kg.startswith("[")
+                        else json.loads(f'["{matched_kg}"]')
+                        if isinstance(matched_kg, str)
+                        else matched_kg
+                    )
+                    if isinstance(kg_list, list) and len(kg_list) > 0:
+                        matched_concept_raw = kg_list[0]
+                        # Normalize the concept name
+                        for cn in concept_names:
+                            if cn.lower() == matched_concept_raw.lower():
+                                matched_concept = cn
+                                # Add to matched concepts history if not already present
+                                if matched_concept not in matched_concepts:
+                                    matched_concepts.append(matched_concept)
+                                    first_time_matched_concepts.append(matched_concept)
+                                    print(
+                                        f"[Concept Logic] Added to matched history: {matched_concept}"
+                                    )
+                                break
+                except (json.JSONDecodeError, TypeError, AttributeError):
+                    pass
+
+            # Find next concept: lowest order concept that hasn't been matched
+            next_concept_for_prompting = None
+            for concept_name in concept_names:
+                if concept_name not in matched_concepts:
+                    next_concept_for_prompting = concept_name
+                    break
+
+            # If all concepts have been matched, set flag and transition to close
+            if next_concept_for_prompting is None:
+                print(
+                    "[Concept Logic] All concepts matched! Setting flag and transitioning to close state."
+                )
+                all_concepts_matched_flag[conversation_id] = True
+                current_state = "close"
+                # Update state history
+                if not conv_state_history or conv_state_history[-1] != current_state:
+                    conv_state_history.append(current_state)
+                state_prompt = state_prompt_classification(current_state)
+                child_question_level = None
+
+            # Replace placeholders in prompt (only if still in scienceqa state)
             if current_state == "scienceqa":
-                # Load knowledge base to get concept list
-                knowledge_base = open("knowledge/kg.json", "r").read()
-                knowledge_base = json.loads(knowledge_base)
-                phenomenon_map = {
-                    "balloon": "Hair Stands Up Near a Balloon",
-                    "bend": "Bending Water Stream with a Comb",
-                    "pepper": "Pepper Leaping up to Spoon",
-                }
-                phenomenon_key = phenomenon_map.get(
-                    phenomenon, "Hair Stands Up Near a Balloon"
-                )
-                concepts_dict = knowledge_base.get(phenomenon_key, {}).get(
-                    "concepts", {}
-                )
-                concept_names = list(concepts_dict.keys())
-
-                # Get matched concepts history for this conversation
-                matched_concepts = matched_concepts_history[conversation.id]
-
-                # A. Knowledge Retrieval (EXPLANATION only) + explanation placeholder
-                matched_kg, explanation_method = get_explanation_method_and_matched_kg(
-                    child_question_level,
-                    messages,
-                    phenomenon,
-                    conversation.id,
-                    db,
-                    log_prefix="[Knowledge Retrieval]",
-                )
-
-                # Parse matched concept and add to history if not already present
-                if matched_kg and matched_kg != "":
-                    try:
-                        kg_list = (
-                            json.loads(matched_kg)
-                            if isinstance(matched_kg, str)
-                            and matched_kg.startswith("[")
-                            else json.loads(f'["{matched_kg}"]')
-                            if isinstance(matched_kg, str)
-                            else matched_kg
-                        )
-                        if isinstance(kg_list, list) and len(kg_list) > 0:
-                            matched_concept_raw = kg_list[0]
-                            # Normalize the concept name
-                            for cn in concept_names:
-                                if cn.lower() == matched_concept_raw.lower():
-                                    matched_concept = cn
-                                    # Add to matched concepts history if not already present
-                                    if matched_concept not in matched_concepts:
-                                        matched_concepts.append(matched_concept)
-                                        first_time_matched_concepts.append(
-                                            matched_concept
-                                        )
-                                        print(
-                                            f"[Concept Logic] Added to matched history: {matched_concept}"
-                                        )
-                                    break
-                    except (json.JSONDecodeError, TypeError, AttributeError):
-                        pass
-
-                # Find next concept: lowest order concept that hasn't been matched
-                next_concept_for_prompting = None
-                for concept_name in concept_names:
-                    if concept_name not in matched_concepts:
-                        next_concept_for_prompting = concept_name
-                        break
-
-                # If all concepts have been matched, set flag and transition to reflection
-                if next_concept_for_prompting is None:
-                    print(
-                        "[Concept Logic] All concepts matched! Setting flag and transitioning to close state."
-                    )
-                    all_concepts_matched_flag[conversation_id] = True
-                    current_state = "close"
-                    # Update state history
-                    if (
-                        not conv_state_history
-                        or conv_state_history[-1] != current_state
-                    ):
-                        conv_state_history.append(current_state)
-                    state_prompt = state_prompt_classification(current_state)
-                    child_question_level = None
-
-                # Replace placeholders in prompt (only if still in scienceqa state)
-                if current_state == "scienceqa":
-                    state_prompt = state_prompt.replace(
-                        "{explanation_method}", explanation_method
-                    )
-
-                # Replace placeholders for all scienceqa questions
-                if current_state == "scienceqa":
-                    # Remove lines about current concept if any
-                    lines = state_prompt.split("\n")
-                    filtered_lines = []
-                    for line in lines:
-                        if "{current_concept}" in line:
-                            continue
-                        filtered_lines.append(line)
-                    state_prompt = "\n".join(filtered_lines)
-
-                    state_prompt = state_prompt.replace(
-                        "{next_concept}",
-                        next_concept_for_prompting
-                        if next_concept_for_prompting
-                        else "",
-                    )
-                    print(
-                        f"[Concept Logic] Next concept: {next_concept_for_prompting}, Matched concepts: {matched_concepts}"
-                    )
-                print("=" * 50)
-
-            elif current_state == "reflection":
-                # Reflection: follow scienceqa-style per-level response templates
-                # (prompting question is fixed in prompts/reflection.py)
-                child_question_level = state_classification(
-                    "scienceqa", messages, phenomenon
-                )
-                state_prompt = state_prompt_classification(
-                    current_state, child_question_level
-                )
-
-                matched_kg, explanation_method = get_explanation_method_and_matched_kg(
-                    child_question_level,
-                    messages,
-                    phenomenon,
-                    conversation.id,
-                    db,
-                    log_prefix="[Knowledge Retrieval] Reflection",
-                    run_for_any_question=True,
-                )
-
-                # Fill explanation placeholder for reflection templates
                 state_prompt = state_prompt.replace(
                     "{explanation_method}", explanation_method
                 )
 
-                # Record first-time matched concepts for bubbles/history (optional in reflection)
-                if matched_kg:
-                    first_time_matched_concepts.extend(
-                        parse_matched_kg_and_record_first_time(
-                            matched_kg,
-                            phenomenon,
-                            conversation.id,
-                            matched_concepts_history,
-                        )
-                    )
-                print("=" * 50)
+            # Replace placeholders for all scienceqa questions
+            if current_state == "scienceqa":
+                # Remove lines about current concept if any
+                lines = state_prompt.split("\n")
+                filtered_lines = []
+                for line in lines:
+                    if "{current_concept}" in line:
+                        continue
+                    filtered_lines.append(line)
+                state_prompt = "\n".join(filtered_lines)
+
+                state_prompt = state_prompt.replace(
+                    "{next_concept}",
+                    next_concept_for_prompting if next_concept_for_prompting else "",
+                )
+                print(
+                    f"[Concept Logic] Next concept: {next_concept_for_prompting}, Matched concepts: {matched_concepts}"
+                )
+            print("=" * 50)
 
         # Ensure state_prompt is not None before calling format_prompt
         if not state_prompt:
@@ -1777,8 +1653,7 @@ def chat_completion():
             )
 
         # Fix bold formatting for scienceqa-style responses
-        # (reflection stage follows the same bolding rule set)
-        if current_state in ["scienceqa", "reflection"]:
+        if current_state == "scienceqa":
             original_content = content
             content = fix_scienceqa_bold_formatting(content)
             if content != original_content:
@@ -1960,20 +1835,10 @@ def chat_completion_stream():
             scienceqa_history[conversation_id] = loaded_scienceqa_history
             matched_concepts_history[conversation_id] = loaded_matched_concepts
 
-            # Reconstruct scienceqa_turn_count and all_concepts_matched_flag
-            if "reflection" in loaded_state_history:
-                last_reflection_index = (
-                    len(loaded_state_history)
-                    - 1
-                    - loaded_state_history[::-1].index("reflection")
-                )
-                scienceqa_turn_count[conversation_id] = loaded_state_history[
-                    last_reflection_index:
-                ].count("scienceqa")
-            else:
-                scienceqa_turn_count[conversation_id] = loaded_state_history.count(
-                    "scienceqa"
-                )
+            # Reflection stage removed: count all scienceqa turns
+            scienceqa_turn_count[conversation_id] = loaded_state_history.count(
+                "scienceqa"
+            )
 
             knowledge_base = json.load(open("knowledge/kg.json", "r"))
             phenomenon_map = {
@@ -2052,16 +1917,9 @@ def chat_completion_stream():
             eval_state = state_classification(state, messages, phenomenon)
             current_state = state_update(state, eval_state, conv_state_history)
 
-            # Special handling: if coming from reflection and all concepts matched, go to close
-            if state == "reflection" and all_concepts_matched_flag[conversation_id]:
-                current_state = "close"
-                # Update state history
-                if not conv_state_history or conv_state_history[-1] != current_state:
-                    conv_state_history.append(current_state)
-
             # If transitioning to scienceqa, reset turn count and classify question level
             if current_state == "scienceqa":
-                # Reset turn count when entering scienceqa from another state (e.g., after reflection)
+                # Reset turn count when entering scienceqa from another state
                 if conv_state_history and conv_state_history[-1] != "scienceqa":
                     scienceqa_turn_count[conversation_id] = 0
                 # Classify the child's question level (always use the scienceqa evaluator prompt)
@@ -2073,14 +1931,6 @@ def chat_completion_stream():
                 print(f"Child's Question: {latest_user_message}")
                 print(f"Evaluation Result: {child_question_level}")
                 print("=" * 50)
-                state_prompt = state_prompt_classification(
-                    current_state, child_question_level
-                )
-            elif current_state == "reflection":
-                # In reflection state - will return to scienceqa after (unless all concepts matched)
-                child_question_level = state_classification(
-                    "scienceqa", messages, phenomenon
-                )
                 state_prompt = state_prompt_classification(
                     current_state, child_question_level
                 )
@@ -2126,203 +1976,159 @@ def chat_completion_stream():
         matched_concept = None  # Matched concept from knowledge retrieval
         first_time_matched_concepts = []  # For concept bubbles (stream path)
 
-        if current_state in ["scienceqa", "reflection"]:
-            if current_state == "scienceqa":
-                # Load knowledge base to get concept list
-                knowledge_base = open("knowledge/kg.json", "r").read()
-                knowledge_base = json.loads(knowledge_base)
-                phenomenon_map = {
-                    "balloon": "Hair Stands Up Near a Balloon",
-                    "bend": "Bending Water Stream with a Comb",
-                    "pepper": "Pepper Leaping up to Spoon",
-                }
-                phenomenon_key = phenomenon_map.get(
-                    phenomenon, "Hair Stands Up Near a Balloon"
-                )
-                concepts_dict = knowledge_base.get(phenomenon_key, {}).get(
-                    "concepts", {}
-                )
-                concept_names = list(concepts_dict.keys())
+        if current_state == "scienceqa":
+            # Load knowledge base to get concept list
+            knowledge_base = open("knowledge/kg.json", "r").read()
+            knowledge_base = json.loads(knowledge_base)
+            phenomenon_map = {
+                "balloon": "Hair Stands Up Near a Balloon",
+                "bend": "Bending Water Stream with a Comb",
+                "pepper": "Pepper Leaping up to Spoon",
+            }
+            phenomenon_key = phenomenon_map.get(
+                phenomenon, "Hair Stands Up Near a Balloon"
+            )
+            concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
+            concept_names = list(concepts_dict.keys())
 
-                # Get matched concepts history for this conversation
-                matched_concepts = matched_concepts_history[conversation.id]
+            # Get matched concepts history for this conversation
+            matched_concepts = matched_concepts_history[conversation.id]
 
-                # A. Knowledge Retrieval: Match concept for EXPLANATION (only for specific question levels)
-                if child_question_level in [
-                    "factual",
-                    "explanatory",
-                    "general_causal",
-                    "specific_causal",
-                ]:
-                    kg = knowledge_retrieval(messages, phenomenon, conversation.id, db)
-                    matched_kg = (
-                        kg if kg else None
-                    )  # Store for database and explanation
+            # A. Knowledge Retrieval: Match concept for EXPLANATION (only for specific question levels)
+            if child_question_level in [
+                "factual",
+                "explanatory",
+                "general_causal",
+                "specific_causal",
+            ]:
+                kg = knowledge_retrieval(messages, phenomenon, conversation.id, db)
+                matched_kg = kg if kg else None  # Store for database and explanation
+                print(
+                    f"[Knowledge Retrieval] Matched component for explanation: {matched_kg if matched_kg else 'None'}"
+                )
+
+                # Parse matched concept and add to history if not already present
+                if matched_kg and matched_kg != "":
+                    try:
+                        kg_list = (
+                            json.loads(matched_kg)
+                            if isinstance(matched_kg, str)
+                            and matched_kg.startswith("[")
+                            else json.loads(f'["{matched_kg}"]')
+                            if isinstance(matched_kg, str)
+                            else matched_kg
+                        )
+                        if isinstance(kg_list, list) and len(kg_list) > 0:
+                            matched_concept_raw = kg_list[0]
+                            # Normalize the concept name
+                            for cn in concept_names:
+                                if cn.lower() == matched_concept_raw.lower():
+                                    matched_concept = cn
+                                    # Add to matched concepts history if not already present
+                                    if matched_concept not in matched_concepts:
+                                        matched_concepts.append(matched_concept)
+                                        first_time_matched_concepts.append(
+                                            matched_concept
+                                        )
+                                        print(
+                                            f"[Concept Logic] Added to matched history: {matched_concept}"
+                                        )
+                                    break
+                    except (json.JSONDecodeError, TypeError, AttributeError):
+                        pass
+
+                # Find next concept: lowest order concept that hasn't been matched
+                next_concept_for_prompting = None
+                for concept_name in concept_names:
+                    if concept_name not in matched_concepts:
+                        next_concept_for_prompting = concept_name
+                        break
+
+                # If all concepts have been matched, set flag and transition to close
+                if next_concept_for_prompting is None:
                     print(
-                        f"[Knowledge Retrieval] Matched component for explanation: {matched_kg if matched_kg else 'None'}"
+                        "[Concept Logic] All concepts matched! Setting flag and transitioning to close state."
                     )
+                    all_concepts_matched_flag[conversation_id] = True
+                    current_state = "close"
+                    # Update state history
+                    if (
+                        not conv_state_history
+                        or conv_state_history[-1] != current_state
+                    ):
+                        conv_state_history.append(current_state)
+                    state_prompt = state_prompt_classification(current_state)
+                    child_question_level = None
 
-                    # Parse matched concept and add to history if not already present
-                    if matched_kg and matched_kg != "":
-                        try:
-                            kg_list = (
-                                json.loads(matched_kg)
-                                if isinstance(matched_kg, str)
-                                and matched_kg.startswith("[")
-                                else json.loads(f'["{matched_kg}"]')
-                                if isinstance(matched_kg, str)
-                                else matched_kg
-                            )
-                            if isinstance(kg_list, list) and len(kg_list) > 0:
-                                matched_concept_raw = kg_list[0]
-                                # Normalize the concept name
-                                for cn in concept_names:
-                                    if cn.lower() == matched_concept_raw.lower():
-                                        matched_concept = cn
-                                        # Add to matched concepts history if not already present
-                                        if matched_concept not in matched_concepts:
-                                            matched_concepts.append(matched_concept)
-                                            first_time_matched_concepts.append(
-                                                matched_concept
-                                            )
-                                            print(
-                                                f"[Concept Logic] Added to matched history: {matched_concept}"
-                                            )
-                                        break
-                        except (json.JSONDecodeError, TypeError, AttributeError):
-                            pass
+                # Extract definition and explanation for embedding in prompt
+                definition = ""
+                explanation = ""
+                explanation_method = ""
 
-                    # Find next concept: lowest order concept that hasn't been matched
-                    next_concept_for_prompting = None
-                    for concept_name in concept_names:
-                        if concept_name not in matched_concepts:
-                            next_concept_for_prompting = concept_name
-                            break
-
-                    # If all concepts have been matched, set flag and transition to reflection
-                    if next_concept_for_prompting is None:
-                        print(
-                            "[Concept Logic] All concepts matched! Setting flag and transitioning to close state."
-                        )
-                        all_concepts_matched_flag[conversation_id] = True
-                        current_state = "close"
-                        # Update state history
-                        if (
-                            not conv_state_history
-                            or conv_state_history[-1] != current_state
-                        ):
-                            conv_state_history.append(current_state)
-                        state_prompt = state_prompt_classification(current_state)
-                        child_question_level = None
-
-                    # Extract definition and explanation for embedding in prompt
-                    definition = ""
-                    explanation = ""
-                    explanation_method = ""
-
-                    if matched_kg and matched_kg != "":
-                        definition, explanation = extract_kg_definition_and_explanation(
-                            matched_kg, phenomenon
-                        )
-                        if definition and explanation:
-                            explanation_method = f"Here are the matched knowledge component's definition: {definition} and explanation: {explanation}. Based on the conversation history, use the provided knowledge component to explain the knowledge. The definition describes the formal definition of the concept, and the explanation describes how the concept works in the image. These two parts are for your reference. The explanation part of your response should be: (1) focus on the provided knowledge component and avoid introducing other concepts to confuse the child (e.g., if you are introducing 'electrons', do not mention 'charge'), (2) naturally flowing from the conversation history, and (3) must be within 30 words."
-                        else:
-                            explanation_method = "Consider the conversation history to provide a simple explanation to the child's message without directly revealing the phenomenon and knowledge."
+                if matched_kg and matched_kg != "":
+                    definition, explanation = extract_kg_definition_and_explanation(
+                        matched_kg, phenomenon
+                    )
+                    if definition and explanation:
+                        explanation_method = f"Here are the matched knowledge component's definition: {definition} and explanation: {explanation}. Based on the conversation history, use the provided knowledge component to explain the knowledge. The definition describes the formal definition of the concept, and the explanation describes how the concept works in the image. These two parts are for your reference. The explanation part of your response should be: (1) focus on the provided knowledge component and avoid introducing other concepts to confuse the child (e.g., if you are introducing 'electrons', do not mention 'charge'), (2) naturally flowing from the conversation history, and (3) must be within 30 words."
                     else:
                         explanation_method = "Consider the conversation history to provide a simple explanation to the child's message without directly revealing the phenomenon and knowledge."
-
-                    # Replace placeholders in prompt (only if still in scienceqa state)
-                    if current_state == "scienceqa":
-                        state_prompt = state_prompt.replace(
-                            "{explanation_method}", explanation_method
-                        )
                 else:
-                    # For irrelevant/no_question, use fallback explanation method
                     explanation_method = "Consider the conversation history to provide a simple explanation to the child's message without directly revealing the phenomenon and knowledge."
+
+                # Replace placeholders in prompt (only if still in scienceqa state)
+                if current_state == "scienceqa":
                     state_prompt = state_prompt.replace(
                         "{explanation_method}", explanation_method
                     )
-                    matched_kg = (
-                        None  # No knowledge retrieval for irrelevant/no_question
-                    )
-                    # Find next concept: lowest order concept that hasn't been matched
-                    next_concept_for_prompting = None
-                    for concept_name in concept_names:
-                        if concept_name not in matched_concepts:
-                            next_concept_for_prompting = concept_name
-                            break
-
-                    # If all concepts have been matched, transition to close
-                    if next_concept_for_prompting is None:
-                        print(
-                            "[Concept Logic] All concepts matched! Transitioning to close state."
-                        )
-                        current_state = "close"
-                        # Update state history
-                        if (
-                            not conv_state_history
-                            or conv_state_history[-1] != current_state
-                        ):
-                            conv_state_history.append(current_state)
-                        state_prompt = state_prompt_classification(current_state)
-                        child_question_level = None
-
-                # Replace placeholders for all scienceqa questions
-                if current_state == "scienceqa":
-                    # Remove lines about current concept if any
-                    lines = state_prompt.split("\n")
-                    filtered_lines = []
-                    for line in lines:
-                        if "{current_concept}" in line:
-                            continue
-                        filtered_lines.append(line)
-                    state_prompt = "\n".join(filtered_lines)
-
-                    state_prompt = state_prompt.replace(
-                        "{next_concept}",
-                        next_concept_for_prompting
-                        if next_concept_for_prompting
-                        else "",
-                    )
-                    print(
-                        f"[Concept Logic] Next concept: {next_concept_for_prompting}, Matched concepts: {matched_concepts}"
-                    )
-                print("=" * 50)
-
-            elif current_state == "reflection":
-                # Reflection: follow scienceqa-style per-level response templates
-                # (prompting question is fixed in prompts/reflection.py)
-                child_question_level = state_classification(
-                    "scienceqa", messages, phenomenon
-                )
-                state_prompt = state_prompt_classification(
-                    current_state, child_question_level
-                )
-
-                matched_kg, explanation_method = get_explanation_method_and_matched_kg(
-                    child_question_level,
-                    messages,
-                    phenomenon,
-                    conversation.id,
-                    db,
-                    log_prefix="[Knowledge Retrieval] Reflection",
-                    run_for_any_question=True,
-                )
-
+            else:
+                # For irrelevant/no_question, use fallback explanation method
+                explanation_method = "Consider the conversation history to provide a simple explanation to the child's message without directly revealing the phenomenon and knowledge."
                 state_prompt = state_prompt.replace(
                     "{explanation_method}", explanation_method
                 )
+                matched_kg = None  # No knowledge retrieval for irrelevant/no_question
+                # Find next concept: lowest order concept that hasn't been matched
+                next_concept_for_prompting = None
+                for concept_name in concept_names:
+                    if concept_name not in matched_concepts:
+                        next_concept_for_prompting = concept_name
+                        break
 
-                if matched_kg:
-                    first_time_matched_concepts.extend(
-                        parse_matched_kg_and_record_first_time(
-                            matched_kg,
-                            phenomenon,
-                            conversation.id,
-                            matched_concepts_history,
-                        )
+                # If all concepts have been matched, transition to close
+                if next_concept_for_prompting is None:
+                    print(
+                        "[Concept Logic] All concepts matched! Transitioning to close state."
                     )
-                print("=" * 50)
+                    current_state = "close"
+                    # Update state history
+                    if (
+                        not conv_state_history
+                        or conv_state_history[-1] != current_state
+                    ):
+                        conv_state_history.append(current_state)
+                    state_prompt = state_prompt_classification(current_state)
+                    child_question_level = None
+
+            # Replace placeholders for all scienceqa questions
+            if current_state == "scienceqa":
+                # Remove lines about current concept if any
+                lines = state_prompt.split("\n")
+                filtered_lines = []
+                for line in lines:
+                    if "{current_concept}" in line:
+                        continue
+                    filtered_lines.append(line)
+                state_prompt = "\n".join(filtered_lines)
+
+                state_prompt = state_prompt.replace(
+                    "{next_concept}",
+                    next_concept_for_prompting if next_concept_for_prompting else "",
+                )
+                print(
+                    f"[Concept Logic] Next concept: {next_concept_for_prompting}, Matched concepts: {matched_concepts}"
+                )
+            print("=" * 50)
 
         if not state_prompt:
             if current_state == "scienceqa" and not child_question_level:
@@ -2629,7 +2435,7 @@ def get_conversation_history_for_chat(conversation_id, db_session, phenomenon):
 
         if (
             msg.role == "assistant"
-            and msg.state in ["scienceqa", "reflection"]
+            and msg.state == "scienceqa"
             and msg.matched_knowledge_components
         ):
             try:
@@ -2694,19 +2500,7 @@ def get_conversation_messages(conversation_id):
         scienceqa_history[conversation_id] = loaded_scienceqa_history
         matched_concepts_history[conversation_id] = loaded_matched_concepts
 
-        if "reflection" in loaded_state_history:
-            last_reflection_index = (
-                len(loaded_state_history)
-                - 1
-                - loaded_state_history[::-1].index("reflection")
-            )
-            scienceqa_turn_count[conversation_id] = loaded_state_history[
-                last_reflection_index:
-            ].count("scienceqa")
-        else:
-            scienceqa_turn_count[conversation_id] = loaded_state_history.count(
-                "scienceqa"
-            )
+        scienceqa_turn_count[conversation_id] = loaded_state_history.count("scienceqa")
 
         knowledge_base = open("knowledge/kg.json", "r").read()
         knowledge_base = json.loads(knowledge_base)

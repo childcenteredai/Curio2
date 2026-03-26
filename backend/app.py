@@ -383,17 +383,33 @@ def format_prompt(
 def build_structured_kg(concepts_dict):
     """
     Build a structured knowledge graph showing concept/sub-concept hierarchy.
+    Each concept node includes its `definition` (when available).
     Returns a dictionary with concepts and their sub-concepts.
     """
     structured_kg = {}
     for concept_name, concept_data in concepts_dict.items():
-        structured_kg[concept_name] = {}
-        if "sub_concepts" in concept_data and concept_data["sub_concepts"]:
+        definition = (
+            concept_data.get("definition", "") if isinstance(concept_data, dict) else ""
+        )
+        structured_kg[concept_name] = {"definition": definition}
+        if (
+            isinstance(concept_data, dict)
+            and "sub_concepts" in concept_data
+            and concept_data["sub_concepts"]
+        ):
             sub_concepts_list = []
             for sub_concept_name, sub_concept_data in concept_data[
                 "sub_concepts"
             ].items():
-                sub_concept_entry = {"name": sub_concept_name}
+                sub_definition = (
+                    sub_concept_data.get("definition", "")
+                    if isinstance(sub_concept_data, dict)
+                    else ""
+                )
+                sub_concept_entry = {
+                    "name": sub_concept_name,
+                    "definition": sub_definition,
+                }
                 # Check if this sub-concept has its own sub-concepts
                 if (
                     "sub_concepts" in sub_concept_data
@@ -682,8 +698,65 @@ def knowledge_retrieval(
 
     # Validate the matched concept exists in the knowledge base
     if kg_raw:
+        # New format: JSON dict with matched_concept + relevancy_score
+        parsed = None
         try:
-            # Parse the response
+            # Be tolerant of surrounding text/code fences: extract the first JSON object.
+            start = kg_raw.find("{")
+            end = kg_raw.rfind("}")
+            candidate = kg_raw
+            if start != -1 and end != -1 and end > start:
+                candidate = kg_raw[start : end + 1]
+            parsed = json.loads(candidate)
+        except (json.JSONDecodeError, TypeError):
+            parsed = None
+
+        if isinstance(parsed, dict):
+            matched_concept = (
+                parsed.get("matched_concept")
+                or parsed.get("matchedConcept")
+                or parsed.get("concept")
+                or ""
+            )
+            relevancy_score = (
+                parsed.get("relevancy_score")
+                or parsed.get("relevancyScore")
+                or parsed.get("score")
+                or 0
+            )
+            try:
+                relevancy_score_float = float(relevancy_score)
+            except (TypeError, ValueError):
+                relevancy_score_float = 0.0
+
+            # Log for debugging; decision is based on score threshold.
+            print(
+                f"[Knowledge Retrieval] Model relevancy_score={relevancy_score_float}, matched_concept={matched_concept!r}"
+            )
+
+            if matched_concept and relevancy_score_float >= 0.5:
+                # Normalize and check if it exists in knowledge base
+                matched_concept_normalized = None
+                for cn in concept_names:
+                    if cn.lower() == str(matched_concept).lower():
+                        matched_concept_normalized = cn
+                        break
+
+                if matched_concept_normalized:
+                    # Valid match, return the normalized concept name as JSON
+                    return json.dumps([matched_concept_normalized])
+
+                # Concept not found in knowledge base
+                print(
+                    f"Warning: Matched concept '{matched_concept}' not found in knowledge base"
+                )
+                return ""
+
+            # If relevancy_score < 0.5, don't adopt the matched concept.
+            return ""
+
+        # Backward-compatible fallback: old format (JSON list or raw string)
+        try:
             kg_list = (
                 json.loads(kg_raw)
                 if kg_raw.startswith("[")
@@ -691,24 +764,20 @@ def knowledge_retrieval(
             )
             if isinstance(kg_list, list) and len(kg_list) > 0:
                 matched_concept = kg_list[0]
-                # Normalize and check if it exists in knowledge base
                 matched_concept_normalized = None
                 for cn in concept_names:
-                    if cn.lower() == matched_concept.lower():
+                    if cn.lower() == str(matched_concept).lower():
                         matched_concept_normalized = cn
                         break
 
                 if matched_concept_normalized:
-                    # Valid match, return the normalized concept name as JSON
                     return json.dumps([matched_concept_normalized])
                 else:
-                    # Concept not found in knowledge base
                     print(
                         f"Warning: Matched concept '{matched_concept}' not found in knowledge base"
                     )
                     return ""
         except (json.JSONDecodeError, TypeError) as e:
-            # Try direct string match
             matched_concept_normalized = None
             for cn in concept_names:
                 if cn.lower() == kg_raw.lower():
@@ -803,7 +872,12 @@ def get_explanation_method_and_matched_kg(
     Returns:
         (matched_kg, explanation_method)
     """
-    explanation_method = "Consider the conversation history to provide a simple explanation to the child's message without directly revealing the phenomenon and knowledge."
+    explanation_method = (
+        "No strongly matched knowledge component is available for this turn. "
+        "Use the child's latest message and conversation history to respond naturally "
+        "and guide exploration, without directly revealing the phenomenon or introducing "
+        "any specific matched concept."
+    )
     matched_kg = None
 
     if run_for_any_question:
@@ -1535,14 +1609,19 @@ def chat_completion():
 
             # Replace placeholders for all scienceqa questions
             if current_state == "scienceqa":
-                # Remove lines about current concept if any
-                lines = state_prompt.split("\n")
-                filtered_lines = []
-                for line in lines:
-                    if "{current_concept}" in line:
-                        continue
-                    filtered_lines.append(line)
-                state_prompt = "\n".join(filtered_lines)
+                # Fill in current_concept from the matched knowledge component
+                if not matched_concept:
+                    # If matched_concept is empty, adjust the prompt wording to avoid
+                    # "current concept ()" - use "the explanation part" instead.
+                    state_prompt = state_prompt.replace(
+                        "the current concept ({current_concept})",
+                        "the explanation part",
+                    )
+                    state_prompt = state_prompt.replace("{current_concept}", "")
+                else:
+                    state_prompt = state_prompt.replace(
+                        "{current_concept}", matched_concept
+                    )
 
                 state_prompt = state_prompt.replace(
                     "{next_concept}",
@@ -2072,9 +2151,19 @@ def chat_completion_stream():
                     if definition and explanation:
                         explanation_method = f"Here are the matched knowledge component's definition: {definition} and explanation: {explanation}. Based on the conversation history, use the provided knowledge component to explain the knowledge. The definition describes the formal definition of the concept, and the explanation describes how the concept works in the image. These two parts are for your reference. The explanation part of your response should be: (1) focus on the provided knowledge component and avoid introducing other concepts to confuse the child (e.g., if you are introducing 'electrons', do not mention 'charge'), (2) naturally flowing from the conversation history, and (3) must be within 30 words."
                     else:
-                        explanation_method = "Consider the conversation history to provide a simple explanation to the child's message without directly revealing the phenomenon and knowledge."
+                        explanation_method = (
+                            "No strongly matched knowledge component is available for this turn. "
+                            "Use the child's latest message and conversation history to respond naturally "
+                            "and guide exploration, without directly revealing the phenomenon or introducing "
+                            "any specific matched concept."
+                        )
                 else:
-                    explanation_method = "Consider the conversation history to provide a simple explanation to the child's message without directly revealing the phenomenon and knowledge."
+                    explanation_method = (
+                        "No strongly matched knowledge component is available for this turn. "
+                        "Use the child's latest message and conversation history to respond naturally "
+                        "and guide exploration, without directly revealing the phenomenon or introducing "
+                        "any specific matched concept."
+                    )
 
                 # Replace placeholders in prompt (only if still in scienceqa state)
                 if current_state == "scienceqa":
@@ -2083,7 +2172,12 @@ def chat_completion_stream():
                     )
             else:
                 # For irrelevant/no_question, use fallback explanation method
-                explanation_method = "Consider the conversation history to provide a simple explanation to the child's message without directly revealing the phenomenon and knowledge."
+                explanation_method = (
+                    "No strongly matched knowledge component is available for this turn. "
+                    "Use the child's latest message and conversation history to respond naturally "
+                    "and guide exploration, without directly revealing the phenomenon or introducing "
+                    "any specific matched concept."
+                )
                 state_prompt = state_prompt.replace(
                     "{explanation_method}", explanation_method
                 )
@@ -2112,14 +2206,19 @@ def chat_completion_stream():
 
             # Replace placeholders for all scienceqa questions
             if current_state == "scienceqa":
-                # Remove lines about current concept if any
-                lines = state_prompt.split("\n")
-                filtered_lines = []
-                for line in lines:
-                    if "{current_concept}" in line:
-                        continue
-                    filtered_lines.append(line)
-                state_prompt = "\n".join(filtered_lines)
+                # Fill in current_concept from the matched knowledge component
+                if not matched_concept:
+                    # If matched_concept is empty, adjust the prompt wording to avoid
+                    # "current concept ()" - use "the explanation part" instead.
+                    state_prompt = state_prompt.replace(
+                        "the current concept ({current_concept})",
+                        "the explanation part",
+                    )
+                    state_prompt = state_prompt.replace("{current_concept}", "")
+                else:
+                    state_prompt = state_prompt.replace(
+                        "{current_concept}", matched_concept
+                    )
 
                 state_prompt = state_prompt.replace(
                     "{next_concept}",

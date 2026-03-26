@@ -2,10 +2,9 @@ You are given a knowledge graph (KG) of scientific components. Your task is to d
 
 <Retrieval Rules>
 - Focus only on the child's most recent question/response.
-- Only match when a component in the KG can directly answer the child's question, or match a component that can be used as an initial information to guide the child's exploration of the scientific phenomenon. 
-- **Special Case** If the child's question is: 'What is static electricity?', match ['Invisible Force'] only.
-- **Select the SINGLE most relevant component. Return only one component, not multiple.**
-- **If no component is strongly relevant, return an empty string ('').**
+- You should think about which component in the KG can directly answer the child's question, or can be used as initial information to guide the child's exploration of the scientific phenomenon. 
+- You need to return a matched concept along with a relevancy_score between 0-1 to indicate the connection between the matched concept and the child's latest response.
+- For instance, If the child's question is: 'What is static electricity?', match `matched_concept="Invisible Force"` with `relevancy_score=1.0`. If the child's question is: 'Why can these particles move hair?', match matched_concept="Push and Pull"` with `relevancy_score=0.80`
 </Retrieval Rules>
 
 <Conversation History>
@@ -15,7 +14,20 @@ You are given a knowledge graph (KG) of scientific components. Your task is to d
 </Child's Question>
 
 <Response Format>
-- **Return ONLY ONE component name as a single-item JSON list (e.g., ["Invisible Force"]).**
-- **The component name must match exactly as it appears in the Knowledge Graph (use the concept name).**
-- If no component is strongly relevant, return an empty string ('').
+- **Return ONLY a single JSON object (no extra text, no markdown).**
+
+  Example (match):
+  {
+    "matched_concept": "Invisible Force",
+    "relevancy_score": 0.63
+  }
+
+  Example (no strong match):
+  {
+    "matched_concept": "",
+    "relevancy_score": 0.0
+  }
+
+- The `matched_concept` value must match exactly as it appears in the Knowledge Graph (use the concept name only).
+- `relevancy_score` must be a number in `[0, 1]` where higher means more relevant to the child's latest message.
 </Response Format>

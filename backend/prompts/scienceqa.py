@@ -22,7 +22,7 @@ Keep responses connected to conversation history.
 COMMON_FORMAT = """
 <Response Format>
 - Use markdown formatting to emphasize important phrases in your response.
-- Must bold relevant phrases using **text** syntax (double asterisks) for: Phrases/words related to the knowledge concept.
+- Must bold relevant phrases using **text** syntax (double asterisks) for: Phrases/words related to the knowledge concept (e.g., charges, particles, etc.).
 - IMPORTANT: When bolding multi-word phrases, bold each word separately. For example, use **static** **electricity** instead of **static electricity**, or **invisible** **force** instead of **invisible force**.
 - Example: "The **static** **electricity** builds up on the balloon, creating an **invisible** **force** that moves the hair."
 - Do NOT bold every word. Do not bold an entire question.
@@ -38,7 +38,7 @@ COMMON_REMINDERS = """
 - The knowledge component is for your reference. Do not completely base your response on the knowledge component. Your response should be relevant to the child's last message in the conversation history.
 - The transition from the explanation part to the prompting question should be natural and flowing. Don't make it abrupt. Do not use 'Have you heard of ...?' or 'Do you know ...?'
 - Review your response: check if some knowledge concept words are repetitive. If so, you don't need to repeat them.
-- *Keep entire response concise, under 300 characters. Don't use meaningless/filler sentences (e.g., 'After all the fun they had with the balloon,', 'Simply put, it's like magic', 'Isn't that amazing?').'*
+- Keep entire response concise, **under 300 characters**. Don't use meaningless/filler sentences (e.g., 'After all the fun they had with the balloon,', 'Simply put, it's like magic', 'Isn't that amazing?').'
 </Reminders>
 """
 
@@ -68,7 +68,7 @@ no_question = (
 <Instruction for prompting question>
 - End with ONE open-ended question that naturally extends from your explanation.
 - Based on the current conversation context, encourage the child to ask their next open-ended question to further explore either the scientific knowledge behind the phenomenon or the cause of the phenomenon.
-- The prompting question should logically transition from the explanation towards exploring this next concept: "{next_concept}".
+- You need to think about the relationship between the current concept ({current_concept}) and the next concept ({next_concept}), and generate the prompting question that logically transitions from the explanation towards exploring this next concept ({next_concept}) without revealing '{next_concept}' directly.
 - Do not extend to daily life examples. Focus on the image/phenomenon itself.
 - Use forms like:
   - "What question would you ask to find the clue about ...?"
@@ -114,7 +114,7 @@ level_0 = (
 <Instruction for prompting question>
 - End with ONE open-ended question that naturally extends from your explanation.
 - Encourage the child to think deeper and formulate their next open-ended question about the phenomenon.
-- The prompting question should logically transition from the explanation towards exploring this next concept: "{next_concept}".
+- You need to think about the relationship between the current concept ({current_concept}) and the next concept ({next_concept}), and generate the prompting question that logically transitions from the explanation towards exploring this next concept ({next_concept}) without revealing '{next_concept}' directly.
 - Use forms like:
     - "What is your hypothesis?" 
     - "What's your next question to find the clue of ...?"
@@ -160,7 +160,7 @@ level_1 = (
 <Instruction for prompting question>
 - End with ONE open-ended question that naturally extends from your explanation.
 - Encourage the child to think deeper and formulate their next open-ended question about the hidden mechanism.
-- Naturally transition from the explanation part and The prompting question should logically transition from the explanation towards exploring this next concept: "{next_concept}".
+- You need to think about the relationship between the current concept ({current_concept}) and the next concept ({next_concept}), and generate the prompting question that logically transitions from the explanation towards exploring this next concept ({next_concept}) without revealing '{next_concept}' directly.
 - Use forms like:
   - "Is there anything you are wondering about ...?"
   - "What question would you ask to find more clues about ...?"
@@ -207,7 +207,7 @@ level_2 = (
 <Instruction for prompting question>
 - End with ONE open-ended question that naturally extends from your explanation.
 - Your question should connect logically to your explanation and lead the child toward exploring the knowledge component or the underlying cause.
-- The prompting question should logically transition from the explanation towards exploring this next concept: "{next_concept}".
+- You need to think about the relationship between the current concept ({current_concept}) and the next concept ({next_concept}), and generate the prompting question that logically transitions from the explanation towards exploring this next concept ({next_concept}) without revealing '{next_concept}' directly.
 - If the conversation with the child is within the first 5 turns, do not expand the question to real-life examples. Focus on the image itself.
 - This question should encourage the child to ask you a question, not to answer your question. 
 - Use varied phrasing, such as:
@@ -252,7 +252,7 @@ level_3 = (
 <Instruction for prompting question>
 - End your response with ONE open-ended question that naturally follows your explanation.
 - This question should guide the child to explore the cause or influencing factors behind the phenomenon.
-- The prompting question should logically transition from the explanation towards exploring this next concept: "{next_concept}".
+- You need to think about the relationship between the current concept ({current_concept}) and the next concept ({next_concept}), and generate the prompting question that logically transitions from the explanation towards exploring this next concept ({next_concept}) without revealing '{next_concept}' directly.
 - If the conversation with the child is within the first 5 turns, do not expand the question to real-life examples. Focus on the image itself.
 - This question should encourage the child to ask you a question, not to answer your question. 
 - Use varied and engaging phrasing, such as:
@@ -298,7 +298,7 @@ level_4 = (
 <Instruction for prompting question>
 - End your response with ONE open-ended question that naturally extends from your explanation.
 - This question should guide the child to think about how changing measurable factors might affect the outcome of the phenomenon.
-- The prompting question should logically transition from the explanation towards exploring this next concept: "{next_concept}".
+- You need to think about the relationship between the current concept ({current_concept}) and the next concept ({next_concept}), and generate the prompting question that logically transitions from the explanation towards exploring this next concept ({next_concept}) without revealing '{next_concept}' directly.
 - If the conversation with the child is within the first 5 turns, do not expand the question to real-life examples. Focus on the image itself.
 - This question should encourage the child to ask you a question, not to answer your question. 
 - Use varied phrasing such as:

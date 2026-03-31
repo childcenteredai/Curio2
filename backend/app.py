@@ -643,6 +643,19 @@ def knowledge_retrieval(
     # Load prompt from the txt file
     retrieval_prompt = open("prompts/knowledge_matching.txt", "r").read()
     retrieval_prompt = format_prompt(retrieval_prompt, phenomenon, messages)
+    matched_so_far = []
+    if conversation_id is not None:
+        matched_so_far = list(matched_concepts_history[conversation_id])
+    matched_concepts_text = (
+        json.dumps(matched_so_far, ensure_ascii=False)
+        if matched_so_far
+        else "[]  (no concepts matched earlier in this conversation)"
+    )
+    if "<Matched Concepts>" in retrieval_prompt:
+        retrieval_prompt = retrieval_prompt.replace(
+            "<Matched Concepts>",
+            "<Matched Concepts>\n" + matched_concepts_text,
+        )
     knowledge_base = open("knowledge/kg.json", "r").read()
     knowledge_base = json.loads(knowledge_base)
 
@@ -1588,18 +1601,12 @@ def chat_completion():
                     next_concept_for_prompting = concept_name
                     break
 
-            # If all concepts have been matched, set flag and transition to close
+            # If all concepts have been matched, keep scienceqa (next_concept stays empty)
             if next_concept_for_prompting is None:
                 print(
-                    "[Concept Logic] All concepts matched! Setting flag and transitioning to close state."
+                    "[Concept Logic] All concepts matched! Staying in scienceqa with empty next_concept."
                 )
                 all_concepts_matched_flag[conversation_id] = True
-                current_state = "close"
-                # Update state history
-                if not conv_state_history or conv_state_history[-1] != current_state:
-                    conv_state_history.append(current_state)
-                state_prompt = state_prompt_classification(current_state)
-                child_question_level = None
 
             # Replace placeholders in prompt (only if still in scienceqa state)
             if current_state == "scienceqa":
@@ -1627,6 +1634,16 @@ def chat_completion():
                     "{next_concept}",
                     next_concept_for_prompting if next_concept_for_prompting else "",
                 )
+                # Only when next_concept is empty, relax the prompting-question constraints.
+                if not next_concept_for_prompting:
+                    state_prompt = state_prompt.replace(
+                        "- You need to think about the relationship between the current concept ({current_concept}) and the next concept ({next_concept}), and generate the prompting question that logically transitions from the explanation towards exploring this next concept ({next_concept}).",
+                        "- Use the conversation history and your explanation to choose the most helpful next question that deepens understanding of the phenomenon's scientific knowledge.",
+                    )
+                    state_prompt = state_prompt.replace(
+                        "- The prompting question should NOT reveal '{next_concept}' directly or explicitly.",
+                        "- Based on the conversation and scientific knowledge, ask a natural next question without relying on a specific next concept.",
+                    )
                 print(
                     f"[Concept Logic] Next concept: {next_concept_for_prompting}, Matched concepts: {matched_concepts}"
                 )
@@ -2126,18 +2143,9 @@ def chat_completion_stream():
                 # If all concepts have been matched, set flag and transition to close
                 if next_concept_for_prompting is None:
                     print(
-                        "[Concept Logic] All concepts matched! Setting flag and transitioning to close state."
+                        "[Concept Logic] All concepts matched! Staying in scienceqa with empty next_concept."
                     )
                     all_concepts_matched_flag[conversation_id] = True
-                    current_state = "close"
-                    # Update state history
-                    if (
-                        not conv_state_history
-                        or conv_state_history[-1] != current_state
-                    ):
-                        conv_state_history.append(current_state)
-                    state_prompt = state_prompt_classification(current_state)
-                    child_question_level = None
 
                 # Extract definition and explanation for embedding in prompt
                 definition = ""
@@ -2192,17 +2200,9 @@ def chat_completion_stream():
                 # If all concepts have been matched, transition to close
                 if next_concept_for_prompting is None:
                     print(
-                        "[Concept Logic] All concepts matched! Transitioning to close state."
+                        "[Concept Logic] All concepts matched! Staying in scienceqa with empty next_concept."
                     )
-                    current_state = "close"
-                    # Update state history
-                    if (
-                        not conv_state_history
-                        or conv_state_history[-1] != current_state
-                    ):
-                        conv_state_history.append(current_state)
-                    state_prompt = state_prompt_classification(current_state)
-                    child_question_level = None
+                    all_concepts_matched_flag[conversation_id] = True
 
             # Replace placeholders for all scienceqa questions
             if current_state == "scienceqa":
@@ -2224,6 +2224,16 @@ def chat_completion_stream():
                     "{next_concept}",
                     next_concept_for_prompting if next_concept_for_prompting else "",
                 )
+                # Only when next_concept is empty, relax the prompting-question constraints.
+                if not next_concept_for_prompting:
+                    state_prompt = state_prompt.replace(
+                        "- You need to think about the relationship between the current concept ({current_concept}) and the next concept ({next_concept}), and generate the prompting question that logically transitions from the explanation towards exploring this next concept ({next_concept}).",
+                        "- Use the conversation history and your explanation to choose the most helpful next question that deepens understanding of the phenomenon's scientific knowledge.",
+                    )
+                    state_prompt = state_prompt.replace(
+                        "- The prompting question should NOT reveal '{next_concept}' directly or explicitly.",
+                        "- Based on the conversation and scientific knowledge, ask a natural next question without relying on a specific next concept.",
+                    )
                 print(
                     f"[Concept Logic] Next concept: {next_concept_for_prompting}, Matched concepts: {matched_concepts}"
                 )

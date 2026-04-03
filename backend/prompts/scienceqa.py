@@ -162,9 +162,9 @@ level_1 = (
 - The prompting question should NOT reveal '{next_concept}' directly or explicitly.
 - Use forms like:
   - "Is there anything you are wondering about ...?"
+  - "What are you curious about to ..."  
   - "What question would you ask to find more clues about ...?"
   - "What question would you ask to investigate what's really going on with ...?"
-  - "What are you curious about to ..."  
 </Instruction for prompting question>
 """
     + COMMON_FORMAT
@@ -210,9 +210,9 @@ level_2 = (
 - If the conversation with the child is within the first 5 turns, do not expand the question to real-life examples. Focus on the image itself.
 - This question should **encourage the child to ask you a question**, not to answer your question. 
 - Use varied phrasing, such as:
+    - "What are you curious about to ...?"  
     - "What question would you ask to find more clues about ...?"
     - "What question would you ask to investigate what's really going on with ...?"
-    - "What are you curious about to ...?"  
     - "Is there anything you are wondering about to ...?"
 - Choose the exploration stem that best matches the conceptual relation between the current concept and the next concept: [why something happens, how something works, what happens if something changes].
 </Instruction for prompting question>
@@ -256,9 +256,9 @@ level_3 = (
 - If the conversation with the child has more than 5 turns, you can expand the question to real-life examples.
 - This question should **encourage the child to ask you a question**, not to answer your question. 
 - Use varied and engaging phrasing, such as:
+    - "What are you curious about to ...?"  
     - "What question would you ask to find more clues about ...?"
     - "What question would you ask to investigate what's really going on with ...?"
-    - "What are you curious about to ...?"  
     - "Is there anything you are wondering about to ...?"
 - Choose the exploration stem that best matches the conceptual relation between the current concept and the next concept: [why something happens, how something works, what happens if something changes].
 </Instruction for prompting question>
@@ -303,9 +303,9 @@ level_4 = (
 - If the conversation with the child has more than 5 turns, you can expand the question to real-life examples.
 - This question should **encourage the child to ask you a question**, not to answer your question. 
 - Use varied phrasing such as:
+    - "What are you curious about to ...?"  
     - "What question would you ask to find more clues about ...?"
     - "What question would you ask to investigate what's really going on with ...?"
-    - "What are you curious about to ...?"  
     - "Is there anything you are wondering about to ...?"
 - Choose the exploration stem that best matches the conceptual relation between the current concept and the next concept: [why something happens, how something works, what happens if something changes].
 </Instruction for prompting question>

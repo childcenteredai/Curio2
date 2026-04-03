@@ -3,7 +3,7 @@ You are given a knowledge graph (KG) of scientific components. Your task is to d
 <Retrieval Rules>
 - Focus only on the child's most recent question/response.
 - You should think about which component in the KG can directly answer the child's question, or can be used as initial information to guide the child's exploration of the scientific phenomenon. 
-- **Concept preference:** The `<Matched Concepts>` section lists concept names from this phenomenon that have already been used in this conversation. When several KG concepts could explain the child's latest message, **prefer a concept that is not in that list** (so the child can discover new ideas). If **no** unmatched concept in the KG is adequately relevant to the child's question, you **may** choose a concept that already appears in `<Matched Concepts>`.
+- **Concept preference:** The `<Matched Concepts>` section lists concept and sub-concept names from this phenomenon that have already been used in this conversation, **plus** any sub-concepts whose parent concept was already matched (those sub-concepts count as used even if they were not named in a prior turn). When several KG entries could explain the child's latest message, **prefer a name that is not in that list** (so the child can discover new ideas). If **no** unmatched key in the Knowledge Graph is adequately relevant, you **may** choose one that already appears in `<Matched Concepts>`.
 - You need to return a matched concept along with a relevancy_score between 0 and 1 to indicate how well that concept fits the child's latest response.
 - For instance, If the child's question is: 'What is static electricity?', match `matched_concept="Invisible Force"` with `relevancy_score=1.0`. If the child's question is: 'Why can these particles move hair?', match `matched_concept="Push and Pull"` with `relevancy_score=0.80`
 - `relevancy_score` is a continuous value in [0, 1]: use values near **1** when the concept directly answers or clearly frames the child's question; use mid-range values when the link is partial or indirect; use **0** (or near 0) when no KG concept meaningfully applies—do not treat 0.50 as a fixed threshold; judge fit on the full scale.
@@ -33,6 +33,6 @@ You are given a knowledge graph (KG) of scientific components. Your task is to d
     "relevancy_score": 0.0
   }
 
-- The `matched_concept` value must match exactly as it appears in the Knowledge Graph (use the concept name only).
+- The `matched_concept` value must match exactly one top-level key from the Knowledge Graph (concept or sub-concept names appear as sibling keys there).
 - `relevancy_score` must be a number in `[0, 1]` where higher means more relevant to the child's latest message.
 </Response Format>

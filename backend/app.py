@@ -380,48 +380,86 @@ def format_prompt(
     return state_prompt
 
 
+def _subconcepts_dict(node):
+    """Return nested subconcept mapping from KG JSON (`subconcepts` or legacy `sub_concepts`)."""
+    if not isinstance(node, dict):
+        return {}
+    subs = node.get("subconcepts") or node.get("sub_concepts")
+    return subs if isinstance(subs, dict) else {}
+
+
+def matchable_concept_names_ordered(concepts_dict):
+    """Top-level concepts then their direct subconcepts, in JSON key order (for LLM matching)."""
+    names = []
+    for concept_name, concept_data in concepts_dict.items():
+        names.append(concept_name)
+        for sub_name in _subconcepts_dict(concept_data):
+            names.append(sub_name)
+    return names
+
+
+def expand_matched_concepts_with_subs_from_parent(matched_names, concepts_dict):
+    """
+    If a top-level concept was matched, treat its subconcepts as already used for
+    <Matched Concepts> preference (they are not still-unmatched for discovery).
+    """
+    seen = set()
+    out = []
+    for m in matched_names:
+        if m not in seen:
+            out.append(m)
+            seen.add(m)
+    matched_top = set(matched_names)
+    for parent_name, concept_data in concepts_dict.items():
+        if parent_name not in matched_top:
+            continue
+        for sub_name in _subconcepts_dict(concept_data):
+            if sub_name not in seen:
+                out.append(sub_name)
+                seen.add(sub_name)
+    return out
+
+
+def resolve_concept_in_kg(concepts_dict, raw_name):
+    """Return (canonical_name, data_dict) for a top-level concept or direct subconcept."""
+    if raw_name is None or str(raw_name).strip() == "":
+        return None, None
+    s = str(raw_name).strip()
+    for key, data in concepts_dict.items():
+        if isinstance(data, dict) and key.lower() == s.lower():
+            return key, data
+    for _parent_key, data in concepts_dict.items():
+        if not isinstance(data, dict):
+            continue
+        for sk, sv in _subconcepts_dict(data).items():
+            if sk.lower() == s.lower():
+                return sk, sv if isinstance(sv, dict) else {}
+    return None, None
+
+
+def normalize_matched_concept_key(concepts_dict, raw_name):
+    name, _ = resolve_concept_in_kg(concepts_dict, raw_name)
+    return name
+
+
 def build_structured_kg(concepts_dict):
     """
-    Build a structured knowledge graph showing concept/sub-concept hierarchy.
-    Each concept node includes its `definition` (when available).
-    Returns a dictionary with concepts and their sub-concepts.
+    Build a flat knowledge graph for prompting: top-level concepts and all nested
+    subconcepts appear as sibling keys (same JSON level), each with `definition`.
+    Order: each parent from the source JSON, then its sub-tree depth-first.
     """
     structured_kg = {}
+
+    def add_node(name, data):
+        if not isinstance(data, dict):
+            structured_kg[name] = {"definition": ""}
+            return
+        structured_kg[name] = {"definition": data.get("definition", "")}
+        for sub_name, sub_data in _subconcepts_dict(data).items():
+            add_node(sub_name, sub_data)
+
     for concept_name, concept_data in concepts_dict.items():
-        definition = (
-            concept_data.get("definition", "") if isinstance(concept_data, dict) else ""
-        )
-        structured_kg[concept_name] = {"definition": definition}
-        if (
-            isinstance(concept_data, dict)
-            and "sub_concepts" in concept_data
-            and concept_data["sub_concepts"]
-        ):
-            sub_concepts_list = []
-            for sub_concept_name, sub_concept_data in concept_data[
-                "sub_concepts"
-            ].items():
-                sub_definition = (
-                    sub_concept_data.get("definition", "")
-                    if isinstance(sub_concept_data, dict)
-                    else ""
-                )
-                sub_concept_entry = {
-                    "name": sub_concept_name,
-                    "definition": sub_definition,
-                }
-                # Check if this sub-concept has its own sub-concepts
-                if (
-                    "sub_concepts" in sub_concept_data
-                    and sub_concept_data["sub_concepts"]
-                ):
-                    sub_concept_entry["sub-concepts"] = list(
-                        sub_concept_data["sub_concepts"].keys()
-                    )
-                sub_concepts_list.append(sub_concept_entry)
-            structured_kg[concept_name]["sub-concepts"] = sub_concepts_list
-        else:
-            structured_kg[concept_name]["sub-concepts"] = []
+        add_node(concept_name, concept_data)
     return structured_kg
 
 
@@ -432,23 +470,19 @@ def extract_all_concepts_and_subconcepts(concepts_dict):
     """
     all_concepts = []
 
-    def extract_recursive(concept_data, parent_name=None):
-        """Recursively extract all concept and sub-concept names."""
-        if isinstance(concept_data, dict):
-            for key, value in concept_data.items():
-                if key == "sub_concepts" and isinstance(value, dict):
-                    for sub_concept_name, sub_concept_data in value.items():
-                        all_concepts.append(sub_concept_name)
-                        # Recursively extract nested sub-concepts
-                        if (
-                            isinstance(sub_concept_data, dict)
-                            and "sub_concepts" in sub_concept_data
-                        ):
-                            extract_recursive(sub_concept_data, sub_concept_name)
+    def extract_recursive(concept_data):
+        if not isinstance(concept_data, dict):
+            return
+        subs = _subconcepts_dict(concept_data)
+        for sub_concept_name, sub_concept_data in subs.items():
+            all_concepts.append(sub_concept_name)
+            extract_recursive(
+                sub_concept_data if isinstance(sub_concept_data, dict) else {}
+            )
 
     for concept_name, concept_data in concepts_dict.items():
         all_concepts.append(concept_name)
-        extract_recursive(concept_data, concept_name)
+        extract_recursive(concept_data if isinstance(concept_data, dict) else {})
 
     return all_concepts
 
@@ -470,9 +504,8 @@ def parse_matched_kg_and_record_first_time(
         "pepper": "Pepper Leaping up to Spoon",
     }
     phenomenon_key = phenomenon_map.get(phenomenon, "Hair Stands Up Near a Balloon")
-    concept_names = list(
-        knowledge_base.get(phenomenon_key, {}).get("concepts", {}).keys()
-    )
+    concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
+    matchable_names = matchable_concept_names_ordered(concepts_dict)
     try:
         kg_list = (
             json.loads(matched_kg)
@@ -483,7 +516,7 @@ def parse_matched_kg_and_record_first_time(
         )
         if isinstance(kg_list, list) and len(kg_list) > 0:
             matched_concept_raw = kg_list[0]
-            for cn in concept_names:
+            for cn in matchable_names:
                 if cn.lower() == matched_concept_raw.lower():
                     matched_concepts_ref = matched_concepts_history[conversation_id]
                     if cn not in matched_concepts_ref:
@@ -520,7 +553,6 @@ def get_matched_concepts_from_db(
     }
     phenomenon_key = phenomenon_map.get(phenomenon, "Hair Stands Up Near a Balloon")
     concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
-    concept_names = list(concepts_dict.keys())
 
     # Query database for assistant messages with matched knowledge components
     assistant_messages = (
@@ -547,20 +579,14 @@ def get_matched_concepts_from_db(
                 )
                 if isinstance(kg_list, list) and len(kg_list) > 0:
                     concept_name = kg_list[0]
-                    # Normalize the concept name (case-insensitive match)
-                    for cn in concept_names:
-                        if cn.lower() == concept_name.lower():
-                            if cn not in matched_concepts:
-                                matched_concepts.append(cn)
-                            break
+                    cn = normalize_matched_concept_key(concepts_dict, concept_name)
+                    if cn and cn not in matched_concepts:
+                        matched_concepts.append(cn)
             except (json.JSONDecodeError, TypeError):
-                # If not JSON, try direct string match
-                matched_kg_str = str(matched_kg).lower()
-                for cn in concept_names:
-                    if cn.lower() == matched_kg_str:
-                        if cn not in matched_concepts:
-                            matched_concepts.append(cn)
-                        break
+                matched_kg_str = str(matched_kg)
+                cn = normalize_matched_concept_key(concepts_dict, matched_kg_str)
+                if cn and cn not in matched_concepts:
+                    matched_concepts.append(cn)
 
     return matched_concepts
 
@@ -646,16 +672,6 @@ def knowledge_retrieval(
     matched_so_far = []
     if conversation_id is not None:
         matched_so_far = list(matched_concepts_history[conversation_id])
-    matched_concepts_text = (
-        json.dumps(matched_so_far, ensure_ascii=False)
-        if matched_so_far
-        else "[]  (no concepts matched earlier in this conversation)"
-    )
-    if "<Matched Concepts>" in retrieval_prompt:
-        retrieval_prompt = retrieval_prompt.replace(
-            "<Matched Concepts>",
-            "<Matched Concepts>\n" + matched_concepts_text,
-        )
     knowledge_base = open("knowledge/kg.json", "r").read()
     knowledge_base = json.loads(knowledge_base)
 
@@ -678,8 +694,22 @@ def knowledge_retrieval(
         print(f"Warning: No concepts found for phenomenon '{phenomenon_key}'")
         return None
 
-    # Get the ordered list of concepts (maintain order from JSON)
-    concept_names = list(concepts_dict.keys())
+    # Top-level concepts and direct subconcepts (order: each parent then its subs)
+    matchable_names = matchable_concept_names_ordered(concepts_dict)
+
+    matched_for_prompt = expand_matched_concepts_with_subs_from_parent(
+        matched_so_far, concepts_dict
+    )
+    matched_concepts_text = (
+        json.dumps(matched_for_prompt, ensure_ascii=False)
+        if matched_for_prompt
+        else "[]  (no concepts matched earlier in this conversation)"
+    )
+    if "<Matched Concepts>" in retrieval_prompt:
+        retrieval_prompt = retrieval_prompt.replace(
+            "<Matched Concepts>",
+            "<Matched Concepts>\n" + matched_concepts_text,
+        )
 
     structured_kg = build_structured_kg(concepts_dict)
 
@@ -750,7 +780,7 @@ def knowledge_retrieval(
             if matched_concept and relevancy_score_float >= 0.5:
                 # Normalize and check if it exists in knowledge base
                 matched_concept_normalized = None
-                for cn in concept_names:
+                for cn in matchable_names:
                     if cn.lower() == str(matched_concept).lower():
                         matched_concept_normalized = cn
                         break
@@ -778,7 +808,7 @@ def knowledge_retrieval(
             if isinstance(kg_list, list) and len(kg_list) > 0:
                 matched_concept = kg_list[0]
                 matched_concept_normalized = None
-                for cn in concept_names:
+                for cn in matchable_names:
                     if cn.lower() == str(matched_concept).lower():
                         matched_concept_normalized = cn
                         break
@@ -792,7 +822,7 @@ def knowledge_retrieval(
                     return ""
         except (json.JSONDecodeError, TypeError) as e:
             matched_concept_normalized = None
-            for cn in concept_names:
+            for cn in matchable_names:
                 if cn.lower() == kg_raw.lower():
                     matched_concept_normalized = cn
                     break
@@ -841,24 +871,11 @@ def extract_kg_definition_and_explanation(kg_raw, phenomenon="balloon"):
 
         component = kg_list[0]
 
-        # Get the actual concept key (case-insensitive matching)
         concepts = knowledge_base[phenomenon_key]["concepts"]
-        actual_component_key = None
-
-        if component in concepts:
-            actual_component_key = component
-        else:
-            component_lower = component.lower()
-            for key in concepts.keys():
-                if key.lower() == component_lower:
-                    actual_component_key = key
-                    break
-
-        if actual_component_key is None:
+        _canonical, component_data = resolve_concept_in_kg(concepts, component)
+        if not component_data:
             return None, None
 
-        # Get the component data
-        component_data = concepts[actual_component_key]
         definition = component_data.get("definition", "")
         explanation = component_data.get("explanation", "")
 
@@ -958,31 +975,18 @@ def format_kg(mode="definition", kg_raw="", phenomenon="balloon"):
 
         component = kg_list[0]  # Take only the first component
 
-        # Get the actual concept key (case-insensitive matching)
         concepts = knowledge_base[phenomenon_key]["concepts"]
-        actual_component_key = None
-
-        # First try exact match
-        if component in concepts:
-            actual_component_key = component
-        else:
-            # Try case-insensitive match
-            component_lower = component.lower()
-            for key in concepts.keys():
-                if key.lower() == component_lower:
-                    actual_component_key = key
-                    break
+        actual_component_key, component_data = resolve_concept_in_kg(
+            concepts, component
+        )
 
         if actual_component_key is None:
             print(f"Warning: Component '{component}' not found in knowledge base")
             return ""
 
-        # Get the component data (do NOT include sub_concepts)
-        component_data = concepts[actual_component_key]
         definition = component_data.get("definition", "")
         explanation = component_data.get("explanation", "")
 
-        # Format the single component (without sub_concepts)
         if mode == "definition":
             kg_content = f"'{actual_component_key}':\n\nDefinition: {definition}\n\n"
         elif mode == "explanation":
@@ -1579,18 +1583,15 @@ def chat_completion():
                     )
                     if isinstance(kg_list, list) and len(kg_list) > 0:
                         matched_concept_raw = kg_list[0]
-                        # Normalize the concept name
-                        for cn in concept_names:
-                            if cn.lower() == matched_concept_raw.lower():
-                                matched_concept = cn
-                                # Add to matched concepts history if not already present
-                                if matched_concept not in matched_concepts:
-                                    matched_concepts.append(matched_concept)
-                                    first_time_matched_concepts.append(matched_concept)
-                                    print(
-                                        f"[Concept Logic] Added to matched history: {matched_concept}"
-                                    )
-                                break
+                        matched_concept = normalize_matched_concept_key(
+                            concepts_dict, matched_concept_raw
+                        )
+                        if matched_concept and matched_concept not in matched_concepts:
+                            matched_concepts.append(matched_concept)
+                            first_time_matched_concepts.append(matched_concept)
+                            print(
+                                f"[Concept Logic] Added to matched history: {matched_concept}"
+                            )
                 except (json.JSONDecodeError, TypeError, AttributeError):
                     pass
 
@@ -2116,20 +2117,18 @@ def chat_completion_stream():
                         )
                         if isinstance(kg_list, list) and len(kg_list) > 0:
                             matched_concept_raw = kg_list[0]
-                            # Normalize the concept name
-                            for cn in concept_names:
-                                if cn.lower() == matched_concept_raw.lower():
-                                    matched_concept = cn
-                                    # Add to matched concepts history if not already present
-                                    if matched_concept not in matched_concepts:
-                                        matched_concepts.append(matched_concept)
-                                        first_time_matched_concepts.append(
-                                            matched_concept
-                                        )
-                                        print(
-                                            f"[Concept Logic] Added to matched history: {matched_concept}"
-                                        )
-                                    break
+                            matched_concept = normalize_matched_concept_key(
+                                concepts_dict, matched_concept_raw
+                            )
+                            if (
+                                matched_concept
+                                and matched_concept not in matched_concepts
+                            ):
+                                matched_concepts.append(matched_concept)
+                                first_time_matched_concepts.append(matched_concept)
+                                print(
+                                    f"[Concept Logic] Added to matched history: {matched_concept}"
+                                )
                     except (json.JSONDecodeError, TypeError, AttributeError):
                         pass
 
@@ -2558,11 +2557,11 @@ def get_conversation_history_for_chat(conversation_id, db_session, phenomenon):
                 )
                 if isinstance(kg_list, list) and len(kg_list) > 0:
                     matched_concept_raw = kg_list[0]
-                    for cn in concept_names:
-                        if cn.lower() == matched_concept_raw.lower():
-                            if cn not in matched_concepts_list:
-                                matched_concepts_list.append(cn)
-                            break
+                    cn = normalize_matched_concept_key(
+                        concepts_dict, matched_concept_raw
+                    )
+                    if cn and cn not in matched_concepts_list:
+                        matched_concepts_list.append(cn)
             except (json.JSONDecodeError, TypeError, AttributeError):
                 pass
 

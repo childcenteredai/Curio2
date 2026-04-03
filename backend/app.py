@@ -388,14 +388,31 @@ def _subconcepts_dict(node):
     return subs if isinstance(subs, dict) else {}
 
 
-def matchable_concept_names_ordered(concepts_dict):
-    """Top-level concepts then their direct subconcepts, in JSON key order (for LLM matching)."""
-    names = []
+def ordered_concept_names_subs_before_parent(concepts_dict):
+    """
+    Flat list of all concept names in kg.json order of top-level keys, but within
+    each subtree: sub-concepts (recursively, subs-first) then the parent.
+    So e.g. Charges, Electrons, Different Charges — not Different Charges first.
+    Used for next-concept sequencing, matching validation, and flat KG key order.
+    """
+    out = []
+
+    def walk(name, data):
+        if not isinstance(data, dict):
+            out.append(name)
+            return
+        for sub_name, sub_data in _subconcepts_dict(data).items():
+            walk(sub_name, sub_data)
+        out.append(name)
+
     for concept_name, concept_data in concepts_dict.items():
-        names.append(concept_name)
-        for sub_name in _subconcepts_dict(concept_data):
-            names.append(sub_name)
-    return names
+        walk(concept_name, concept_data)
+    return out
+
+
+def matchable_concept_names_ordered(concepts_dict):
+    """Same order as `ordered_concept_names_subs_before_parent` (for LLM matching)."""
+    return ordered_concept_names_subs_before_parent(concepts_dict)
 
 
 def expand_matched_concepts_with_subs_from_parent(matched_names, concepts_dict):
@@ -446,7 +463,8 @@ def build_structured_kg(concepts_dict):
     """
     Build a flat knowledge graph for prompting: top-level concepts and all nested
     subconcepts appear as sibling keys (same JSON level), each with `definition`.
-    Order: each parent from the source JSON, then its sub-tree depth-first.
+    Key order: within each subtree, sub-concepts (recursively) then parent, so
+    sub-concepts appear before their parent (e.g. Charges, Electrons, Different Charges).
     """
     structured_kg = {}
 
@@ -454,9 +472,9 @@ def build_structured_kg(concepts_dict):
         if not isinstance(data, dict):
             structured_kg[name] = {"definition": ""}
             return
-        structured_kg[name] = {"definition": data.get("definition", "")}
         for sub_name, sub_data in _subconcepts_dict(data).items():
             add_node(sub_name, sub_data)
+        structured_kg[name] = {"definition": data.get("definition", "")}
 
     for concept_name, concept_data in concepts_dict.items():
         add_node(concept_name, concept_data)
@@ -466,25 +484,9 @@ def build_structured_kg(concepts_dict):
 def extract_all_concepts_and_subconcepts(concepts_dict):
     """
     Extract all concept and sub-concept names from the knowledge graph.
-    Returns a flat list of all concept and sub-concept names.
+    Same order as `ordered_concept_names_subs_before_parent` (subs before parent).
     """
-    all_concepts = []
-
-    def extract_recursive(concept_data):
-        if not isinstance(concept_data, dict):
-            return
-        subs = _subconcepts_dict(concept_data)
-        for sub_concept_name, sub_concept_data in subs.items():
-            all_concepts.append(sub_concept_name)
-            extract_recursive(
-                sub_concept_data if isinstance(sub_concept_data, dict) else {}
-            )
-
-    for concept_name, concept_data in concepts_dict.items():
-        all_concepts.append(concept_name)
-        extract_recursive(concept_data if isinstance(concept_data, dict) else {})
-
-    return all_concepts
+    return ordered_concept_names_subs_before_parent(concepts_dict)
 
 
 def parse_matched_kg_and_record_first_time(
@@ -615,7 +617,7 @@ def get_next_concept_for_prompting(
     }
     phenomenon_key = phenomenon_map.get(phenomenon, "Hair Stands Up Near a Balloon")
     concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
-    concept_names = list(concepts_dict.keys())
+    concept_names = ordered_concept_names_subs_before_parent(concepts_dict)
 
     if not concept_names:
         return None
@@ -1035,23 +1037,12 @@ def format_concept_for_prompting(concept_name, phenomenon="balloon"):
 
     concepts = knowledge_base[phenomenon_key]["concepts"]
 
-    # Find the concept (case-insensitive)
-    actual_concept_key = None
-    if concept_name in concepts:
-        actual_concept_key = concept_name
-    else:
-        concept_name_lower = concept_name.lower()
-        for key in concepts.keys():
-            if key.lower() == concept_name_lower:
-                actual_concept_key = key
-                break
-
+    actual_concept_key, concept_data = resolve_concept_in_kg(concepts, concept_name)
     if actual_concept_key is None:
         print(f"Warning: Concept '{concept_name}' not found in knowledge base")
         return ""
 
     # Get only the definition (not explanation) for prompting questions
-    concept_data = concepts[actual_concept_key]
     definition = concept_data.get("definition", "")
 
     # Format for prompting question guidance
@@ -1384,7 +1375,7 @@ def chat_completion():
                 phenomenon, "Hair Stands Up Near a Balloon"
             )
             concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
-            concept_names = list(concepts_dict.keys())
+            concept_names = ordered_concept_names_subs_before_parent(concepts_dict)
             all_concepts_matched_flag[conversation_id] = (
                 len(loaded_matched_concepts) >= len(concept_names)
                 if concept_names
@@ -1556,7 +1547,7 @@ def chat_completion():
                 phenomenon, "Hair Stands Up Near a Balloon"
             )
             concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
-            concept_names = list(concepts_dict.keys())
+            concept_names = ordered_concept_names_subs_before_parent(concepts_dict)
 
             # Get matched concepts history for this conversation
             matched_concepts = matched_concepts_history[conversation.id]
@@ -1947,7 +1938,7 @@ def chat_completion_stream():
                 phenomenon, "Hair Stands Up Near a Balloon"
             )
             concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
-            concept_names = list(concepts_dict.keys())
+            concept_names = ordered_concept_names_subs_before_parent(concepts_dict)
             all_concepts_matched_flag[conversation_id] = (
                 len(loaded_matched_concepts) >= len(concept_names)
                 if concept_names
@@ -2086,7 +2077,7 @@ def chat_completion_stream():
                 phenomenon, "Hair Stands Up Near a Balloon"
             )
             concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
-            concept_names = list(concepts_dict.keys())
+            concept_names = ordered_concept_names_subs_before_parent(concepts_dict)
 
             # Get matched concepts history for this conversation
             matched_concepts = matched_concepts_history[conversation.id]
@@ -2517,7 +2508,6 @@ def get_conversation_history_for_chat(conversation_id, db_session, phenomenon):
     }
     phenomenon_key = phenomenon_map.get(phenomenon, "Hair Stands Up Near a Balloon")
     concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
-    concept_names = list(concepts_dict.keys())
 
     messages = (
         db_session.query(Message)
@@ -2621,7 +2611,7 @@ def get_conversation_messages(conversation_id):
             conversation.phenomenon, "Hair Stands Up Near a Balloon"
         )
         concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
-        concept_names = list(concepts_dict.keys())
+        concept_names = ordered_concept_names_subs_before_parent(concepts_dict)
 
         all_concepts_matched_flag[conversation_id] = (
             len(loaded_matched_concepts) >= len(concept_names)

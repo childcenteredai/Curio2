@@ -131,16 +131,30 @@ const isGeneratingGreeting = ref(false)
 
 const router = useRouter()
 
-// 10-minute popup: ask whether to explore another room
+// Character image: Speaking Owl when playing audio, Wave 1/2 alternating when idle
+const isPlayingResponseAudio = ref(false)
+
+// 10-minute popup: ask whether to explore another room (never while TTS is playing)
 const showRoomChoicePopup = ref(false)
+const roomChoiceShowPending = ref(false)
 let roomChoiceTimeout: ReturnType<typeof setTimeout> | null = null
+
+const tryShowRoomChoicePopup = () => {
+  if (isPlayingResponseAudio.value) {
+    roomChoiceShowPending.value = true
+  } else {
+    showRoomChoicePopup.value = true
+  }
+}
+
 const startRoomChoiceTimer = () => {
   if (roomChoiceTimeout) {
     clearTimeout(roomChoiceTimeout)
     roomChoiceTimeout = null
   }
+  roomChoiceShowPending.value = false
   roomChoiceTimeout = setTimeout(() => {
-    showRoomChoicePopup.value = true
+    tryShowRoomChoicePopup()
   }, 10 * 60 * 1000)
 }
 const handleExploreAnotherRoom = () => {
@@ -151,9 +165,6 @@ const handleExploreAnotherRoom = () => {
 const handleContinueThisRoom = () => {
   showRoomChoicePopup.value = false
 }
-
-// Character image: Speaking Owl when playing audio, Wave 1/2 alternating when idle
-const isPlayingResponseAudio = ref(false)
 const idleCharacterImage = ref('/imgs/Wave 1.png')
 let idleImageTimeout: ReturnType<typeof setTimeout> | null = null
 const scheduleNextIdleImageToggle = () => {
@@ -1200,6 +1211,8 @@ const generateInitialGreeting = async () => {
 
 const startNewChat = async () => {
   if (isLoading.value) return
+
+  roomChoiceShowPending.value = false
   
   // Stop any playing audio
   isPlayingResponseAudio.value = false
@@ -1239,6 +1252,14 @@ watch(chatHistory, async () => {
   await nextTick()
   updateScrollState()
 }, { deep: true })
+
+// When 10-min timer fired during TTS, show room popup only after playback ends
+watch(isPlayingResponseAudio, (playing) => {
+  if (!playing && roomChoiceShowPending.value) {
+    roomChoiceShowPending.value = false
+    showRoomChoicePopup.value = true
+  }
+})
 
 // Watch for image path changes and reload conversation if needed
 watch(() => props.selectedImagePath, async (newPath, oldPath) => {
@@ -1309,6 +1330,7 @@ onUnmounted(() => {
     clearTimeout(roomChoiceTimeout)
     roomChoiceTimeout = null
   }
+  roomChoiceShowPending.value = false
   
   if (mediaRecorder && mediaRecorder.state === 'recording') {
     mediaRecorder.stop()

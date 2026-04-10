@@ -89,6 +89,22 @@
       </div>
     </div>
 
+    <!-- 30-min global session reminder (from first app load in this tab) -->
+    <div
+      v-if="showMissionCompletePopup"
+      class="mission-complete-overlay"
+      @click.self="handleMissionCompleteDismiss"
+    >
+      <div class="mission-complete-container" role="dialog" aria-modal="true" aria-label="Session reminder">
+        <div class="mission-complete-message">
+          Excellent work! We successfully completed our detective mission today. Let's get back to your researcher!
+        </div>
+        <button type="button" class="mission-complete-button" @click="handleMissionCompleteDismiss">
+          OK
+        </button>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -164,6 +180,60 @@ const handleExploreAnotherRoom = () => {
 }
 const handleContinueThisRoom = () => {
   showRoomChoicePopup.value = false
+}
+
+// 30-minute reminder: clock starts once when the first chat session begins (first Conversation mount).
+// Switching images or starting a new conversation does not reset it.
+const GLOBAL_SESSION_START_KEY = 'curio_global_session_start'
+const MISSION_COMPLETE_SHOWN_KEY = 'curio_mission_complete_popup_shown'
+const MISSION_COMPLETE_MS = 30 * 60 * 1000
+
+/** Anchor the 30-min timer the first time the child enters chat; never overwrite (same tab session). */
+const ensureFirstConversationClockAnchor = () => {
+  if (!sessionStorage.getItem(GLOBAL_SESSION_START_KEY)) {
+    sessionStorage.setItem(GLOBAL_SESSION_START_KEY, String(Date.now()))
+  }
+}
+
+const showMissionCompletePopup = ref(false)
+const missionCompleteShowPending = ref(false)
+let missionCompleteTimeout: ReturnType<typeof setTimeout> | null = null
+
+const isMissionCompleteAlreadyShown = () =>
+  sessionStorage.getItem(MISSION_COMPLETE_SHOWN_KEY) === '1'
+
+const tryShowMissionCompletePopup = () => {
+  if (isMissionCompleteAlreadyShown()) return
+  if (isPlayingResponseAudio.value) {
+    missionCompleteShowPending.value = true
+  } else {
+    showMissionCompletePopup.value = true
+    sessionStorage.setItem(MISSION_COMPLETE_SHOWN_KEY, '1')
+  }
+}
+
+const scheduleMissionCompleteTimer = () => {
+  if (missionCompleteTimeout) {
+    clearTimeout(missionCompleteTimeout)
+    missionCompleteTimeout = null
+  }
+  if (isMissionCompleteAlreadyShown()) return
+  const raw = sessionStorage.getItem(GLOBAL_SESSION_START_KEY)
+  if (!raw) return
+  const startMs = parseInt(raw, 10)
+  const elapsed = Date.now() - startMs
+  const remaining = MISSION_COMPLETE_MS - elapsed
+  if (remaining <= 0) {
+    tryShowMissionCompletePopup()
+    return
+  }
+  missionCompleteTimeout = setTimeout(() => {
+    tryShowMissionCompletePopup()
+  }, remaining)
+}
+
+const handleMissionCompleteDismiss = () => {
+  showMissionCompletePopup.value = false
 }
 const idleCharacterImage = ref('/imgs/Wave 1.png')
 let idleImageTimeout: ReturnType<typeof setTimeout> | null = null
@@ -1253,9 +1323,15 @@ watch(chatHistory, async () => {
   updateScrollState()
 }, { deep: true })
 
-// When 10-min timer fired during TTS, show room popup only after playback ends
+// When 10-min / 30-min timer fired during TTS, show popup only after playback ends
 watch(isPlayingResponseAudio, (playing) => {
-  if (!playing && roomChoiceShowPending.value) {
+  if (playing) return
+  if (missionCompleteShowPending.value) {
+    missionCompleteShowPending.value = false
+    roomChoiceShowPending.value = false
+    showMissionCompletePopup.value = true
+    sessionStorage.setItem(MISSION_COMPLETE_SHOWN_KEY, '1')
+  } else if (roomChoiceShowPending.value) {
     roomChoiceShowPending.value = false
     showRoomChoicePopup.value = true
   }
@@ -1296,6 +1372,8 @@ onMounted(async () => {
   scheduleNextIdleImageToggle()
   await loadAppConfig()
   startRoomChoiceTimer()
+  ensureFirstConversationClockAnchor()
+  scheduleMissionCompleteTimer()
 
   // Wait for props to be set (may take a moment if parent sets them in onMounted)
   let attempts = 0
@@ -1331,6 +1409,12 @@ onUnmounted(() => {
     roomChoiceTimeout = null
   }
   roomChoiceShowPending.value = false
+
+  if (missionCompleteTimeout) {
+    clearTimeout(missionCompleteTimeout)
+    missionCompleteTimeout = null
+  }
+  missionCompleteShowPending.value = false
   
   if (mediaRecorder && mediaRecorder.state === 'recording') {
     mediaRecorder.stop()
@@ -1372,6 +1456,60 @@ defineExpose({
   position: relative;
   z-index: 200; /* Higher z-index to ensure messages are above character */
   padding: 10px;
+}
+
+.mission-complete-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 13000;
+  animation: fadeIn 0.25s ease;
+}
+
+.mission-complete-container {
+  background: #FFEC99;
+  border: 8px solid white;
+  border-radius: 40px;
+  width: min(680px, 92vw);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  padding: 26px 26px 22px;
+  animation: slideUp 0.25s ease;
+}
+
+.mission-complete-message {
+  font-family: 'Roboto', sans-serif;
+  font-size: 1.35em;
+  font-weight: 500;
+  color: #008CBB;
+  line-height: 1.35;
+  margin-bottom: 20px;
+}
+
+.mission-complete-button {
+  font-family: 'Peachy Kink', 'Roboto', sans-serif;
+  font-size: 1.2em;
+  padding: 10px 22px;
+  border-radius: 999px;
+  cursor: pointer;
+  border: 6px solid #88E7FA;
+  box-shadow: 0 6px 0 0 #008CBB;
+  background: #59A7F6;
+  color: #FFE600;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.mission-complete-button:hover {
+  transform: scale(1.03);
+}
+
+.mission-complete-button:active {
+  transform: scale(0.98);
 }
 
 .room-choice-overlay {

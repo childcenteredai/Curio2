@@ -14,7 +14,8 @@ import { RouterView } from 'vue-router'
 }
 
 body {
-  font-family: 'Comic Sans MS', cursive, sans-serif;
+  font-family: system-ui, sans-serif;
   overflow: hidden;
+  background: #ffffff;
 }
 </style>

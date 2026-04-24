@@ -894,12 +894,13 @@ def get_explanation_method_and_matched_kg(
     conversation_id,
     db_session,
     log_prefix="[Knowledge Retrieval]",
-    run_for_any_question=False,
 ):
     """
     Shared helper for scienceqa:
     - Optionally run knowledge retrieval for EXPLANATION depending on question level
     - Build explanation_method string for {explanation_method} placeholder
+    - Retrieval (with relevancy score threshold) runs for no_question and factual–causal
+      levels, not for irrelevant.
 
     Returns:
         (matched_kg, explanation_method)
@@ -912,17 +913,14 @@ def get_explanation_method_and_matched_kg(
     )
     matched_kg = None
 
-    if run_for_any_question:
-        if child_question_level == "no_question":
-            return matched_kg, explanation_method
-    else:
-        if child_question_level not in [
-            "factual",
-            "explanatory",
-            "general_causal",
-            "specific_causal",
-        ]:
-            return matched_kg, explanation_method
+    if child_question_level not in [
+        "no_question",
+        "factual",
+        "explanatory",
+        "general_causal",
+        "specific_causal",
+    ]:
+        return matched_kg, explanation_method
 
     kg = knowledge_retrieval(messages, phenomenon, conversation_id, db_session)
     matched_kg = kg if kg else None
@@ -2084,6 +2082,7 @@ def chat_completion_stream():
 
             # A. Knowledge Retrieval: Match concept for EXPLANATION (only for specific question levels)
             if child_question_level in [
+                "no_question",
                 "factual",
                 "explanatory",
                 "general_causal",

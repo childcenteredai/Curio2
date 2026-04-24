@@ -1,13 +1,9 @@
 <template>
   <div class="chat-container">
-    <!-- Character image - inside chat-container but outside chat-messages -->
-    <div class="curio-character">
-      <img
-        :src="isPlayingResponseAudio ? '/imgs/Speaking Owl.gif' : idleCharacterImage"
-        alt="Curio"
-        class="curio-character-image"
-      >
-    </div>
+    <header class="chat-panel-header">
+      <h1 class="chat-panel-title">Let's Learn Together!</h1>
+      <!-- <p class="chat-panel-subtitle">Ask me anything about this picture</p> -->
+    </header>
 
     <!-- Chat messages area -->
     <div 
@@ -23,25 +19,33 @@
         :class="`message ${msg.role}`"
         v-show="msg.role === 'user' || (msg.role === 'assistant' && msg.audioReady !== false)"
       >
-        <div class="message-bubble">
-          <div class="message-text">
-            <template v-if="msg.words">
-              <span 
-                v-for="(word, wordIndex) in renderWordsWithBoldState(msg.words)" 
-                :key="wordIndex"
-                :class="{ 
-                  'word-visible': word.visible, 
-                  'word-hidden': !word.visible,
-                  'bold-highlight': word.isBold,
-                  'bold-first': word.isFirstBold,
-                  'bold-last': word.isLastBold
-                }"
-                v-html="escapeHtml(word.text)"
-              ></span>
-            </template>
-            <span v-else v-html="renderTextWithBoldState(msg.content)"></span>
+        <div class="message-inner">
+          <img
+            v-if="msg.role === 'assistant'"
+            src="/imgs/owl.svg"
+            alt=""
+            class="message-avatar"
+          >
+          <div class="message-bubble">
+            <div class="message-text">
+              <template v-if="msg.words">
+                <span 
+                  v-for="(word, wordIndex) in renderWordsWithBoldState(msg.words)" 
+                  :key="wordIndex"
+                  :class="{ 
+                    'word-visible': word.visible, 
+                    'word-hidden': !word.visible,
+                    'bold-highlight': word.isBold,
+                    'bold-first': word.isFirstBold,
+                    'bold-last': word.isLastBold
+                  }"
+                  v-html="escapeHtml(word.text)"
+                ></span>
+              </template>
+              <span v-else v-html="renderTextWithBoldState(msg.content)"></span>
+            </div>
+            <!-- <div class="message-time">{{ msg.time }}</div> -->
           </div>
-          <div class="message-time">{{ msg.time }}</div>
         </div>
       </div>
     </div>
@@ -55,16 +59,20 @@
           :class="`voice-input-button ${isRecording ? 'recording' : ''} ${isLoading ? 'loading' : ''}`"
           :title="isLoading ? 'Processing...' : isRecording ? 'Click to send' : 'Click to speak'"
         >
-          <svg v-if="isLoading" class="voice-icon loading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <circle cx="12" cy="12" r="10" stroke-dasharray="32 48" stroke-dashoffset="16" />
-          </svg>
-          <svg v-else :class="['voice-icon', 'mic-icon', { 'recording-icon': isRecording }]" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 2a3 3 0 013 3v6a3 3 0 01-6 0V5a3 3 0 013-3z" />
-            <path d="M17 10v2a5 5 0 01-10 0v-2H5v2a7 7 0 0014 0v-2h-2z" />
-            <rect x="10" y="19" width="4" height="3" rx="1" />
-          </svg>
+          <i
+            v-if="isLoading"
+            class="fa-solid fa-spinner fa-spin voice-icon loading-icon"
+            aria-hidden="true"
+          />
+          <i
+            v-else
+            class="fa-solid fa-microphone voice-icon mic-icon"
+            :class="{ 'recording-icon': isRecording }"
+            aria-hidden="true"
+          />
         </button>
       </div>
+      <!-- <p class="voice-hint">💡 PRESS to describe what you see or ask questions!</p> -->
     </div>
 
     <!-- 10-min room choice popup -->
@@ -80,10 +88,10 @@
         </div>
         <div class="room-choice-actions">
           <button class="room-choice-button secondary" @click="handleExploreAnotherRoom">
-            Explore another room
+            Another room
           </button>
           <button class="room-choice-button primary" @click="handleContinueThisRoom">
-            Continue exploring this room
+            This room
           </button>
         </div>
       </div>
@@ -147,7 +155,6 @@ const isGeneratingGreeting = ref(false)
 
 const router = useRouter()
 
-// Character image: Speaking Owl when playing audio, Wave 1/2 alternating when idle
 const isPlayingResponseAudio = ref(false)
 
 // 10-minute popup: ask whether to explore another room (never while TTS is playing)
@@ -234,17 +241,6 @@ const scheduleMissionCompleteTimer = () => {
 
 const handleMissionCompleteDismiss = () => {
   showMissionCompletePopup.value = false
-}
-const idleCharacterImage = ref('/imgs/Wave 1.png')
-let idleImageTimeout: ReturnType<typeof setTimeout> | null = null
-const scheduleNextIdleImageToggle = () => {
-  const delay = 1500 + Math.random() * 2000 // 1.5–3.5 seconds
-  idleImageTimeout = setTimeout(() => {
-    idleCharacterImage.value = idleCharacterImage.value.includes('Wave 1')
-      ? '/imgs/Wave 2.png'
-      : '/imgs/Wave 1.png'
-    scheduleNextIdleImageToggle()
-  }, delay)
 }
 
 // Emit first-time matched concepts for concept bubbles (displayed in Home)
@@ -1369,7 +1365,6 @@ watch(() => props.selectedImagePath, async (newPath, oldPath) => {
 
 onMounted(async () => {
   document.addEventListener('keydown', handleKeyDown)
-  scheduleNextIdleImageToggle()
   await loadAppConfig()
   startRoomChoiceTimer()
   ensureFirstConversationClockAnchor()
@@ -1395,14 +1390,37 @@ onMounted(async () => {
   
   // Initialize scroll state
   updateScrollState()
+
+  if (import.meta.env.DEV) {
+    const w = window as Window & {
+      __curioDebug?: {
+        showRoomChoice: () => void
+        showMissionComplete: () => void
+        resetMissionShownFlag: () => void
+      }
+    }
+    w.__curioDebug = {
+      showRoomChoice: () => {
+        showMissionCompletePopup.value = false
+        showRoomChoicePopup.value = true
+      },
+      showMissionComplete: () => {
+        showRoomChoicePopup.value = false
+        showMissionCompletePopup.value = true
+      },
+      resetMissionShownFlag: () => {
+        sessionStorage.removeItem(MISSION_COMPLETE_SHOWN_KEY)
+      }
+    }
+  }
 })
 
 onUnmounted(() => {
-  document.removeEventListener('keydown', handleKeyDown)
-  if (idleImageTimeout) {
-    clearTimeout(idleImageTimeout)
-    idleImageTimeout = null
+  if (import.meta.env.DEV) {
+    const w = window as Window & { __curioDebug?: unknown }
+    delete w.__curioDebug
   }
+  document.removeEventListener('keydown', handleKeyDown)
 
   if (roomChoiceTimeout) {
     clearTimeout(roomChoiceTimeout)
@@ -1441,21 +1459,54 @@ defineExpose({
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Kodchasan:wght@400;500;600;700&display=swap');
+
+@font-face {
+  font-family: 'Krona One';
+  src: url('../assets/fonts/KronaOne-Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Lao Muang Don';
+  src: url('../assets/fonts/LaoMuangDon-Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Design tokens — match learn-together panel */
+.chat-container {
+  --border-blue: #B9E0EA;
+  --header-bg: #C7E8F0;
+  --title-color: #3D576A;
+  --subtitle-color: #364B5C;
+  --user-bubble: #C7E8F0;
+  --voice-blue: #79AAFF;
+  --text-body: #486174;
+  /* Chat window (outer card) — single drop shadow */
+  --shadow-chat-window: 0 15px 50px 0 rgba(0, 0, 0, 0.2);
+  /* Bubbles, avatar, mic — stacked drop shadows */
+  --shadow-layered: 0 8px 10px -6px rgba(0, 0, 0, 0.1), 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  --voice-btn-size: 112px;
+}
 
 /* Chat Section */
 .chat-container {
   width: 100%;
-  max-width: 500px;
-  height: 80vh;
-  background: #FFEC99;
-  border: 8px solid white;
-  border-radius: 40px;
+  max-width: 560px;
+  height: 90vh;
+  background: #ffffff;
+  border: 6px solid var(--border-blue);
+  border-radius: 24px;
+  display: flex;
   flex-direction: column;
-  overflow: visible; /* Allow character image to overflow */
+  overflow: hidden;
   position: relative;
-  z-index: 200; /* Higher z-index to ensure messages are above character */
-  padding: 10px;
+  z-index: 200;
+  box-shadow: var(--shadow-chat-window);
 }
 
 .mission-complete-overlay {
@@ -1473,39 +1524,47 @@ defineExpose({
 }
 
 .mission-complete-container {
-  background: #FFEC99;
-  border: 8px solid white;
-  border-radius: 40px;
+  background: #ffffff;
+  border: 4px solid #BFE4F0;
+  border-radius: 24px;
   width: min(680px, 92vw);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-chat-window);
   padding: 26px 26px 22px;
   animation: slideUp 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
 }
 
 .mission-complete-message {
-  font-family: 'Roboto', sans-serif;
-  font-size: 1.35em;
+  font-family: 'Kodchasan';
+  font-size: 1.4em;
   font-weight: 500;
-  color: #008CBB;
-  line-height: 1.35;
+  color: #3D576A;
+  line-height: 1.45;
   margin-bottom: 20px;
+  max-width: 100%;
 }
 
 .mission-complete-button {
-  font-family: 'Peachy Kink', 'Roboto', sans-serif;
-  font-size: 1.2em;
+  font-family: 'Kodchasan';
+  font-size: 1.05em;
+  font-weight: 700;
   padding: 10px 22px;
   border-radius: 999px;
   cursor: pointer;
-  border: 6px solid #88E7FA;
-  box-shadow: 0 6px 0 0 #008CBB;
-  background: #59A7F6;
-  color: #FFE600;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  border: 2px solid #79AAFF;
+  box-shadow: none;
+  background: #ffffff;
+  color: #000000;
+  transition: background 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
 }
 
 .mission-complete-button:hover {
-  transform: scale(1.03);
+  background: #C7E3FF;
+  border-color: #79AAFF;
+  transform: scale(1.02);
 }
 
 .mission-complete-button:active {
@@ -1527,66 +1586,61 @@ defineExpose({
 }
 
 .room-choice-container {
-  background: #FFEC99;
-  border: 8px solid white;
-  border-radius: 40px;
+  background: #ffffff;
+  border: 4px solid #BFE4F0;
+  border-radius: 24px;
   width: min(680px, 92vw);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-chat-window);
   padding: 26px 26px 22px;
   animation: slideUp 0.25s ease;
 }
 
 .room-choice-title {
-  font-family: 'Roboto', sans-serif;
-  font-size: 2em;
-  font-weight: 700;
-  color: #008CBB;
+  font-family: 'Krona One', sans-serif;
+  font-size: 1.5em;
+  font-weight: 400;
+  color: #3D576A;
   margin-bottom: 12px;
 }
 
 .room-choice-question {
-  font-family: 'Roboto', sans-serif;
-  font-size: 1.35em;
+  font-family: 'Kodchasan';
+  font-size: 1.4em;
   font-weight: 500;
-  color: #008CBB;
-  line-height: 1.25;
+  color: #3D576A;
+  line-height: 1.45;
   margin-bottom: 18px;
 }
 
 .room-choice-actions {
   display: flex;
   gap: 14px;
-  justify-content: flex-end;
+  justify-content: center;
   flex-wrap: wrap;
 }
 
 .room-choice-button {
-  font-family: 'Peachy Kink', 'Roboto', sans-serif;
-  font-size: 1.2em;
+  font-family: 'Kodchasan';
+  font-size: 1.05em;
+  font-weight: 700;
   padding: 10px 18px;
   border-radius: 999px;
   cursor: pointer;
-  border: 6px solid #88E7FA;
-  box-shadow: 0 6px 0 0 #008CBB;
-  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  border: 2px solid #79AAFF;
+  box-shadow: none;
+  background: #ffffff;
+  color: #000000;
+  transition: background 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
 }
 
 .room-choice-button:hover {
-  transform: scale(1.03);
+  background: #C7E3FF;
+  border-color: #79AAFF;
+  transform: scale(1.02);
 }
 
 .room-choice-button:active {
   transform: scale(0.98);
-}
-
-.room-choice-button.primary {
-  background: #59A7F6;
-  color: #FFE600;
-}
-
-.room-choice-button.secondary {
-  background: #FFFFFF;
-  color: #008CBB;
 }
 
 @keyframes fadeIn {
@@ -1599,56 +1653,77 @@ defineExpose({
   to { transform: translateY(0); opacity: 1; }
 }
 
-.curio-character{
-  width: 20vw;
-  height: fit-content;
-  position: absolute; /* Absolute positioning relative to chat-container */
-  left: -12vw;
-  top: -12vh;
-  z-index: 0; /* Lower z-index - character below messages */
-  pointer-events: none; /* Allow clicks to pass through to messages */
-  overflow: visible; /* Ensure image can overflow */
+.chat-panel-header {
+  flex-shrink: 0;
+  background: var(--header-bg);
+  padding: 18px 20px 16px;
+  border-bottom: 1px solid var(--border-blue);
 }
 
-.curio-character-image{
-  width: 20vw;
-  height: fit-content;
-  object-fit: contain;
-  pointer-events: auto; /* Re-enable pointer events for the image itself */
-  transform: scaleX(-1); /* 左右翻转 */
-}
-
-.chat-title {
+.chat-panel-title {
   margin: 0;
-  font-size: 1.8em;
-  font-weight: bold;
+  font-family: 'Krona One', sans-serif;
+  font-size: clamp(1.05rem, 2.8vw, 1.35rem);
+  font-weight: 400;
+  color: var(--title-color);
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+  text-align: left;
 }
 
-.chat-subtitle {
-  margin-top: 5px;
-  opacity: 0.9;
-  font-size: 1em;
+.chat-panel-subtitle {
+  margin: 8px 0 0;
+  font-family: 'Lao Muang Don', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--subtitle-color);
+  line-height: 1.35;
+  text-align: left;
 }
 
 /* Chat Messages */
 .chat-messages {
   flex: 1;
-  padding: 40px 20px 40px 60px;
-  height: 70vh;
+  min-height: 0;
+  padding: 16px 18px calc(12px + var(--voice-btn-size) / 2);
   overflow-y: auto;
-  overflow-x: hidden; /* Standard overflow for scrollable container */
-  border-radius: 40px;
+  overflow-x: hidden;
+  background: #FAFAFA;
   position: relative;
-  z-index: 300; /* Highest layer - messages container above character */
-  transform: translateZ(0); /* Force hardware acceleration and new stacking context */
+  z-index: 1;
+  transform: translateZ(0);
 }
 
-
 .message {
-  margin-bottom: 15px;
+  margin-bottom: 14px;
   display: flex;
   position: relative;
-  z-index: 1; /* Ensure messages are in the stacking context */
+  z-index: 1;
+}
+
+.message-inner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 92%;
+}
+
+.message.user .message-inner {
+  margin-left: auto;
+  flex-direction: row;
+  justify-content: flex-end;
+}
+
+.message.assistant .message-inner {
+  margin-right: auto;
+}
+
+.message-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .message.user {
@@ -1660,63 +1735,61 @@ defineExpose({
 }
 
 .message-bubble {
-  /* max-width: 80%; */
   padding: 12px 16px;
-  border-radius: 20px;
+  border-radius: 18px;
   position: relative;
-  z-index: 10; /* Higher z-index to ensure visibility above character */
+  z-index: 10;
+  font-family: 'Kodchasan';
+  font-size: 1.2rem;
+  box-shadow: var(--shadow-layered);
 }
 
 .message.user .message-bubble {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  font-family: 'Roboto';
-  font-size: 1.3em;
-  border: 3px solid white;
-  border-bottom-right-radius: 0px;
+  background: var(--user-bubble);
+  color: var(--text-body);
+  border: none;
+  border-bottom-right-radius: 6px;
 }
 
 .message.assistant .message-bubble {
-  background: #008CBB;
-  color: #ffffff;
-  font-family: 'Roboto';
-  font-size: 1.3em;
-  border: 3px solid white;
-  border-top-left-radius: 0px;
-  position: relative;
+  background: #ffffff;
+  color: var(--text-body);
+  border: 1px solid var(--border-blue);
+  border-top-left-radius: 6px;
 }
 
 .message-text {
   font-size: 1em;
-  line-height: 1.4;
-  margin-bottom: 5px;
+  line-height: 1.45;
+  margin-bottom: 6px;
   text-align: left;
 }
 
-.message-text :deep(.bold-highlight),
-.message-text .bold-highlight {
+.message.user .message-text :deep(.bold-highlight),
+.message.user .message-text .bold-highlight {
   font-weight: 700;
-  color: #FFE600;
-  font-family: 'Roboto', sans-serif;
+  color: #2a4a5c;
+  font-family: 'Kodchasan';
+  display: inline;
+  padding: 0;
+  border-radius: 0;
+  background-image: linear-gradient(
+    transparent 60%,
+    rgba(127, 179, 245, 0.45) 60%
+  );
+}
 
-  display: inline-block;
-  line-height: 1.05;
-
-  padding: 0.08em 0.22em;
-
-  border-radius: 0.8em;
-
-  background-color: transparent;
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 100% 100%;
-
-  background-image: radial-gradient(
-    ellipse 85% 75% at 50% 50%,
-    rgba(255, 230, 0, 0.30) 0%,
-    rgba(255, 230, 0, 0.18) 35%,
-    rgba(255, 230, 0, 0.08) 58%,
-    rgba(255, 230, 0, 0.00) 78%
+.message.assistant .message-text :deep(.bold-highlight),
+.message.assistant .message-text .bold-highlight {
+  font-weight: 700;
+  color: #2a4a5c;
+  font-family: 'Kodchasan';
+  display: inline;
+  padding: 0;
+  border-radius: 0;
+  background-image: linear-gradient(
+    transparent 60%,
+    rgba(127, 179, 245, 0.4) 60%
   );
 }
 
@@ -1734,8 +1807,10 @@ defineExpose({
 }
 
 .message-time {
-  font-size: 0.75em;
-  opacity: 0.7;
+  font-family: 'Kodchasan';
+  font-size: 0.85rem;
+  opacity: 0.55;
+  color: var(--text-body);
   text-align: right;
 }
 
@@ -1760,37 +1835,51 @@ defineExpose({
   line-height: 1.5;
 }
 
-/* Push-to-Talk Input */
+/* Push-to-Talk Input — mic sits half above / half inside this bar */
 .chat-input-area {
-  padding: 20px;
+  flex-shrink: 0;
+  padding: 0 18px 8px;
   position: relative;
-  z-index: 200; /* Same as messages - above character */
+  z-index: 4;
+  background: #F2F7F9;
+  border-top: 4.5px solid var(--border-blue);
 }
 
 .voice-input-container {
   display: flex;
   justify-content: center;
   align-items: center;
+  margin-top: calc(-0.5 * var(--voice-btn-size));
+  margin-bottom: 2px;
+}
+
+.voice-hint {
+  margin: 4px 0 0;
+  font-family: 'Lao Muang Don', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: rgba(61, 87, 106, 0.72);
+  text-align: center;
+  line-height: 1.35;
 }
 
 .voice-input-button {
-  font-family: 'Peachy Kink';
-  color: #FFE600;
+  color: #ffffff;
   font-size: 2em;
-  width: 120px;
-  height: 120px;
-  min-width: 120px;
-  min-height: 120px;
+  width: var(--voice-btn-size);
+  height: var(--voice-btn-size);
+  min-width: var(--voice-btn-size);
+  min-height: var(--voice-btn-size);
   padding: 0;
-  border: 6px solid #D4C5FA;
   border-radius: 50%;
-  background: #686DF4;
+  border: 2px solid rgba(191, 228, 240, 0.85);
+  background: #79AAFF;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease, border-color 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 6px 0 0 #3F4296;
+  box-shadow: var(--shadow-layered);
   position: relative;
   overflow: hidden;
   box-sizing: border-box;
@@ -1798,27 +1887,30 @@ defineExpose({
 }
 
 .voice-input-button:hover:not(:disabled) {
-  transform: scale(1.05);
-  box-shadow: 0 6px 0 0 #3F4296;
+  transform: scale(1.04);
+  filter: brightness(1.03);
+  border-color: #568E9C;
 }
 
 .voice-input-button:active {
-  transform: scale(0.95);
+  transform: scale(0.96);
 }
 
 .voice-input-button.recording {
-  background: linear-gradient(135deg, #ff6b9d 0%, #c44569 100%);
-  border: 6px solid #ffbdcb;
+  background: #3C69B8;
+  border-color: rgba(232, 120, 154, 0.55);
   animation: pulse 1.5s infinite;
-  box-shadow: 0 6px 0 0 #d73475;
+  box-shadow: var(--shadow-layered);
 }
 
+
 .voice-input-button.loading {
-  background: linear-gradient(135deg, #ffa726 0%, #ff7043 100%);
-  border: 6px solid #fdc77b;
-  box-shadow: 0 6px 0 0 #ffa323;
+  background: linear-gradient(180deg, #c5d8e8 0%, #9eb8d4 100%);
+  border-color: var(--border-blue);
+  box-shadow: var(--shadow-layered);
   cursor: not-allowed;
 }
+
 
 .voice-input-button:disabled {
   cursor: not-allowed;
@@ -1826,29 +1918,26 @@ defineExpose({
 }
 
 .voice-icon {
-  width: 56px;
-  height: 56px;
+  font-size: 3.25rem;
+  line-height: 1;
   flex-shrink: 0;
   color: currentColor;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .recording-icon {
   animation: bounce 0.6s infinite alternate;
 }
 
-.loading-icon {
-  animation: spin 1s linear infinite;
-}
-
 @keyframes pulse {
-  0% {
-    box-shadow: 0 8px 25px rgba(255, 107, 157, 0.4);
+  0%,
+  100% {
+    box-shadow: 0 8px 10px -6px rgba(0, 0, 0, 0.08), 0 20px 25px -5px rgba(0, 0, 0, 0.08);
   }
   50% {
-    box-shadow: 0 8px 35px rgba(255, 107, 157, 0.6);
-  }
-  100% {
-    box-shadow: 0 8px 25px rgba(255, 107, 157, 0.4);
+    box-shadow: 0 8px 12px -6px rgba(0, 0, 0, 0.14), 0 20px 30px -5px rgba(0, 0, 0, 0.14);
   }
 }
 
@@ -1861,68 +1950,35 @@ defineExpose({
   }
 }
 
-/* .loading {
-  animation: spin 1s linear infinite;
-} */
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
 /* Responsive Design */
 @media (max-width: 1024px) {
-  .curio-character {
-    width: 15vw;
-    left: -8vw;
-    top: -8vh;
-  }
-  
-  .curio-character-image {
-    width: 15vw;
-    transform: scaleX(-1);
+  .chat-container {
+    --voice-btn-size: 100px;
   }
 
   .chat-messages {
-    padding: 30px 15px 30px 50px;
-  }
-  
-  .voice-input-button {
-    width: 100px;
-    height: 100px;
-    min-width: 100px;
-    min-height: 100px;
+    padding: 14px 14px calc(10px + var(--voice-btn-size) / 2);
   }
   
   .voice-icon {
-    width: 48px;
-    height: 48px;
+    font-size: 2.875rem;
   }
 }
 
 @media (max-width: 768px) {
   .chat-container {
-    height: 70vh;
+    height: min(78vh, 720px);
     max-width: 100%;
-    padding: 8px;
-    border-width: 4px;
-    border-radius: 30px;
+    border-radius: 20px;
+    --voice-btn-size: 96px;
   }
-  
-  .curio-character {
-    width: 25vw;
-    left: -10vw;
-    top: -6vh;
-  }
-  
-  .curio-character-image {
-    width: 25vw;
-    transform: scaleX(-1);
+
+  .chat-panel-header {
+    padding: 14px 16px 12px;
   }
 
   .chat-messages {
-    padding: 30px 15px 30px 40px;
-    height: 60vh;
+    padding: 12px 12px calc(8px + var(--voice-btn-size) / 2);
   }
   
   .message-bubble {
@@ -1931,12 +1987,11 @@ defineExpose({
   
   .message.user .message-bubble,
   .message.assistant .message-bubble {
-    font-size: 1.2em;
-    border-width: 4px;
+    font-size: 1.12rem;
   }
   
   .message-text {
-    font-size: 0.9em;
+    font-size: 1.2em;
   }
   
   .message-time {
@@ -1944,46 +1999,27 @@ defineExpose({
   }
   
   .chat-input-area {
-    padding: 15px;
-  }
-  
-  .voice-input-button {
-    width: 96px;
-    height: 96px;
-    min-width: 96px;
-    min-height: 96px;
-    border-width: 4px;
+    padding: 0 14px 6px;
   }
   
   .voice-icon {
-    width: 44px;
-    height: 44px;
+    font-size: 2.75rem;
+  }
+
+  .voice-hint {
+    font-size: 0.78rem;
   }
 }
 
 @media (max-width: 480px) {
   .chat-container {
-    height: 75vh;
-    padding: 5px;
-    border-width: 3px;
-    border-radius: 25px;
-  }
-  
-  .curio-character {
-    width: 30vw;
-    left: -8vw;
-    top: -4vh;
-  }
-  
-  .curio-character-image {
-    width: 30vw;
-    transform: scaleX(-1);
+    height: min(82vh, 680px);
+    border-radius: 18px;
+    --voice-btn-size: 88px;
   }
 
   .chat-messages {
-    padding: 25px 10px 25px 35px;
-    height: 65vh;
-    border-radius: 25px;
+    padding: 10px 10px calc(6px + var(--voice-btn-size) / 2);
   }
   
   .message {
@@ -1992,38 +2028,33 @@ defineExpose({
   
   .message-bubble {
     padding: 8px 12px;
-    border-radius: 15px;
+    border-radius: 14px;
   }
   
   .message.user .message-bubble,
   .message.assistant .message-bubble {
-    font-size: 1em;
-    border-width: 3px;
+    font-size: 1.08rem;
   }
   
   .message-text {
-    font-size: 0.85em;
+    font-size: 1em;
   }
   
   .message-time {
-    font-size: 0.65em;
+    font-size: 0.68em;
   }
   
   .chat-input-area {
-    padding: 10px;
-  }
-  
-  .voice-input-button {
-    width: 88px;
-    height: 88px;
-    min-width: 88px;
-    min-height: 88px;
-    border-width: 3px;
+    padding: 0 12px 6px;
   }
   
   .voice-icon {
-    width: 40px;
-    height: 40px;
+    font-size: 2.5rem;
+  }
+
+  .message-avatar {
+    width: 36px;
+    height: 36px;
   }
 }
 
@@ -2033,16 +2064,16 @@ defineExpose({
 }
 
 .chat-messages::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: #eef6f9;
   border-radius: 10px;
 }
 
 .chat-messages::-webkit-scrollbar-thumb {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #c5dde8;
   border-radius: 10px;
 }
 
 .chat-messages::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+  background: #a8ccd9;
 }
 </style>

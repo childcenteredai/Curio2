@@ -24,7 +24,7 @@ ChatCompletion System/
 ## Prerequisites
 
 - **Python 3.8+** with pip
-- **Node.js 16+** with npm/yarn
+- **Node.js 16+** with **Yarn** (recommended; the frontend Docker image uses `yarn install --frozen-lockfile`)
 - **OpenAI API Key** (for AI functionality)
 - **Docker & Docker Compose** (for Docker setup)
 - **PostgreSQL** (included in Docker setup, or install separately for local development)
@@ -101,9 +101,7 @@ Navigate to the frontend directory and install dependencies:
 ```bash
 cd ../frontend
 
-# Install dependencies
-npm install
-# or
+# Install dependencies (use Yarn — matches frontend/Dockerfile)
 yarn install
 ```
 
@@ -133,8 +131,6 @@ The backend server will start on `http://localhost:5001`
 From the `frontend/` directory:
 
 ```bash
-npm run dev
-# or
 yarn dev
 ```
 
@@ -189,7 +185,7 @@ python app.py
 ```bash
 cd frontend
 # Start development server with hot reload
-npm run dev
+yarn dev
 ```
 
 ### Building for Production
@@ -197,7 +193,7 @@ npm run dev
 ```bash
 # Build frontend
 cd frontend
-npm run build
+yarn build
 
 # The built files will be in dist/
 ```
@@ -247,7 +243,7 @@ docker-compose up --build
 This will:
 - Start PostgreSQL database on port 5432
 - Start the backend service on port 5001
-- Start the frontend service on port 80
+- Build the frontend with **Yarn** (`frontend/Dockerfile`: `yarn install --frozen-lockfile` then `yarn build`) and serve it via nginx
 - Automatically configure `DATABASE_URL` for the backend
 
 ### 3. Database URL Configuration

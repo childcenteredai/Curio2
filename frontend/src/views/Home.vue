@@ -1,31 +1,62 @@
 <template>
   <div class="home-container">
+    <div class="home-bg-decorations" aria-hidden="true">
+      <img
+        class="home-bg-decor home-bg-green-blur3"
+        src="/imgs/green_blur3.svg"
+        alt=""
+      />
+      <img
+        class="home-bg-decor home-bg-green-circle"
+        src="/imgs/green_circle.svg"
+        alt=""
+      />
+      <img
+        class="home-bg-decor home-bg-orange-blur3"
+        src="/imgs/orange_blur3.svg"
+        alt=""
+      />
+    </div>
     <!-- Left side - Image display -->
     <div class="image-section">
-      <button @click="handleSwitchImage" class="switch-image-button">
-        <p class="switch-image-button-text">Choose Image</p>
-      </button>
       <div class="image-and-bubbles">
         <div class="image-container">
-          <img 
-            :src="currentImage" 
-            :alt="imageAlt"
-            class="main-image"
-            @error="handleImageError"
-          />
+          <!-- Framed like chat panel: outer blue border, white mat, inner subtle rim -->
+          <div class="picture-card">
+            <div class="picture-card-mat">
+              <div class="picture-card-inner">
+                <div class="picture-card-clip">
+                  <img 
+                    :src="currentImage" 
+                    :alt="imageAlt"
+                    class="main-image"
+                    @error="handleImageError"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
+      </div>
+      <div class="image-toolbar">
+        <button type="button" @click="handleSwitchImage" class="switch-image-button">
+          <i class="fa-solid fa-arrow-left switch-image-button-icon" aria-hidden="true" />
+          <span class="switch-image-button-text">Back</span>
+        </button>
+        <button
+          type="button"
+          @click="handleNewChat"
+          class="new-chat-button"
+          :disabled="conversationRef?.isLoading || false"
+          title="Start new chat"
+        >
+          <i class="fa-solid fa-arrows-rotate new-chat-icon" aria-hidden="true" />
+        </button>
       </div>
     </div>
 
     <!-- Right side - Chat interface -->
     <div class="chat-section">
-      <button 
-        @click="handleNewChat"
-        class="new-chat-button"
-        :disabled="conversationRef?.isLoading || false"
-      >
-        <img :src="refreshIcon" alt="Refresh" class="new-chat-icon" />
-      </button>
       <Conversation
         ref="conversationRef"
         :selectedImagePath="currentImage"
@@ -38,7 +69,6 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Conversation from '../components/Conversation.vue'
-import refreshIcon from '../assets/imgs/refresh.png'
 
 const route = useRoute()
 const router = useRouter()
@@ -86,24 +116,81 @@ onMounted(() => {
 </script>
 
 <style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Kodchasan:wght@500;600;700&display=swap');
+
+/* Align with Conversation.vue chat card */
 .home-container {
+  --border-blue: #BFE4F0;
+  /* Image frame — stacked shadows (match chat buttons) */
+  --shadow-layered: 0 8px 10px -6px rgba(0, 0, 0, 0.1), 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+
   display: flex;
+  align-items: flex-start;
   height: 100vh;
   width: 100vw;
-  font-family: 'Comic Sans MS', cursive, sans-serif;
+  font-family: 'Kodchasan', system-ui, sans-serif;
+  background: #ffffff;
+  padding: 20px 0 20px 0;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
-/* Image Section - reserve space for bubbles so image size stays fixed */
+.home-bg-decorations {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.home-bg-decor {
+  position: absolute;
+  display: block;
+  max-width: none;
+  height: auto;
+  user-select: none;
+}
+
+/* 左上 — green_blur3 */
+.home-bg-green-blur3 {
+  left: -3%;
+  top: 0;
+  width: min(46vw, 340px);
+  transform: translateY(-4%);
+}
+
+/* 底部中间 — green_circle */
+.home-bg-green-circle {
+  left: 50%;
+  bottom: 2%;
+  width: min(32vw, 220px);
+  transform: translateX(-50%);
+}
+
+/* 右侧中间 — orange_blur3 */
+.home-bg-orange-blur3 {
+  right: -6%;
+  top: 50%;
+  width: min(52vw, 400px);
+  transform: translateY(-50%);
+  opacity: 0.95;
+}
+
+/* Image Section — slightly wider column so the picture reads larger */
 .image-section {
-  flex: 1;
+  flex: 1.5;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   justify-content: flex-start;
-  padding: 20px;
-  background: #FFD000;
-  gap: 12px;
+  padding: 24px 16px 24px 32px;
+  background: transparent;
+  gap: 34px;
   min-height: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .image-and-bubbles {
@@ -112,9 +199,9 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  padding-top: 8vh;
   min-height: 0;
   width: 100%;
+  padding: 0 0 8px;
 }
 
 .image-container {
@@ -122,96 +209,150 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   min-height: 0;
+  width: 100%;
+  max-width: min(960px, 100%);
+}
+
+/* Same shell as .chat-container: white card, cyan border, soft radius + shadow */
+.picture-card {
+  width: 100%;
+  background: #ffffff;
+  border: 6px solid var(--border-blue);
+  border-radius: 24px;
+  box-shadow: var(--shadow-layered);
+  box-sizing: border-box;
+}
+
+.picture-card-mat {
+  padding: clamp(28px, 4vw, 36px);
+  background: #ffffff;
+  border-radius: 22px;
+}
+
+/* inset box-shadow + overflow:hidden on same node clips the shadow in browsers */
+.picture-card-inner {
+  position: relative;
+  border-radius: 18px;
+  border: 1px solid rgba(61, 87, 106, 0.14);
+  background: #ffffff;
+}
+
+.picture-card-clip {
+  overflow: hidden;
+  border-radius: 17px;
+}
+
+.picture-card-inner::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 4.15px 4.15px 0 rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.image-toolbar {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  flex-shrink: 0;
+  gap: 12px;
 }
 
 .switch-image-button {
-  align-self: flex-start;
   margin: 0;
-  background: #59A7F6;
-  color: white;
-  border: 6px solid #88E7FA;
-  padding: 10px 20px;
-  border-radius: 100px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #ffffff;
+  color: #486174;
+  border: 2px solid var(--border-blue);
+  padding: 10px 22px;
+  border-radius: 999px;
   cursor: pointer;
   font-size: 1em;
-  font-weight: bold;
-  transition: all 0.3s ease;
+  font-weight: 600;
+  transition: transform 0.2s ease, filter 0.2s ease, border-color 0.2s ease;
   white-space: nowrap;
-  box-shadow: 0 6px 0 0 #008CBB;
+  box-shadow: var(--shadow-layered);
   z-index: 10;
 }
 
+.switch-image-button-icon {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
 .switch-image-button-text {
-  font-family: 'Peachy Kink';
-  font-size: 2em;
-  color: #FFE600;
+  font-family: 'Inter', sans-serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #486174;
 }
 
 .switch-image-button:hover {
-  background: #59A7F6;
-  transform: scale(1.05);
-  box-shadow: 0 6px 0 0 #008CBB;
+  filter: brightness(1.05);
+  transform: scale(1.02);
+  border-color: #568E9C;
 }
 
 .switch-image-button:active {
-  transform: scale(0.95);
+  transform: scale(0.98);
 }
 
-
 .main-image {
+  display: block;
+  width: 100%;
   height: auto;
-  max-width: 100%;
-  max-height: 100%;
+  max-height: min(88vh, 940px);
   object-fit: contain;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
   transition: transform 0.3s ease;
 }
 
 .main-image:hover {
-  transform: scale(1.02);
+  transform: scale(1.01);
 }
 
 .chat-section {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 20px;
-  background: #F75C46;
-  overflow: visible; /* Allow character image to overflow */
+  padding: 24px 24px 24px 16px;
+  background: transparent;
+  overflow: visible;
   position: relative;
+  z-index: 1;
 }
 
+/* Icon-only pill — aligned with Back, paired on the right of the toolbar */
 .new-chat-button {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  font-family: 'Peachy Kink';
-  color: #FFE600;
-  font-size: 1.5em;
-  padding: 10px 20px;
-  border: none;
-  border-radius: 50px;
-  background: #59A7F6;
-  border: 6px solid #88E7FA;
+  margin: 0;
+  flex-shrink: 0;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #486174;
+  border: 2px solid var(--border-blue);
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: transform 0.2s ease, filter 0.2s ease, border-color 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  box-shadow: 0 6px 0 0 #008CBB;
-  white-space: nowrap;
-  z-index: 201;
+  box-shadow: var(--shadow-layered);
 }
 
 .new-chat-button:hover:not(:disabled) {
-  transform: scale(1.05);
-  box-shadow: 0 6px 0 0 #008CBB;
+  filter: brightness(1.05);
+  transform: scale(1.02);
+  border-color: #568E9C;
 }
 
 .new-chat-button:active:not(:disabled) {
-  transform: scale(0.95);
+  transform: scale(0.98);
 }
 
 .new-chat-button:disabled {
@@ -221,13 +362,8 @@ onMounted(() => {
 }
 
 .new-chat-icon {
-  width: 1.8em;
-  height: 1.8em;
-  object-fit: contain;
-}
-
-.new-chat-text {
-  font-weight: bold;
+  font-size: 1.375rem;
+  line-height: 1;
 }
 
 /* Responsive Design */
@@ -237,7 +373,14 @@ onMounted(() => {
   }
   
   .image-section {
-    flex: 0 0 40vh;
+    flex: 0 0 auto;
+    max-height: 48vh;
+    padding: 16px 12px 12px;
+  }
+
+  .image-and-bubbles {
+    padding: 0;
+    justify-content: flex-start;
   }
   
   .switch-image-button {
@@ -247,26 +390,44 @@ onMounted(() => {
   
   .chat-section {
     flex: 1;
+    padding: 16px 12px 12px;
+    min-height: 0;
+    align-items: flex-start;
   }
   
   .main-image {
-    max-height: 32vh;
+    max-height: min(40vh, 420px);
   }
-  
+
+  .picture-card-mat {
+    padding: 12px;
+  }
+
+  .image-toolbar {
+    gap: 8px;
+  }
+
   .new-chat-button {
-    top: 10px;
-    right: 10px;
-    font-size: 1.2em;
-    padding: 8px 16px;
-    border-width: 3px;
+    padding: 8px 12px;
   }
-  
+
   .new-chat-icon {
-    font-size: 1em;
+    font-size: 1.25rem;
   }
-  
-  .new-chat-text {
-    font-size: 0.9em;
+
+  .home-bg-green-blur3 {
+    width: min(58vw, 260px);
+    left: -6%;
+  }
+
+  .home-bg-green-circle {
+    width: min(40vw, 160px);
+    bottom: 1%;
+  }
+
+  .home-bg-orange-blur3 {
+    width: min(70vw, 300px);
+    right: -12%;
   }
 }
 </style>

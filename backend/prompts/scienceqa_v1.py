@@ -16,7 +16,6 @@ Note: Mechanism Context is for YOUR understanding only. Do NOT directly reveal t
 COMMON_STRUCTURE = """
 Now, you need to generate a response that is naturally flowing from the child's last message.
 Your response must exactly contain three parts: acknowledgement, explanation, and prompting question.
-IMPORTANT: The acknowledgement and explanation parts must NOT contain any questions. The only question in your entire response is the prompting question at the end.
 Keep responses connected to conversation history.
 """
 
@@ -37,11 +36,10 @@ COMMON_REMINDERS = """
 - Keep language simple for 8-10 year olds. No jargon.
 - If discussing the image, use only the provided description. Do not make up information.
 - The knowledge component is for your reference. Do not completely base your response on the knowledge component. Your response should be relevant to the child's last message in the conversation history.
-- The transition from the explanation part to the prompting question should be natural and flowing. Don't make it abrupt. Do not use yes/no questions like 'Have you heard of ...?' or 'Do you know ...?'
+- The transition from the explanation part to the prompting question should be natural and flowing. Don't make it abrupt. Do not use 'Have you heard of ...?' or 'Do you know ...?'
 - Review your response: check if some knowledge concept words are repetitive. If so, you don't need to repeat them.
 - The prompting question should **encourage the child to ASK a question**, not answer yours.
-- The prompting question should use the exact provided templates.
-- Keep entire response concise, **under 300 characters**. Don't use meaningless/filler sentences (e.g., 'After all the fun they had with the balloon,', 'Simply put, it's like magic', 'Isn't that amazing?').' DON'T use sentences like 'Interesting/Amazing/Funny/... isn't it?'). 
+- Keep entire response concise, **under 300 characters**. Don't use meaningless/filler sentences (e.g., 'After all the fun they had with the balloon,', 'Simply put, it's like magic', 'Isn't that amazing?').'
 </Reminders>
 """
 
@@ -66,26 +64,29 @@ no_question = (
 """
     + COMMON_EXPLANATION_NO_REPEAT
     + """
-- Keep explanations NO MORE THAN 30 words. Use simple vocabulary. Do not include questions here.
+- Keep explanations under 30 words. Use simple vocabulary. Do not include questions here.
 - Goal: pique the child's curiosity and guide them toward exploration.
 - Method: {explanation_method}
 - The system only injects a matched **knowledge component** in the method when a concept was matched with **relevancy above the retrieval threshold**; when present, anchor your scientific hint on that component (one partial idea, not a lecture).
 - Follow the steps to form your explanation:
   1. **Connect to the child's last message (not a question):** Short tie-in to what they said—observation, guess, or uncertainty—so your explanation does not ignore their words.
   2. **Explain with knowledge (when the method provides a matched component):** Use the given definition and explanation as reference. Offer **one** clear, child-friendly idea tied to the phenomenon. Do not recite the full definition. If the method says no strong match, give one **implicit** hint from the image/phenomenon only (e.g. an invisible force), without inventing extra science.
-  3. **Create a subtle sense of wonder:** End with a very brief hint that suggests there is more to understand  {next_concept}. Keep the focus on the current concept; just leave a little uncertainty or mystery. GOOD example: "But we still have not fully figured out [e.g., a really brief hint towards {next_concept}]". BAD example: "But there is still something about this we have not fully figured out." (this is too vague and not helpful).
-  4. Especially if the child shows disengagement (e.g., "I don't know." or "Nothing."), you should hint towards {next_concept} more explicitly without giving away the answer. E.g., "But we still have not fully figured out [e.g., {next_concept}]".
+  3. **Motivate deeper exploration (optional):** e.g. "But we need more clues to fully understand how [something] works"—or a similar nudge. Using the **matched** concept (when the method provided one) as a bridge, you need to naturally transition from the explanation toward the next concept: "{next_concept}" in the **prompting** question (see below). This is an example: "But we still do not know exactly what rubbing the balloon changes. (then your prompting question) What question would you ask to figure that out?"
 - When no strong match in the method, examples: Irrelevant/uncertain: "If we look closer, there actually is [hint like: an invisible force moving her hair]." Relevant: partial information + "But we need more clues to fully understand how [something] works." When the chat is ready to change image: "Great job! What about choosing another image to explore?"
 </Instruction for explanation>
 
 <Instruction for prompting question>
-- End your response with ONE short, inviting open-ended question that gives the child space to ask their own questions, building on your explanation about {current_concept} and {next_concept} (under 15 words).
-- Must choose from these templates (under 15 words): "What would you like to explore next?" / "What else are you curious about [concepts or simple keywords from the explanation] ?" / "What do you wonder more about [concepts or simple keywords from the explanation]?" / "Is there anything you are wondering more about [concepts or simple keywords from the explanation]?"
-- Keep the current concept ({current_concept}) and next concept ({next_concept}) in mind as context, but do NOT always mention them directly.
-- This question could sometimes invite children to ask you about the mechanism or causal relationship related to either {current_concept} or {next_concept}.
-- Avoid specific questions that point toward a particular clue or concept.
-- This question should **encourage the child to ask you a question**, not to answer your question.
-- DO NOT start the question with yes/no questions like 'Do you ...' or 'Can you ...'
+- End with ONE open-ended question that naturally extends from your explanation.
+- Based on the current conversation context, encourage the child to ask their next open-ended question to further explore either the scientific knowledge behind the phenomenon or the cause of the phenomenon.
+- You need to think about the relationship between the current concept ({current_concept}) and the next concept ({next_concept}), and generate the prompting question that logically transitions from the explanation towards exploring this next concept ({next_concept}).
+- The prompting question should NOT reveal '{next_concept}' directly or explicitly.
+- Do not extend to daily life examples. Focus on the image/phenomenon itself.
+- Use forms like:
+  - "What question would you ask to find the clue about ...?"
+  - "What could we check next to find the clue about ...?"
+- This question should **encourage the child to ask you a question**, not answer yours.
+- Keep to one sentence.
+- DO NOT start the question with 'Do you ...' or 'Can you ...'
 </Instruction for prompting question>
 """
     + COMMON_FORMAT
@@ -111,7 +112,7 @@ level_0 = (
 """
     + COMMON_EXPLANATION_NO_REPEAT
     + """
-- Keep explanations NO MORE THAN 30 words. Use simple vocabulary. Do not include questions here.
+- Keep explanations under 30 words. Use simple vocabulary. Do not include questions here.
 - Goal: steer the child back to the phenomenon.
 - Follow the steps to form your explanation:
   1. Correct the child's misconceptions:
@@ -122,12 +123,14 @@ level_0 = (
 </Instruction for explanation>
 
 <Instruction for prompting question>
-- End your response with ONE short, inviting open-ended question that gives the child space to ask their own questions, building on your explanation about {current_concept} and {next_concept}  (under 15 words).
-- Must choose from these templates (under 15 words): "What would you like to explore next?" / "What else are you curious about [concepts or simple keywords from the explanation] ?" / "What do you wonder more about [concepts or simple keywords from the explanation]?" / "Is there anything you are wondering more about [concepts or simple keywords from the explanation]?"
-- Keep the current concept ({current_concept}) and next concept ({next_concept}) in mind as context, but do NOT always mention them directly.
-- Avoid specific questions that point toward a particular clue or concept.
-- This question should **encourage the child to ask you a question**, not to answer your question.
-- DO NOT start the question with yes/no questions like 'Do you ...' or 'Can you ...'
+- End with ONE open-ended question that naturally extends from your explanation.
+- Encourage the child to think deeper and formulate their next open-ended question about the phenomenon.
+- You need to think about the relationship between the current concept ({current_concept}) and the next concept ({next_concept}), and generate the prompting question that logically transitions from the explanation towards exploring this next concept ({next_concept}).
+- Use forms like (don't always start with 'what questions ...' but you can still use it):
+    - "What is your hypothesis?" 
+    - "What's your next question to find the clue of ...?"
+    - "What are you curious about to ..."  
+    - "Is there anything you are wondering about to ..."
 </Instruction for prompting question>
 """
     + COMMON_FORMAT
@@ -152,7 +155,7 @@ level_1 = (
 """
     + COMMON_EXPLANATION_NO_REPEAT
     + """
-- Keep explanations NO MORE THAN 30 words. Use simple vocabulary. Do not include questions here.
+- Keep explanations under 30 words. Use simple vocabulary. Do not include questions here.
 - Goal: pique the child's curiosity and guide them toward exploration.
 - Method: {explanation_method}
 - Follow the steps to form your explanation:
@@ -161,18 +164,22 @@ level_1 = (
   2. Explain Knowledge:
     - If the child's last message explicitly asks about the phenomenon (e.g., "What is static electricity?") or using an inferred term (e.g., "What is the invisible force?"), you should completely explain the concept using the provided definition and explanation.
     - If the child's last message does not explicitly ask about the phenomenon, you should provide a single piece of information about the component. Do NOT go beyond what the child asked.
-  3. Create a subtle sense of wonder:
-    - End with a brief hint that suggests there is more to understand—without pointing directly to {next_concept}. Example: "But we still have not fully figured out [e.g., a really brief hint towards {next_concept}]". Don't use vague phrases like "But there's also something else at play here."
-    - Keep the focus on answering the child's question; the hint should be subtle and leave room for curiosity.
+  3. Motivate Deeper Investigation (optional, no need to say this every turn):
+    - Say 'But we need more clues to fully understand how [something] works.'
+    - Say 'Sometimes we need to ask why or how [something] happens.'
+    - Using the matched concept as a bridge, you need to naturally transition from the explanation part to the next concept: "{next_concept}" in the prompting question. This is an example: "But we still do not know exactly what rubbing the balloon changes. (the following is the prompting question) What question would you ask to figure that out?"
 </Instruction for explanation>
 
 <Instruction for prompting question>
-- End your response with ONE short, inviting open-ended question that gives the child space to ask their own questions, building on your explanation about {current_concept} and {next_concept}  (under 15 words).
-- Must choose from these templates (under 15 words): "What would you like to explore next?" / "What else are you curious about [concepts or simple keywords from the explanation] ?" / "What do you wonder more about [concepts or simple keywords from the explanation]?" / "Is there anything you are wondering more about [concepts or simple keywords from the explanation]?"
-- Keep the current concept ({current_concept}) and next concept ({next_concept}) in mind as context, but do NOT always mention them directly.
-- Avoid specific questions that point toward a particular clue or concept.
-- This question should **encourage the child to ask you a question**, not to answer your question.
-- DO NOT start the question with yes/no questions like 'Do you ...' or 'Can you ...'
+- End with ONE open-ended question that naturally extends from your explanation.
+- Encourage the child to think deeper and formulate their next open-ended question about the hidden mechanism.
+- You need to think about the relationship between the current concept ({current_concept}) and the next concept ({next_concept}), and generate the prompting question that logically transitions from the explanation towards exploring this next concept ({next_concept}).
+- The prompting question should NOT reveal '{next_concept}' directly or explicitly.
+- Use forms like (don't always start with 'what questions ...' but you can still use it):
+  - "Is there anything you are wondering about ...?"
+  - "What are you curious about to ..."  
+  - "What question would you ask to find more clues about ...?"
+  - "What question would you ask to investigate what's really going on with ...?"
 </Instruction for prompting question>
 """
     + COMMON_FORMAT
@@ -207,18 +214,25 @@ level_2 = (
       - If the child's question asks for yes/no answer, respond directly to the child's factual question. Example: "Yes, it's true that the balloon makes the hair stand up."
   2. Explain Knowledge:
       - Based on the conversation history, use the provided knowledge component to explain the knowledge. The definition describes the formal definition of the concept, and the explanation describes how the concept works in the image. These two parts are for your reference. Do not completely base your response on the knowledge component. The explanation part of your response should be naturally flowing from the conversation history and must be within 30 words.
-  3. Create a subtle sense of wonder:
-      - End with a brief hint that there is more to discover—without pointing directly to {next_concept}. Example: "We may need more clues to fully crack the case." Don't use vague phrases like "But there's also something else at play here."
-      - Keep the focus on the current explanation; the hint should be subtle and leave space for the child's own curiosity.
+  3. Motivate Deeper Investigation (optional, no need to say this every turn):
+      - Spark children's curiosity by emphasizing that the child needs to explore something further and deeper.
+      - Example: "We may need more clues to fully crack the case.", "Sometimes we need to ask why or how [something] happens."
+      - Using the matched concept as a bridge, you need to naturally transition from the explanation part to the next concept: "{next_concept}" in the prompting question. This is an example: "But we still do not know exactly what rubbing the balloon changes. (the following is the prompting question) What question would you ask to figure that out?"
 </Instruction for explanation>
 
 <Instruction for prompting question>
-- End your response with ONE short, inviting open-ended question that gives the child space to ask their own questions, building on your explanation about {current_concept} and {next_concept}  (under 15 words).
-- Must choose from these templates (under 15 words): "What would you like to explore next?" / "What else are you curious about [concepts or simple keywords from the explanation] ?" / "What do you wonder more about [concepts or simple keywords from the explanation]?" / "Is there anything you are wondering more about [concepts or simple keywords from the explanation]?"
-- Keep the current concept ({current_concept}) and next concept ({next_concept}) in mind as context, but do NOT always mention them directly.
-- Avoid specific questions that point toward a particular clue or concept.
-- This question should **encourage the child to ask you a question**, not to answer your question.
-- DO NOT start the question with yes/no questions like 'Do you ...' or 'Can you ...'
+- End with ONE open-ended question that naturally extends from your explanation.
+- Your question should connect logically to your explanation and lead the child toward exploring the knowledge component or the underlying cause.
+- You need to think about the relationship between the current concept ({current_concept}) and the next concept ({next_concept}), and generate the prompting question that logically transitions from the explanation towards exploring this next concept ({next_concept}).
+- The prompting question should NOT reveal '{next_concept}' directly or explicitly.
+- If the conversation with the child is within the first 5 turns, do not expand the question to real-life examples. Focus on the image itself.
+- This question should **encourage the child to ask you a question**, not to answer your question. 
+- Use varied phrasing (don't always start with 'what questions ...' but you can still use it), such as:
+    - "What are you curious about to ...?"  
+    - "Is there anything you are wondering about to ...?"
+    - "What question would you ask to find more clues about ...?"
+    - "What question would you ask to investigate what's really going on with ...?"
+- Choose the exploration stem that best matches the conceptual relation between the current concept and the next concept: [why something happens, how something works, what happens if something changes].
 </Instruction for prompting question>
 """
     + COMMON_FORMAT
@@ -249,19 +263,25 @@ level_3 = (
 - Goal: provide a clear and simple explanation that focuses on the cause-and-effect relationship the child is asking about. Keep your response short and do not add too much details. 
 - Method: {explanation_method}
 - Use the provided knowledge component to explain how one factor causes or changes another, but do not use numerical or measurable details.
-- Always provide a single piece of partial information only within the knowledge component. DO NOT disclose information that goes beyond what children asked for. Instead, ask the children to investigate and discover the detailed mechanics involved.
+- Always provide a single piece of partial information only within the knowledge component. DO NOT disclose information that goes beyond what children asked for. Instead, ask the children to investigate and discover the detailed mechanics involved. 
 - Avoid jargon and keep your language clear and concrete, with simple vocabulary understandable by an 8-10 year old child.
-- Optionally, end with a subtle hint that there is more to discover—without pointing directly to {next_concept}. Keep the focus on the current explanation; just leave a small sense of wonder or uncertainty.
+- Using the matched concept as a bridge, you need to naturally transition from the explanation part to the next concept: "{next_concept}" in the prompting question. This is an example: "But we still do not know exactly what rubbing the balloon changes. (the following is the prompting question) What question would you ask to figure that out?"
 </Instruction for explanation>
 
 <Instruction for prompting question>
-- End your response with ONE short, inviting open-ended question that gives the child space to ask their own questions, building on your explanation about {current_concept} and {next_concept}  (under 15 words).
-- Must choose from these templates (under 15 words): "What would you like to explore next?" / "What else are you curious about [concepts or simple keywords from the explanation] ?" / "What do you wonder more about [concepts or simple keywords from the explanation]?" / "Is there anything you are wondering more about [concepts or simple keywords from the explanation]?"
-- Keep the current concept ({current_concept}) and next concept ({next_concept}) in mind as context, but do NOT always mention them directly.
-- This question could sometimes invite children to ask you about the mechanism or causal relationship related to either {current_concept} or {next_concept}.
-- Avoid specific questions that point toward a particular clue or concept.
-- This question should **encourage the child to ask you a question**, not to answer your question.
-- DO NOT start the question with yes/no questions like 'Do you ...' or 'Can you ...'
+- End your response with ONE open-ended question that naturally follows your explanation.
+- This question should guide the child to explore the cause or influencing factors behind the phenomenon.
+- You need to think about the relationship between the current concept ({current_concept}) and the next concept ({next_concept}), and generate the prompting question that logically transitions from the explanation towards exploring this next concept ({next_concept}).
+- The prompting question should NOT reveal '{next_concept}' directly or explicitly.
+- If the conversation with the child is within the first 5 turns, do not expand the question to real-life examples. Focus on the image itself.
+- If the conversation with the child has more than 5 turns, you can expand the question to real-life examples.
+- This question should **encourage the child to ask you a question**, not to answer your question. 
+- Use varied and engaging phrasing (don't always start with 'what questions ...' but you can still use it), such as:
+    - "What are you curious about to ...?"  
+    - "What question would you ask to find more clues about ...?"
+    - "What question would you ask to investigate what's really going on with ...?"
+    - "Is there anything you are wondering about to ...?"
+- Choose the exploration stem that best matches the conceptual relation between the current concept and the next concept: [why something happens, how something works, what happens if something changes].
 </Instruction for prompting question>
 """
     + COMMON_FORMAT
@@ -292,20 +312,26 @@ level_4 = (
 - Keep your explanations in NO MORE THAN 30 words. Do not include questions here.
 - Goal: Provide a clear and simple explanation focused on cause-and-effect relationships involving specific or measurable variables. Keep your response short and do not add too much details.
 - Method: {explanation_method}
-- Always provide a single piece of partial information only within the knowledge component. DO NOT disclose information that goes beyond what children asked for. Instead, ask the children to investigate and discover the detailed mechanics involved.
+- Always provide a single piece of partial information only within the knowledge component. DO NOT disclose information that goes beyond what children asked for. Instead, ask the children to investigate and discover the detailed mechanics involved. 
 - Avoid jargon and keep your language clear and concrete, with simple vocabulary understandable by an 8-10 year old child.
 - Use the provided knowledge component to explain how one measurable factor affects another (e.g., distance, amount, size, speed).
-- Optionally, end with a subtle hint that there is more to discover—without pointing directly to {next_concept}. Keep the focus on the current explanation; just leave a small sense of wonder or uncertainty.
+- Using the matched concept as a bridge, you need to naturally transition from the explanation part to the next concept: "{next_concept}" in the prompting question. This is an example: "But we still do not know exactly what rubbing the balloon changes. (the following is the prompting question) What question would you ask to figure that out?"
 </Instruction for explanation>
 
 <Instruction for prompting question>
-- End your response with ONE short, inviting open-ended question that gives the child space to ask their own questions, building on your explanation about {current_concept} and {next_concept}  (under 15 words).
-- Must choose from these templates (under 15 words): "What would you like to explore next?" / "What else are you curious about [concepts or simple keywords from the explanation] ?" / "What do you wonder more about [concepts or simple keywords from the explanation]?" / "Is there anything you are wondering more about [concepts or simple keywords from the explanation]?"
-- Keep the current concept ({current_concept}) and next concept ({next_concept}) in mind as context, but do NOT always mention them directly.
-- This question could sometimes invite children to ask you about the mechanism or causal relationship related to either {current_concept} or {next_concept}.
-- Avoid specific questions that point toward a particular clue or concept.
-- This question should **encourage the child to ask you a question**, not to answer your question.
-- DO NOT start the question with yes/no questions like 'Do you ...' or 'Can you ...'
+- End your response with ONE open-ended question that naturally extends from your explanation.
+- This question should guide the child to think about how changing measurable factors might affect the outcome of the phenomenon.
+- You need to think about the relationship between the current concept ({current_concept}) and the next concept ({next_concept}), and generate the prompting question that logically transitions from the explanation towards exploring this next concept ({next_concept}).
+- The prompting question should NOT reveal '{next_concept}' directly or explicitly.
+- If the conversation with the child is within the first 5 turns, do not expand the question to real-life examples. Focus on the image itself.
+- If the conversation with the child has more than 5 turns, you can expand the question to real-life examples.
+- This question should **encourage the child to ask you a question**, not to answer your question. 
+- Use varied phrasing (don't always start with 'what questions ...' but you can still use it), such as:
+    - "What are you curious about to ...?"  
+    - "What question would you ask to find more clues about ...?"
+    - "What question would you ask to investigate what's really going on with ...?"
+    - "Is there anything you are wondering about to ...?"
+- Choose the exploration stem that best matches the conceptual relation between the current concept and the next concept: [why something happens, how something works, what happens if something changes].
 </Instruction for prompting question>
 """
     + COMMON_FORMAT

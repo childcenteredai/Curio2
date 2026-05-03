@@ -6,12 +6,12 @@
         <img class="bg-decor bg-green-blur2" src="/imgs/green_blur2.svg" alt="" />
         <img class="bg-decor bg-purple-circle" src="/imgs/purple_circle.svg" alt="" />
         <img class="bg-decor bg-orange-blur2" src="/imgs/orange_blur2.svg" alt="" />
-        <img class="bg-decor bg-colorful-dots" src="/imgs/colorful_dots.svg" alt="" />
+        <img class="bg-decor bg-colorful-dots" src="/imgs/colorful_dots.png" alt="" />
         <img class="bg-decor bg-pink-blur" src="/imgs/pink_blur.svg" alt="" />
         <img class="bg-decor bg-green-blur1" src="/imgs/green_blur1.svg" alt="" />
         <img class="bg-decor bg-orange-blur" src="/imgs/orange_blur.svg" alt="" />
-        <img class="bg-decor bg-plant1" src="/imgs/plant1.svg" alt="" />
-        <img class="bg-decor bg-plant2" src="/imgs/plant2.svg" alt="" />
+        <img class="bg-decor bg-plant1" src="/imgs/plant1.png" alt="" />
+        <img class="bg-decor bg-plant2" src="/imgs/plant2.png" alt="" />
       </div>
 
       <div class="selection-header">
@@ -35,7 +35,7 @@
             />
             <div class="card-frame-inner">
               <img
-                :src="img.path"
+                :src="img.previewPath"
                 :alt="img.alt"
                 class="preview-image"
               />
@@ -89,27 +89,32 @@ onMounted(async () => {
 })
 
 interface ImageOption {
+  /** Full-size image URL passed to `/chat` (query `image`). */
   path: string
+  previewPath: string
   alt: string
   name: string
 }
 
 /** Decorative tape per card (cycle if more than three images). */
-const pasteTapeSrc = ['/imgs/paste1.svg', '/imgs/paste2.svg', '/imgs/paste3.svg'] as const
+const pasteTapeSrc = ['/imgs/paste1.png', '/imgs/paste2.png', '/imgs/paste3.png'] as const
 
 const images = ref<ImageOption[]>([
   {
     path: '/imgs/balloon.jpg',
+    previewPath: '/imgs/balloon-preview.jpeg',
     alt: 'Two girls with pink balloons',
     name: 'Balloon Mystery'
   },
   {
     path: '/imgs/bend.jpg',
+    previewPath: '/imgs/bend-preview.jpeg',
     alt: 'Bending Water mystery',
     name: 'Bending Water Mystery'
   },
   {
     path: '/imgs/pepper.jpg',
+    previewPath: '/imgs/pepper-preview.jpg',
     alt: 'Pepper mystery',
     name: 'Pepper Mystery'
   }

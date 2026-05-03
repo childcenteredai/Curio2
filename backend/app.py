@@ -907,9 +907,8 @@ def get_explanation_method_and_matched_kg(
     """
     explanation_method = (
         "No strongly matched knowledge component is available for this turn. "
-        "Use the child's latest message and conversation history to respond naturally "
-        "and guide exploration, without directly revealing the phenomenon or introducing "
-        "any specific matched concept."
+        "Primarily respond to what the child just said—their observation, guess, or question. "
+        "Guide exploration naturally without directly revealing the phenomenon or introducing any specific concept."
     )
     matched_kg = None
 
@@ -935,7 +934,7 @@ def get_explanation_method_and_matched_kg(
             matched_kg, phenomenon
         )
         if definition and explanation:
-            explanation_method = f"Here are the matched knowledge component's definition: {definition} and explanation: {explanation}. Based on the conversation history, use the provided knowledge component to explain the knowledge. The definition describes the formal definition of the concept, and the explanation describes how the concept works in the image. These two parts are for your reference. The explanation part of your response should be: (1) focus on the provided knowledge component and avoid introducing other concepts to confuse the child (e.g., if you are introducing 'electrons', do not mention 'charge'), (2) naturally flowing from the conversation history, and (3) must be within 30 words."
+            explanation_method = f"Here are the matched knowledge component's definition: {definition} and explanation: {explanation}. Primary goal: directly answer or respond to what the child just said—their question, guess, or observation. Use this knowledge component as reference to support your answer; do not recite it verbatim. Keep focused on the matched component and avoid introducing other concepts (e.g., if introducing 'electrons', do not mention 'charge'). Response must be naturally flowing from the conversation history and within 30 words."
 
     return matched_kg, explanation_method
 
@@ -1598,6 +1597,13 @@ def chat_completion():
                 )
                 all_concepts_matched_flag[conversation_id] = True
 
+            # Embed next concept subtle hint into explanation_method
+            if next_concept_for_prompting and explanation_method:
+                explanation_method += (
+                    f" Optionally, at end of your explanation, add a very brief subtle hint within 10 words"
+                    f"that points toward exploring '{next_concept_for_prompting}'—without naming or revealing it directly."
+                )
+
             # Replace placeholders in prompt (only if still in scienceqa state)
             if current_state == "scienceqa":
                 state_prompt = state_prompt.replace(
@@ -2146,20 +2152,25 @@ def chat_completion_stream():
                         matched_kg, phenomenon
                     )
                     if definition and explanation:
-                        explanation_method = f"Here are the matched knowledge component's definition: {definition} and explanation: {explanation}. Based on the conversation history, use the provided knowledge component to explain the knowledge. The definition describes the formal definition of the concept, and the explanation describes how the concept works in the image. These two parts are for your reference. The explanation part of your response should be: (1) focus on the provided knowledge component and avoid introducing other concepts to confuse the child (e.g., if you are introducing 'electrons', do not mention 'charge'), (2) naturally flowing from the conversation history, and (3) must be within 30 words."
+                        explanation_method = f"Here are the matched knowledge component's definition: {definition} and explanation: {explanation}. Primary goal: directly answer or respond to what the child just said—their question, guess, or observation. Use this knowledge component as reference to support your answer; do not recite it verbatim. Keep focused on the matched component and avoid introducing other concepts (e.g., if introducing 'electrons', do not mention 'charge'). Response must be naturally flowing from the conversation history and within 30 words."
                     else:
                         explanation_method = (
                             "No strongly matched knowledge component is available for this turn. "
-                            "Use the child's latest message and conversation history to respond naturally "
-                            "and guide exploration, without directly revealing the phenomenon or introducing "
-                            "any specific matched concept."
+                            "Primarily respond to what the child just said—their observation, guess, or question. "
+                            "Guide exploration naturally without directly revealing the phenomenon or introducing any specific concept."
                         )
                 else:
                     explanation_method = (
                         "No strongly matched knowledge component is available for this turn. "
-                        "Use the child's latest message and conversation history to respond naturally "
-                        "and guide exploration, without directly revealing the phenomenon or introducing "
-                        "any specific matched concept."
+                        "Primarily respond to what the child just said—their observation, guess, or question. "
+                        "Guide exploration naturally without directly revealing the phenomenon or introducing any specific concept."
+                    )
+
+                # Embed next concept subtle hint into explanation_method
+                if next_concept_for_prompting and explanation_method:
+                    explanation_method += (
+                        f" Optionally, at end of your explanation, add a very brief subtle hint within 10 words"
+                        f"that points toward exploring '{next_concept_for_prompting}'—without naming or revealing it directly."
                     )
 
                 # Replace placeholders in prompt (only if still in scienceqa state)
@@ -2168,18 +2179,8 @@ def chat_completion_stream():
                         "{explanation_method}", explanation_method
                     )
             else:
-                # For irrelevant/no_question, use fallback explanation method
-                explanation_method = (
-                    "No strongly matched knowledge component is available for this turn. "
-                    "Use the child's latest message and conversation history to respond naturally "
-                    "and guide exploration, without directly revealing the phenomenon or introducing "
-                    "any specific matched concept."
-                )
-                state_prompt = state_prompt.replace(
-                    "{explanation_method}", explanation_method
-                )
                 matched_kg = None  # No knowledge retrieval for irrelevant/no_question
-                # Find next concept: lowest order concept that hasn't been matched
+                # Find next concept first (needed for explanation_method hint)
                 next_concept_for_prompting = None
                 for concept_name in concept_names:
                     if concept_name not in matched_concepts:
@@ -2192,6 +2193,21 @@ def chat_completion_stream():
                         "[Concept Logic] All concepts matched! Staying in scienceqa with empty next_concept."
                     )
                     all_concepts_matched_flag[conversation_id] = True
+
+                # For irrelevant/no_question, use fallback explanation method
+                explanation_method = (
+                    "No strongly matched knowledge component is available for this turn. "
+                    "Primarily respond to what the child just said—their observation, guess, or question. "
+                    "Guide exploration naturally without directly revealing the phenomenon or introducing any specific concept."
+                )
+                if next_concept_for_prompting:
+                    explanation_method += (
+                        f" Optionally, at the very end of your explanation, add a very brief subtle hint "
+                        f"that points toward exploring '{next_concept_for_prompting}'—without naming or revealing it directly."
+                    )
+                state_prompt = state_prompt.replace(
+                    "{explanation_method}", explanation_method
+                )
 
             # Replace placeholders for all scienceqa questions
             if current_state == "scienceqa":

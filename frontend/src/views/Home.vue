@@ -55,9 +55,14 @@
       </div>
     </div>
 
-    <!-- Right side - Chat interface -->
+    <!-- Right side - Chat interface (after first-time mic check this session) -->
     <div class="chat-section">
+      <MicCheckModal
+        v-if="hasChatImage && !micCheckComplete"
+        @done="handleMicCheckDone"
+      />
       <Conversation
+        v-if="hasChatImage && micCheckComplete"
         ref="conversationRef"
         :selectedImagePath="currentImage"
       />
@@ -66,12 +71,30 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Conversation from '../components/Conversation.vue'
+import MicCheckModal from '../components/MicCheckModal.vue'
+
+const MIC_CHECK_SESSION_KEY = 'curio_mic_check_completed'
 
 const route = useRoute()
 const router = useRouter()
+
+const hasChatImage = computed(() => {
+  const q = route.query.image
+  return typeof q === 'string' && q.trim().length > 0
+})
+
+const micCheckComplete = ref(
+  typeof sessionStorage !== 'undefined' &&
+    sessionStorage.getItem(MIC_CHECK_SESSION_KEY) === '1'
+)
+
+const handleMicCheckDone = () => {
+  sessionStorage.setItem(MIC_CHECK_SESSION_KEY, '1')
+  micCheckComplete.value = true
+}
 
 const currentImage = ref('/imgs/balloon.jpg')
 const imageAlt = ref('Two girls with pink balloons - friendly cartoon illustration')

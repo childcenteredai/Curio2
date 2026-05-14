@@ -248,6 +248,20 @@ const emit = defineEmits<{
   (e: 'firstTimeMatchedConcepts', concepts: string[]): void
 }>()
 
+const PREFERRED_MIC_KEY = 'curio_preferred_mic_device_id'
+
+const buildAudioConstraints = (): MediaTrackConstraints => {
+  const id = localStorage.getItem(PREFERRED_MIC_KEY)
+  if (id) {
+    return {
+      deviceId: { exact: id },
+      echoCancellation: true,
+      noiseSuppression: true
+    }
+  }
+  return { echoCancellation: true, noiseSuppression: true }
+}
+
 // Audio recording
 let mediaRecorder: MediaRecorder | null = null
 let audioChunks: Blob[] = []
@@ -522,7 +536,9 @@ const handleVoiceClick = async () => {
 
 const startRecording = async () => {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: buildAudioConstraints()
+    })
     mediaRecorder = new MediaRecorder(stream)
     recorderMimeType = mediaRecorder.mimeType || 'audio/webm'
     audioChunks = []

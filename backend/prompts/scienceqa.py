@@ -570,11 +570,23 @@ LEVEL_4_BODY = (
 )
 
 _QUESTION_LEVEL_BODIES = {
-    "irrelevant_question": (LEVEL_0_BODY, QUEST_PROMPT_SHALLOW_NEXT, QUEST_PROMPT_SHALLOW_CURRENT),
+    "irrelevant_question": (
+        LEVEL_0_BODY,
+        QUEST_PROMPT_SHALLOW_NEXT,
+        QUEST_PROMPT_SHALLOW_CURRENT,
+    ),
     "factual": (LEVEL_1_BODY, QUEST_PROMPT_SHALLOW_NEXT, QUEST_PROMPT_SHALLOW_CURRENT),
-    "explanatory": (LEVEL_2_BODY, QUEST_PROMPT_SHALLOW_NEXT, QUEST_PROMPT_SHALLOW_CURRENT),
+    "explanatory": (
+        LEVEL_2_BODY,
+        QUEST_PROMPT_SHALLOW_NEXT,
+        QUEST_PROMPT_SHALLOW_CURRENT,
+    ),
     "general_causal": (LEVEL_3_BODY, QUEST_PROMPT_DEEP_NEXT, QUEST_PROMPT_DEEP_CURRENT),
-    "specific_causal": (LEVEL_4_BODY, QUEST_PROMPT_DEEP_NEXT, QUEST_PROMPT_DEEP_CURRENT),
+    "specific_causal": (
+        LEVEL_4_BODY,
+        QUEST_PROMPT_DEEP_NEXT,
+        QUEST_PROMPT_DEEP_CURRENT,
+    ),
 }
 
 
@@ -586,9 +598,7 @@ def get_question_level_prompt(
         level_tag,
         _QUESTION_LEVEL_BODIES["irrelevant_question"],
     )
-    prompting = (
-        prompting_next if include_next_concept_in_prompting else prompting_curr
-    )
+    prompting = prompting_next if include_next_concept_in_prompting else prompting_curr
     return (
         COMMON_HEADER
         + COMMON_STRUCTURE

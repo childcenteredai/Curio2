@@ -41,7 +41,7 @@ COMMON_REMINDERS = """
 - The prompting question should **encourage the child to ASK a question**, not answer yours.
 - The prompting question should use the exact provided templates.
 - Keep entire response CONCISE, **under 300 characters**. Don't use meaningless/filler sentences (e.g., 'After all the fun they had with the balloon,', 'Simply put, it's like magic', 'Isn't that amazing?').' DON'T use sentences like 'Interesting/Amazing/Funny/... isn't it?'). 
-- Response must contain exactly ONE question (the prompting question).
+- Your response should include exactly ONE question, which must be the prompting question at the end. There should be no questions anywhere else in your response.
 </Reminders>
 """
 
@@ -64,19 +64,19 @@ NONQUESTION_EXPL_TAIL_NEXT = """
   1. **Connect to the child's last message (not a question):** Short tie-in to what they said—observation, guess, or uncertainty—so your explanation does not ignore their words.
   2. **Explain with knowledge (when the method provides a matched component):** Use the given definition and explanation as reference. Offer **one** clear, child-friendly idea tied to the phenomenon. Do not recite the full definition. If the method says no strong match, give one **implicit** hint from the image/phenomenon only (e.g. an invisible force), without inventing extra science.
   3. **Create a subtle sense of wonder:** End with a very brief hint that suggests there is more to understand—without pointing directly to {next_concept}. Keep the focus on the current explanation; just leave a small sense of wonder or uncertainty. GOOD example: "But we still have not fully figured out [e.g., a really brief hint towards {next_concept}]". BAD example: "But there is still something about this we have not fully figured out." (this is too vague and not helpful).
-  4. If the child shows disengagement (e.g., "I don't know." or "Nothing."), you should hint towards {next_concept} (in one sentence) more explicitly without giving away the answer. E.g., "But we still have not fully figured out [e.g., {next_concept}]".
+  4. If the child shows disengagement (e.g., "I don't know." or "Nothing."), you should hint towards {next_concept} (in one sentence) more explicitly without giving away the answer. E.g., "But we still have not fully figured out [e.g., hint towards {next_concept}]". Don't provide useless hints like 'magic-like effect'. Please give concrete hint.
 - When no strong match in the method, examples: Irrelevant/uncertain: "If we look closer, there actually is [hint like: an invisible force moving her hair]." Relevant: partial information + "But we need more clues to fully understand how [something] works." When the chat is ready to change image: "Great job! What about choosing another image to explore?"
 """
 
 NONQUESTION_PROMPTING_NEXT = """
 <Instruction for prompting question>
 - End your response with **ONE** short, inviting open-ended question that gives the child space to ask their own questions, building on your explanation about {current_concept} and {next_concept} (under 15 words).
-- Must choose from these templates (under 15 words): 
+- The question must be from these templates (under 15 words): 
 "What would you like to explore next?"
-"What else are you curious about [concepts or simple keywords from the explanation]? "
-"What do you want to learn more about [concepts or simple keywords from the explanation]? "
-"What other questions do you have about [concepts or simple keywords from the explanation]? "
-"Is there anything else you are wondering about [concepts or simple keywords from the explanation]? "
+"What else are you curious about [simple keywords related to the next concept: {next_concept}]? "
+"What do you want to learn more about [simple keywords related to the next concept: {next_concept}]? "
+"What other questions do you have about [simple keywords related to the next concept: {next_concept}]? "
+"Is there anything else you are wondering about [simple keywords related to the next concept: {next_concept}]? "
 - Keep the current concept ({current_concept}) and next concept ({next_concept}) in mind as context, but do NOT always mention them directly.
 - This question could sometimes invite children to ask you about the mechanism or causal relationship related to either {current_concept} or {next_concept}.
 - Avoid specific questions that point toward a particular clue or concept.
@@ -88,29 +88,29 @@ NONQUESTION_PROMPTING_NEXT = """
 NONQUESTION_PROMPTING_NO_NEXT = """
 <Instruction for prompting question>
 - End your response with ONE short, inviting open-ended question that gives the child space to ask their own questions, building on your explanation (under 15 words).
-- Must choose from these templates (under 15 words): 
+- The question must be from these templates (under 15 words): 
 "What would you like to explore next?"
-"What else are you curious about [simple keywords from {current_concept}]?"  
-"What do you want to learn more about [simple keywords from {current_concept}]?" 
-"What other questions do you have about [simple keywords from {current_concept}]?"
-"Is there anything else you are wondering about [simple keywords from {current_concept}]?"
-- Keep the phenomenon and anything you discussed in mind, but avoid steering toward specific concepts the child did not mention.
+"What else are you curious about [simple keywords related to the current concept: {current_concept}]?"  
+"What do you want to learn more about [simple keywords related to the current concept: {current_concept}]?" 
+"What other questions do you have about [simple keywords related to the current concept: {current_concept}]?"
+"Is there anything else you are wondering about [simple keywords related to the current concept: {current_concept}]?"
+- Keep the phenomenon and anything you discussed in mind, anchored on {current_concept} where it fits, but avoid steering toward concepts the child did not mention.
 - This question should **encourage the child to ask you a question**, not to answer your question.
 - DO NOT start the question with yes/no questions like 'Do you ...' or 'Can you ...'
 </Instruction for prompting question>
 """
 
-# Question-track (TRACK A) prompting: shallow = irrelevant / factual / explanatory; deep = causal levels
+# Question-track (TRACK A) prompting: shallow = irrelevant / factual ; deep = explanatory / causal levels
 QUEST_PROMPT_SHALLOW_NEXT = """
 <Instruction for prompting question>
-- End your response with ONE short, inviting open-ended question that gives the child space to ask their own questions, building on your explanation about {current_concept} and {next_concept} (under 15 words).
-- Must choose from these templates (under 15 words), don't always repeat the same template: 
+- End your response with ONE short, inviting open-ended question that gives the child space to ask their own questions, building on your explanation (under 15 words).
+- The question must be from these templates (under 15 words), check the conversation history and don't always use the same template: 
 "What would you like to explore next?"
-"What else are you curious about [concepts or simple keywords from the explanation] ?" 
-"What do you want to learn more about [concepts or simple keywords from the explanation]? "
-"What other questions do you have about [concepts or simple keywords from the explanation]?"
-"Is there anything you are wondering about [concepts or simple keywords from the explanation]?"
-- Keep the current concept ({current_concept}) and next concept ({next_concept}) in mind as context, but do NOT always mention them directly.
+"What else are you curious about [simple keywords related to the current concept: **{current_concept}** ] ?" 
+"What do you want to learn more about [simple keywords related to the current concept: **{current_concept}**]? "
+"What other questions do you have about [simple keywords related to the current concept: **{current_concept}**]?"
+"Is there anything you are wondering about [simple keywords related to the current concept: **{current_concept}**]?"
+- Keep the current concept (**{current_concept}**) in mind as context, but do NOT always mention them directly.
 - Avoid specific questions that point toward a particular clue or concept.
 - This question should **encourage the child to ask you a question**, not to answer your question.
 - DO NOT start the question with yes/no questions like 'Do you ...' or 'Can you ...'
@@ -120,13 +120,13 @@ QUEST_PROMPT_SHALLOW_NEXT = """
 QUEST_PROMPT_SHALLOW_CURRENT = """
 <Instruction for prompting question>
 - End your response with ONE short, inviting open-ended question that gives the child space to ask their own questions, building on your explanation (under 15 words).
-- Must choose from these templates (under 15 words): 
+- The question must be from these templates (under 15 words): 
 "What would you like to explore next?"
-"What else are you curious about [simple keywords from {current_concept}]?"  
-"What do you want to learn more about [simple keywords from {current_concept}]?" 
-"What other questions do you have about [simple keywords from {current_concept}]?"
-"Is there anything else you are wondering about [simple keywords from {current_concept}]?"
-- Keep the phenomenon and anything you discussed in mind, anchored on {current_concept} where it fits, but avoid steering toward concepts the child did not mention.
+"What else are you curious about [simple keywords related to the current concept: **{current_concept}**]?"  
+"What do you want to learn more about [simple keywords related to the current concept: **{current_concept}**]? " 
+"What other questions do you have about [simple keywords related to the current concept: **{current_concept}**]?"
+"Is there anything else you are wondering about [simple keywords related to the current concept: **{current_concept}**]?"
+- Keep the phenomenon and anything you discussed in mind, anchored on **{current_concept}** where it fits, but avoid steering toward concepts the child did not mention.
 - This question should **encourage the child to ask you a question**, not to answer your question.
 - DO NOT start the question with yes/no questions like 'Do you ...' or 'Can you ...'
 </Instruction for prompting question>
@@ -135,14 +135,14 @@ QUEST_PROMPT_SHALLOW_CURRENT = """
 QUEST_PROMPT_DEEP_NEXT = """
 <Instruction for prompting question>
 - End your response with ONE short, inviting open-ended question that gives the child space to ask their own questions, building on your explanation about {current_concept} and {next_concept} (under 15 words).
-- Must choose from these templates (under 15 words), don't always repeat the same template: 
+- The question must be from these templates (under 15 words), check the conversation history and don't always use the same template: 
 "What would you like to explore next?"
-"What else are you curious about [concepts or simple keywords from the explanation] ?" 
-"What do you want to learn more about [concepts or simple keywords from the explanation]? "
-"What other questions do you have about [concepts or simple keywords from the explanation]?"
-"Is there anything you are wondering about [concepts or simple keywords from the explanation]?"
-- Keep the current concept ({current_concept}) and next concept ({next_concept}) in mind as context, but do NOT always mention them directly.
-- This question could sometimes invite children to ask you about the mechanism or causal relationship related to either {current_concept} or {next_concept}.
+"What else are you curious about [simple keywords related to the next concept: **{next_concept}**] ?" 
+"What do you want to learn more about [simple keywords related to the next concept: **{next_concept}**]? "
+"What other questions do you have about [simple keywords related to the next concept: **{next_concept}**]?"
+"Is there anything you are wondering about [simple keywords related to the next concept: **{next_concept}**]?"
+- Keep the current concept (**{current_concept}**) and next concept (**{next_concept}**) in mind as context, but do NOT always mention them directly. But you should use concrete details about the **{next_concept}** in the question, instead of using meaningless words like 'science magic' or 'science mystery'.
+- This question could sometimes invite children to ask you about the mechanism or causal relationship related to either **{current_concept}** or **{next_concept}**.
 - Avoid specific questions that point toward a particular clue or concept.
 - This question should **encourage the child to ask you a question**, not to answer your question.
 - DO NOT start the question with yes/no questions like 'Do you ...' or 'Can you ...'
@@ -152,12 +152,12 @@ QUEST_PROMPT_DEEP_NEXT = """
 QUEST_PROMPT_DEEP_CURRENT = """
 <Instruction for prompting question>
 - End your response with ONE short, inviting open-ended question that gives the child space to ask their own questions, building on your explanation (under 15 words).
-- Must choose from these templates (under 15 words): 
+- The question must be from these templates (under 15 words): 
 "What would you like to explore next?"
-"What else are you curious about [simple keywords from {current_concept}]?"  
-"What do you want to learn more about [simple keywords from {current_concept}]?" 
-"What other questions do you have about [simple keywords from {current_concept}]?"
-"Is there anything else you are wondering about [simple keywords from {current_concept}]?"
+"What else are you curious about [simple keywords related to {current_concept}]?"  
+"What do you want to learn more about [simple keywords related to {current_concept}]?" 
+"What other questions do you have about [simple keywords related to {current_concept}]?"
+"Is there anything else you are wondering about [simple keywords related to {current_concept}]?"
 - Keep the phenomenon and anything you discussed in mind, anchored on {current_concept} where it fits, but avoid steering toward concepts the child did not mention.
 - This question could sometimes invite children to ask you about the mechanism or causal relationship related to {current_concept}.
 - Avoid specific questions that point toward a particular clue or concept.
@@ -452,6 +452,7 @@ LEVEL_1_BODY = (
     - "Great question!"
     - "Good thinking!"
 - Review the conversation history. Do not repeat the same acknowledgement phrase two times in a row.
+- Do not say 'You are totally right' if the child's last message is a question.
 </Instruction for acknowledgement>
 
 <Instruction for explanation>
@@ -468,7 +469,7 @@ LEVEL_1_BODY = (
     - If the child's last message explicitly asks about the phenomenon (e.g., "What is static electricity?") or using an inferred term (e.g., "What is the invisible force?"), you should completely explain the concept using the provided definition and explanation.
     - If the child's last message does not explicitly ask about the phenomenon, you should provide a single piece of information about the component. Do NOT go beyond what the child asked.
   3. Create a subtle sense of wonder:
-    - End with a brief hint that suggests there is more to understand—without pointing directly to {next_concept}. Example: "But we still have not fully figured out [e.g., a really brief hint towards {next_concept}]". Don't use vague phrases like "But there's also something else at play here."
+    - End with a brief hint that suggests there is more to understand—without pointing directly to **{next_concept}**. Example: "But we still have not fully figured out [e.g., a really brief hint towards {next_concept}]". Don't use vague phrases like "But there's also something else at play here."
     - Keep the focus on answering the child's question; the hint should be subtle and leave room for curiosity.
 </Instruction for explanation>
 
@@ -502,7 +503,7 @@ LEVEL_2_BODY = (
   2. Explain Knowledge:
       - Based on the conversation history, use the provided knowledge component to explain the knowledge. The definition describes the formal definition of the concept, and the explanation describes how the concept works in the image. These two parts are for your reference. Do not completely base your response on the knowledge component. The explanation part of your response should be naturally flowing from the conversation history and must be within 30 words.
   3. Create a subtle sense of wonder:
-      - End with a brief hint that there is more to discover—without pointing directly to {next_concept}. Example: "We may need more clues to fully crack the case." Don't use vague phrases like "But there's also something else at play here."
+      - End with a brief hint that there is more to discover—without pointing directly to **{next_concept}**. Example: "We may need more clues to fully crack the case." Don't use vague phrases like "But there's also something else at play here."
       - Keep the focus on the current explanation; the hint should be subtle and leave space for the child's own curiosity.
 </Instruction for explanation>
 
@@ -578,8 +579,8 @@ _QUESTION_LEVEL_BODIES = {
     "factual": (LEVEL_1_BODY, QUEST_PROMPT_SHALLOW_NEXT, QUEST_PROMPT_SHALLOW_CURRENT),
     "explanatory": (
         LEVEL_2_BODY,
-        QUEST_PROMPT_SHALLOW_NEXT,
-        QUEST_PROMPT_SHALLOW_CURRENT,
+        QUEST_PROMPT_DEEP_NEXT,
+        QUEST_PROMPT_DEEP_CURRENT,
     ),
     "general_causal": (LEVEL_3_BODY, QUEST_PROMPT_DEEP_NEXT, QUEST_PROMPT_DEEP_CURRENT),
     "specific_causal": (

@@ -185,13 +185,53 @@ SCIENCEQA_QUESTION_DEPTH = {
 }
 
 
+def normalize_eval_tag(raw):
+    """Strip angle brackets, quotes, and whitespace from evaluator output."""
+    if not raw:
+        return ""
+    tag = str(raw).strip().lower().replace("<", "").replace(">", "")
+    return tag.strip("'\"` ").strip()
+
+
+def inherit_matched_concept_for_non_question_prompt(
+    child_question_level,
+    matched_concept_this_turn,
+    matched_concepts_ordered_history,
+):
+    """
+    For non-question eval labels (observation, hypothesis, uncertainty, etc.): if this
+    turn has no KG match, reuse the last concept from the conversation's matched
+    history so {current_concept} placeholders in the assistant prompt are not empty.
+    """
+    if child_question_level not in SCIENCEQA_NON_QUESTION_LEVELS:
+        return matched_concept_this_turn
+    if matched_concept_this_turn:
+        return matched_concept_this_turn
+    if not matched_concepts_ordered_history:
+        return matched_concept_this_turn
+    return matched_concepts_ordered_history[-1]
+
+
+def scienceqa_prompting_should_include_next_concept(child_question_level):
+    """
+    When True, assistant prompt uses the *next concept* variant for the prompting question.
+    Depth is from SCIENCEQA_QUESTION_DEPTH for question types; irrelevant / non-question
+    labels are treated as depth 0 (< 2 → current-only prompting variant).
+    """
+    if not child_question_level:
+        return False
+    depth = SCIENCEQA_QUESTION_DEPTH.get(child_question_level, 0)
+    return depth >= 2
+
+
 def scienceqa_include_next_concept_hint(scienceqa_hist_list):
     """
-    Use current + next concept in the *prompting question* only when the child has
-    reached explanatory depth (or deeper) at least once, or the last two turns were
-    both non-question hypotheses in a row.
-    Explanations still always reference {next_concept} via the shared prompt text.
+    History-based gates for the *next concept* prompting variant: any past (or current,
+    if already appended) turn reached explanatory depth or deeper, or the last two turns
+    were both hypothesis.
     """
+    if not scienceqa_hist_list:
+        return False
     if any(SCIENCEQA_QUESTION_DEPTH.get(x, 0) >= 2 for x in scienceqa_hist_list):
         return True
     if (
@@ -201,6 +241,16 @@ def scienceqa_include_next_concept_hint(scienceqa_hist_list):
     ):
         return True
     return False
+
+
+def scienceqa_prompting_include_next_concept(child_question_level, scienceqa_hist_list):
+    """
+    Next-concept prompting variant when this turn's question depth is >= 2 and/or
+    scienceqa_include_next_concept_hint(history) is True.
+    """
+    if scienceqa_prompting_should_include_next_concept(child_question_level):
+        return True
+    return scienceqa_include_next_concept_hint(scienceqa_hist_list or [])
 
 
 def state_classification(state, messages, phenomenon):
@@ -231,8 +281,7 @@ def state_classification(state, messages, phenomenon):
 
     # content = response.output_text or ""
     content = response.choices[0].message.content or ""
-    eval_state = content.strip().lower().replace("<", "").replace(">", "")
-    return eval_state
+    return normalize_eval_tag(content)
 
 
 def state_update(current_state, eval_state, state_history_list):
@@ -261,10 +310,12 @@ def state_update(current_state, eval_state, state_history_list):
 
 
 def state_prompt_classification(
-    state,
-    child_question_level=None,
-    scienceqa_include_next_concept_hint=True,
+    state, child_question_level=None, scienceqa_hist_list=None
 ):
+    if child_question_level:
+        child_question_level = normalize_eval_tag(child_question_level)
+    if scienceqa_hist_list:
+        scienceqa_hist_list = [normalize_eval_tag(x) for x in scienceqa_hist_list if x]
     if state == "greet":
         return open("prompts/greet.txt", "r").read()
     elif state == "scaffolding":
@@ -272,30 +323,32 @@ def state_prompt_classification(
     elif state == "discover":
         return open("prompts/discover.txt", "r").read()
     elif state == "scienceqa":
+        include_next_in_prompting = scienceqa_prompting_include_next_concept(
+            child_question_level,
+            scienceqa_hist_list,
+        )
         if child_question_level in SCIENCEQA_NON_QUESTION_LEVELS:
             return get_non_question_prompt(
                 child_question_level,
-                scienceqa_include_next_concept_hint,
+                include_next_in_prompting,
             )
         elif child_question_level == "irrelevant_question":
             return get_question_level_prompt(
-                "irrelevant_question", scienceqa_include_next_concept_hint
+                "irrelevant_question", include_next_in_prompting
             )
         elif child_question_level == "factual":
-            return get_question_level_prompt(
-                "factual", scienceqa_include_next_concept_hint
-            )
+            return get_question_level_prompt("factual", include_next_in_prompting)
         elif child_question_level == "explanatory":
             return get_question_level_prompt(
-                "explanatory", scienceqa_include_next_concept_hint
+                "explanatory", include_next_in_prompting
             )
         elif child_question_level == "general_causal":
             return get_question_level_prompt(
-                "general_causal", scienceqa_include_next_concept_hint
+                "general_causal", include_next_in_prompting
             )
         elif child_question_level == "specific_causal":
             return get_question_level_prompt(
-                "specific_causal", scienceqa_include_next_concept_hint
+                "specific_causal", include_next_in_prompting
             )
         else:
             # If child_question_level is None or unknown, this should not happen
@@ -305,7 +358,7 @@ def state_prompt_classification(
                 f"WARNING: state_prompt_classification called for scienceqa with child_question_level={child_question_level}, using level_0 as fallback"
             )
             return get_question_level_prompt(
-                "irrelevant_question", scienceqa_include_next_concept_hint
+                "irrelevant_question", include_next_in_prompting
             )
     elif state == "close":
         return open("prompts/close.txt", "r").read()
@@ -314,9 +367,47 @@ def state_prompt_classification(
         print(
             f"WARNING: state_prompt_classification called with unknown state={state}, using level_0 as fallback"
         )
-        return get_question_level_prompt(
-            "irrelevant_question", scienceqa_include_next_concept_hint
-        )
+        return get_question_level_prompt("irrelevant_question", False)
+
+
+def _message_content_for_prompt_log(content):
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    return repr(content)
+
+
+def print_generation_prompt(
+    all_messages,
+    *,
+    label,
+    conversation_id=None,
+    current_state=None,
+    child_question_level=None,
+):
+    """Print the full message list sent to chat completion for this turn (server logs)."""
+    try:
+        lines = [
+            "",
+            "=" * 60,
+            f"=== Generation prompt ({label}) ===",
+        ]
+        if conversation_id is not None:
+            lines.append(f"conversation_id: {conversation_id}")
+        if current_state is not None:
+            lines.append(f"current_state: {current_state}")
+        if child_question_level is not None:
+            lines.append(f"child_question_level: {child_question_level}")
+        lines.append(f"message_count: {len(all_messages)}")
+        for i, msg in enumerate(all_messages):
+            role = msg.get("role", "?")
+            lines.append(f"--- [{i}] role={role} ---")
+            lines.append(_message_content_for_prompt_log(msg.get("content")))
+        lines.extend(["=== End generation prompt ===", ""])
+        print("\n".join(lines))
+    except Exception as e:
+        print(f"[print_generation_prompt] error: {e}")
 
 
 def format_prompt(
@@ -1526,7 +1617,6 @@ def chat_completion():
         conv_scienceqa_history = scienceqa_history[conversation_id]
 
         eval_state = None
-        scienceqa_next_concept_hint_active = True
 
         if state != "scienceqa":
             eval_state = state_classification(state, messages, phenomenon)
@@ -1542,9 +1632,6 @@ def chat_completion():
                     "scienceqa", messages, phenomenon
                 )
                 conv_scienceqa_history.append(child_question_level)
-                scienceqa_next_concept_hint_active = (
-                    scienceqa_include_next_concept_hint(conv_scienceqa_history)
-                )
                 print("\n=== Turn Evaluation (Non-Stream) ===")
                 print(f"Child's Question: {latest_user_message}")
                 print(f"Evaluation Result: {child_question_level}")
@@ -1552,7 +1639,7 @@ def chat_completion():
                 state_prompt = state_prompt_classification(
                     current_state,
                     child_question_level,
-                    scienceqa_next_concept_hint_active,
+                    conv_scienceqa_history,
                 )
             else:
                 child_question_level = None
@@ -1572,14 +1659,11 @@ def chat_completion():
                 "scienceqa", messages, phenomenon
             )
             conv_scienceqa_history.append(child_question_level)
-            scienceqa_next_concept_hint_active = scienceqa_include_next_concept_hint(
-                conv_scienceqa_history
-            )
             current_state = "scienceqa"
             state_prompt = state_prompt_classification(
                 current_state,
                 child_question_level,
-                scienceqa_next_concept_hint_active,
+                conv_scienceqa_history,
             )
             if latest_user_message:
                 print("\n=== Turn Evaluation (Non-Stream) ===")
@@ -1682,6 +1766,11 @@ def chat_completion():
 
             # Replace placeholders for all scienceqa questions
             if current_state == "scienceqa":
+                matched_concept = inherit_matched_concept_for_non_question_prompt(
+                    child_question_level,
+                    matched_concept,
+                    matched_concepts,
+                )
                 # Fill in current_concept from the matched knowledge component
                 if not matched_concept:
                     # If matched_concept is empty, adjust the prompt wording to avoid
@@ -1723,7 +1812,7 @@ def chat_completion():
             state_prompt = state_prompt_classification(
                 current_state,
                 child_question_level,
-                scienceqa_include_next_concept_hint(conv_scienceqa_history),
+                conv_scienceqa_history,
             )
             if not state_prompt:
                 state_prompt = "Respond to the child's question."
@@ -1787,19 +1876,13 @@ def chat_completion():
             [system_message] + messages + [{"role": "user", "content": state_prompt}]
         )
 
-        # Debug: print final prompt before response generation
-        # try:
-        #     print("\n=== AI Prompt (Non-Stream) ===")
-        #     print(f"current_state: {current_state}")
-        #     print(f"child_question_level: {child_question_level}")
-        #     print(f"messages_count: {len(all_messages)}")
-        #     print("--- system ---")
-        #     print(system_message.get("content") or "")
-        #     print("--- last_user_prompt (state_prompt) ---")
-        #     print(state_prompt or "")
-        #     print("=== End AI Prompt ===\n")
-        # except Exception as e:
-        #     print(f"Prompt print error (non-stream): {e}")
+        print_generation_prompt(
+            all_messages,
+            label="non-stream",
+            conversation_id=conversation_id,
+            current_state=current_state,
+            child_question_level=child_question_level,
+        )
 
         response = client.chat.completions.create(
             model=OPENAI_CHAT_MODEL,
@@ -2077,7 +2160,6 @@ def chat_completion_stream():
         conv_scienceqa_history = scienceqa_history[conversation_id]
 
         eval_state = None
-        scienceqa_next_concept_hint_active = True
 
         if state != "scienceqa":
             eval_state = state_classification(state, messages, phenomenon)
@@ -2093,9 +2175,6 @@ def chat_completion_stream():
                     "scienceqa", messages, phenomenon
                 )
                 conv_scienceqa_history.append(child_question_level)
-                scienceqa_next_concept_hint_active = (
-                    scienceqa_include_next_concept_hint(conv_scienceqa_history)
-                )
                 print("\n=== Turn Evaluation (Stream) ===")
                 print(f"Child's Question: {latest_user_message}")
                 print(f"Evaluation Result: {child_question_level}")
@@ -2103,7 +2182,7 @@ def chat_completion_stream():
                 state_prompt = state_prompt_classification(
                     current_state,
                     child_question_level,
-                    scienceqa_next_concept_hint_active,
+                    conv_scienceqa_history,
                 )
             else:
                 child_question_level = None
@@ -2123,14 +2202,11 @@ def chat_completion_stream():
                 "scienceqa", messages, phenomenon
             )
             conv_scienceqa_history.append(child_question_level)
-            scienceqa_next_concept_hint_active = scienceqa_include_next_concept_hint(
-                conv_scienceqa_history
-            )
             current_state = "scienceqa"
             state_prompt = state_prompt_classification(
                 current_state,
                 child_question_level,
-                scienceqa_next_concept_hint_active,
+                conv_scienceqa_history,
             )
             if latest_user_message:
                 print("\n=== Turn Evaluation (Stream) ===")
@@ -2295,6 +2371,11 @@ def chat_completion_stream():
 
             # Replace placeholders for all scienceqa questions
             if current_state == "scienceqa":
+                matched_concept = inherit_matched_concept_for_non_question_prompt(
+                    child_question_level,
+                    matched_concept,
+                    matched_concepts,
+                )
                 # Fill in current_concept from the matched knowledge component
                 if not matched_concept:
                     # If matched_concept is empty, adjust the prompt wording to avoid
@@ -2337,7 +2418,7 @@ def chat_completion_stream():
             state_prompt = state_prompt_classification(
                 current_state,
                 child_question_level,
-                scienceqa_include_next_concept_hint(conv_scienceqa_history),
+                conv_scienceqa_history,
             )
             if not state_prompt:
                 state_prompt = "Respond to the child's question."
@@ -2400,19 +2481,13 @@ def chat_completion_stream():
             [system_message] + messages + [{"role": "user", "content": state_prompt}]
         )
 
-        # Debug: print final prompt before response generation (stream)
-        # try:
-        #     print("\n=== AI Prompt (Stream) ===")
-        #     print(f"current_state: {current_state}")
-        #     print(f"child_question_level: {child_question_level}")
-        #     print(f"messages_count: {len(all_messages)}")
-        #     print("--- system ---")
-        #     print((system_message.get("content") or ""))
-        #     print("--- last_user_prompt (state_prompt) ---")
-        #     print((state_prompt or ""))
-        #     print("=== End AI Prompt ===\n")
-        # except Exception as e:
-        #     print(f"Prompt print error (stream): {e}")
+        print_generation_prompt(
+            all_messages,
+            label="stream",
+            conversation_id=conversation_id,
+            current_state=current_state,
+            child_question_level=child_question_level,
+        )
 
         # Capture variables for use inside generate() function
         saved_child_question_level = child_question_level
@@ -2622,15 +2697,17 @@ def get_conversation_history_for_chat(conversation_id, db_session, phenomenon):
             if not state_history_list or state_history_list[-1] != msg.state:
                 state_history_list.append(msg.state)
 
-        if msg.evaluation_result and msg.evaluation_result in [
-            *SCIENCEQA_NON_QUESTION_LEVELS,
-            "irrelevant_question",
-            "factual",
-            "explanatory",
-            "general_causal",
-            "specific_causal",
-        ]:
-            scienceqa_history_list.append(msg.evaluation_result)
+        if msg.evaluation_result:
+            eval_tag = normalize_eval_tag(msg.evaluation_result)
+            if eval_tag in [
+                *SCIENCEQA_NON_QUESTION_LEVELS,
+                "irrelevant_question",
+                "factual",
+                "explanatory",
+                "general_causal",
+                "specific_causal",
+            ]:
+                scienceqa_history_list.append(eval_tag)
 
         if (
             msg.role == "assistant"

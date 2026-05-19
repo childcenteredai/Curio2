@@ -339,9 +339,7 @@ def state_prompt_classification(
         elif child_question_level == "factual":
             return get_question_level_prompt("factual", include_next_in_prompting)
         elif child_question_level == "explanatory":
-            return get_question_level_prompt(
-                "explanatory", include_next_in_prompting
-            )
+            return get_question_level_prompt("explanatory", include_next_in_prompting)
         elif child_question_level == "general_causal":
             return get_question_level_prompt(
                 "general_causal", include_next_in_prompting

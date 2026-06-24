@@ -150,10 +150,10 @@ CURIO_APP_VERSION = int(os.getenv("CURIO_APP_VERSION", "1"))
 # Global variable to track conversation start times
 conversation_start_times = {}
 
-# System prompt for Curio
+# System prompt for Nova
 CURIO_SYSTEM_PROMPT = """
 <System Introduction>
-You are Curio, a friendly and encouraging science chatbot for children aged 8-10. The system shows an image, and your task is to prompt the child to discover the scientific phenomenon behind the image. Once the child has discovered the scientific phenomenon, you will prompt the child to ask questions to discover the science knowledge behind the phenomenon.
+You are Nova, a friendly and encouraging science chatbot for children aged 8-10. The system shows an image, and your task is to prompt the child to discover the scientific phenomenon behind the image. Once the child has discovered the scientific phenomenon, you will prompt the child to ask questions to discover the science knowledge behind the phenomenon.
 </System Introduction>
 """
 
@@ -1749,10 +1749,19 @@ def chat_completion():
                 )
                 all_concepts_matched_flag[conversation_id] = True
 
-            # Embed next concept subtle hint into explanation_method (always when a next concept exists)
-            if next_concept_for_prompting and explanation_method:
+            # Embed next concept subtle hint into explanation_method only when the prompting
+            # question is moving toward the next concept, so the sense of wonder hint and the
+            # prompting question stay on the same concept (otherwise the hint stays on current).
+            include_next_in_prompting = scienceqa_prompting_include_next_concept(
+                child_question_level, conv_scienceqa_history
+            )
+            if (
+                next_concept_for_prompting
+                and explanation_method
+                and include_next_in_prompting
+            ):
                 explanation_method += (
-                    f" Optionally, at end of your explanation, add a very brief subtle hint within 10 words"
+                    f" Optionally, at end of your explanation, add a very brief subtle hint within 10 words "
                     f"that points toward exploring '{next_concept_for_prompting}'—without naming or revealing it directly."
                 )
 
@@ -2324,10 +2333,19 @@ def chat_completion_stream():
                         "Guide exploration naturally without directly revealing the phenomenon or introducing any specific concept."
                     )
 
-                # Embed next concept subtle hint into explanation_method (always when a next concept exists)
-                if next_concept_for_prompting and explanation_method:
+                # Embed next concept subtle hint into explanation_method only when the prompting
+                # question is moving toward the next concept, so the sense of wonder hint and the
+                # prompting question stay on the same concept (otherwise the hint stays on current).
+                include_next_in_prompting = scienceqa_prompting_include_next_concept(
+                    child_question_level, conv_scienceqa_history
+                )
+                if (
+                    next_concept_for_prompting
+                    and explanation_method
+                    and include_next_in_prompting
+                ):
                     explanation_method += (
-                        f" Optionally, at end of your explanation, add a very brief subtle hint within 10 words"
+                        f" Optionally, at end of your explanation, add a very brief subtle hint within 10 words "
                         f"that points toward exploring '{next_concept_for_prompting}'—without naming or revealing it directly."
                     )
 
@@ -2358,7 +2376,10 @@ def chat_completion_stream():
                     "Primarily respond to what the child just said—their observation, guess, or question. "
                     "Guide exploration naturally without directly revealing the phenomenon or introducing any specific concept."
                 )
-                if next_concept_for_prompting:
+                include_next_in_prompting = scienceqa_prompting_include_next_concept(
+                    child_question_level, conv_scienceqa_history
+                )
+                if next_concept_for_prompting and include_next_in_prompting:
                     explanation_method += (
                         f" Optionally, at the very end of your explanation, add a very brief subtle hint "
                         f"that points toward exploring '{next_concept_for_prompting}'—without naming or revealing it directly."

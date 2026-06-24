@@ -1122,7 +1122,7 @@ const loadExistingConversation = async () => {
         
         // Restore chat history from messages
         // Filter out system messages and only include user and assistant messages
-        const greetingText = "Hi, I'm Curio, your friendly science assistant. We are going to explore the scientific mystery in the image together! What do you find odd in this picture?"
+        const greetingText = "Hi, I'm Nova, your friendly science assistant. We are going to explore the scientific mystery in the image together! What do you find odd in this picture?"
         
         chatHistory.value = messages
           .filter((msg: any) => msg.role === 'user' || msg.role === 'assistant')
@@ -1189,7 +1189,7 @@ const loadExistingConversation = async () => {
 }
 
 const generateInitialGreeting = async () => {
-  const greetingText = "Hi, I'm Curio, your friendly science assistant. We are going to explore the scientific mystery in the image together! What do you find odd in this picture?"
+  const greetingText = "Hi, I'm Nova, your friendly science assistant. We are going to explore the scientific mystery in the image together! What do you find odd in this picture?"
   
   // Prevent duplicate greeting calls - check if greeting already exists in chat history
   const hasGreeting = chatHistory.value.some(msg => 

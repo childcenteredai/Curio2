@@ -42,8 +42,9 @@ COMMON_REMINDERS = """
 - The prompting question should use the exact provided templates.
 - Keep entire response CONCISE, **under 300 characters**. Don't use meaningless/filler sentences (e.g., 'After all the fun they had with the balloon,', 'Simply put, it's like magic', 'Isn't that amazing?').' DON'T use sentences like 'Interesting/Amazing/Funny/... isn't it?'). 
 - Your response should include exactly ONE question, which must be the prompting question at the end. There should be no questions anywhere else in your response.
-- The subtle sense of wonder hint in your explanation and the prompting question must be about the **same concept**. Never hint at one concept and then ask about a different one.
-- Vary how you phrase the subtle sense of wonder hint. Review the conversation history and do not reuse the same opener two times in a row. Rotate among forms such as: "But we still haven't figured out ...", "There's still a clue hiding about ...", "One piece of the puzzle is still missing—...", "But exactly how ... works is still a mystery", "We've got part of the story, but ... is still hidden".
+- The subtle sense of wonder hint (e.g., "... is still a mystery/secret") is OPTIONAL. Do NOT include it every turn. Use it only occasionally, when it genuinely adds curiosity and there is room for it—it's your call. When you skip it, use the freed-up space to make the explanation richer and more concrete.
+- When you DO include a subtle sense of wonder hint, it and the prompting question must be about the **same concept**. Never hint at one concept and then ask about a different one.
+- When you DO include the hint, vary how you phrase it. Review the conversation history and do not reuse the same opener two times in a row. Rotate among forms such as: "But we still haven't figured out ...", "There's still a clue hiding about ...", "One piece of the puzzle is still missing—...", "But exactly how ... works is still a mystery", "We've got part of the story, but ... is still hidden".
 </Reminders>
 """
 
@@ -55,7 +56,7 @@ COMMON_EXPLANATION_NO_REPEAT = """- **Explanation vs. conversation history:** Do
 # Non-question prompts: one variable per eval label (and per next-concept mode) so each
 # category can be edited independently.
 
-NONQUESTION_EXPL_PREFACE = """- Keep explanations NO MORE THAN 30 words. Use simple vocabulary. **Do not include questions here.**
+NONQUESTION_EXPL_PREFACE = """- Keep explanations NO MORE THAN 30 words. Use simple vocabulary and concise, easy to understand sentences. **Do not include questions here.**
 - Goal: pique the child's curiosity and guide them toward exploration.
 - Method: {explanation_method}
 - The system only injects a matched **knowledge component** in the method when a concept was matched with **relevancy above the retrieval threshold**; when present, anchor your scientific hint on that component (one partial idea, not a lecture).
@@ -65,7 +66,7 @@ NONQUESTION_EXPL_TAIL_NEXT = """
 - Follow the steps to form your explanation (DO NOT INCLUDE QUESTIONS IN YOUR EXPLANATION):
   1. **Connect to the child's last message (not a question):** Short tie-in to what they said—observation, guess, or uncertainty—so your explanation does not ignore their words.
   2. **Explain with knowledge (when the method provides a matched component):** Use the given definition and explanation as reference. Offer **one** clear, child-friendly idea tied to the phenomenon. Do not recite the full definition. If the method says no strong match, give one **implicit** hint from the image/phenomenon only (e.g. an invisible force), without inventing extra science.
-  3. **Create a subtle sense of wonder:** End with a very brief hint that suggests there is more to understand. Point this hint at the SAME concept your prompting question invites the child to explore. When a next concept ({next_concept}) is in play and your prompting question moves toward it, do not leave the hint only on {current_concept}: bridge naturally from {current_concept} toward {next_concept} without naming or revealing it directly. Otherwise keep the hint on {current_concept}. Vary the wording each turn (see <Reminders>). GOOD example: "But we still have not fully figured out [a really brief hint toward the concept your prompting question targets]". BAD example: "But there is still something about this we have not fully figured out." (this is too vague and not helpful).
+  3. **Optionally, create a subtle sense of wonder (NOT every turn):** Only occasionally, when it fits and adds curiosity, end with a very brief hint that suggests there is more to understand. If you skip it, spend the space on a richer, more concrete explanation instead. When you do include it, point this hint at the SAME concept your prompting question invites the child to explore. When a next concept ({next_concept}) is in play and your prompting question moves toward it, do not leave the hint only on {current_concept}: bridge naturally from {current_concept} toward {next_concept} without naming or revealing it directly. Otherwise keep the hint on {current_concept}. Vary the wording each turn (see <Reminders>). GOOD example: "But we still have not fully figured out [a really brief hint toward the concept your prompting question targets]". BAD example: "But there is still something about this we have not fully figured out." (this is too vague and not helpful).
   4. If the child shows disengagement (e.g., "I don't know." or "Nothing."), you should hint towards {next_concept} (in one sentence) more explicitly without giving away the answer. E.g., "But we still have not fully figured out [e.g., hint towards {next_concept}]". Don't provide useless hints like 'magic-like effect'. Please give concrete hint.
 - When no strong match in the method, examples: Irrelevant/uncertain: "If we look closer, there actually is [hint like: an invisible force moving her hair]." Relevant: partial information + "But we need more clues to fully understand how [something] works." When the chat is ready to change image: "Great job! What about choosing another image to explore?"
 """
@@ -434,7 +435,7 @@ LEVEL_0_BODY = (
 """
     + COMMON_EXPLANATION_NO_REPEAT
     + """
-- Keep explanations NO MORE THAN 30 words. Use simple vocabulary. Do not include questions here.
+- Keep explanations NO MORE THAN 30 words. Use simple vocabulary and concise, easy to understand sentences. Do not include questions here.
 - Goal: steer the child back to the phenomenon.
 - Follow the steps to form your explanation:
   1. Correct the child's misconceptions:
@@ -463,7 +464,7 @@ LEVEL_1_BODY = (
 """
     + COMMON_EXPLANATION_NO_REPEAT
     + """
-- Keep explanations NO MORE THAN 30 words. Use simple vocabulary. Do not include questions here.
+- Keep explanations NO MORE THAN 30 words. Use simple vocabulary and concise, easy to understand sentences. Do not include questions here.
 - Goal: pique the child's curiosity and guide them toward exploration.
 - Method: {explanation_method}
 - Follow the steps to form your explanation:
@@ -472,9 +473,9 @@ LEVEL_1_BODY = (
   2. Explain Knowledge:
     - If the child's last message explicitly asks about the phenomenon (e.g., "What is static electricity?") or using an inferred term (e.g., "What is the invisible force?"), you should completely explain the concept using the provided definition and explanation.
     - If the child's last message does not explicitly ask about the phenomenon, you should provide a single piece of information about the component. Do NOT go beyond what the child asked.
-  3. Create a subtle sense of wonder:
-    - End with a brief hint that there is more to understand, pointing at the SAME concept your prompting question targets. When the prompting question moves toward **{next_concept}**, bridge naturally from {current_concept} toward {next_concept} without naming or revealing it; otherwise keep the hint on {current_concept}. Vary the wording each turn (see <Reminders>). Don't use vague phrases like "But there's also something else at play here."
-    - Keep the focus on answering the child's question; the hint should be subtle and leave room for curiosity.
+  3. Optionally, create a subtle sense of wonder (NOT every turn):
+    - Only occasionally, when it fits, end with a brief hint that there is more to understand, pointing at the SAME concept your prompting question targets. When the prompting question moves toward **{next_concept}**, bridge naturally from {current_concept} toward {next_concept} without naming or revealing it; otherwise keep the hint on {current_concept}. Vary the wording each turn (see <Reminders>). Don't use vague phrases like "But there's also something else at play here."
+    - If you skip the hint, use the space for a richer, more concrete explanation. When you do include it, keep the focus on answering the child's question; the hint should be subtle and leave room for curiosity.
 </Instruction for explanation>
 
 """
@@ -506,9 +507,9 @@ LEVEL_2_BODY = (
       - If the child's question asks for yes/no answer, respond directly to the child's factual question. Example: "Yes, it's true that the balloon makes the hair stand up."
   2. Explain Knowledge:
       - Based on the conversation history, use the provided knowledge component to explain the knowledge. The definition describes the formal definition of the concept, and the explanation describes how the concept works in the image. These two parts are for your reference. Do not completely base your response on the knowledge component. The explanation part of your response should be naturally flowing from the conversation history and must be within 30 words.
-  3. Create a subtle sense of wonder:
-      - End with a brief hint that there is more to discover, pointing at the SAME concept your prompting question targets. When the prompting question moves toward **{next_concept}**, bridge naturally from {current_concept} toward {next_concept} without naming or revealing it; otherwise keep the hint on {current_concept}. Vary the wording each turn (see <Reminders>). Don't use vague phrases like "But there's also something else at play here."
-      - Keep the focus on the current explanation; the hint should be subtle and leave space for the child's own curiosity.
+  3. Optionally, create a subtle sense of wonder (NOT every turn):
+      - Only occasionally, when it fits, end with a brief hint that there is more to discover, pointing at the SAME concept your prompting question targets. When the prompting question moves toward **{next_concept}**, bridge naturally from {current_concept} toward {next_concept} without naming or revealing it; otherwise keep the hint on {current_concept}. Vary the wording each turn (see <Reminders>). Don't use vague phrases like "But there's also something else at play here."
+      - If you skip the hint, use the space for a richer, more concrete explanation. When you do include it, keep the focus on the current explanation; the hint should be subtle and leave space for the child's own curiosity.
 </Instruction for explanation>
 
 """
@@ -538,7 +539,7 @@ LEVEL_3_BODY = (
 - Use the provided knowledge component to explain how one factor causes or changes another, but do not use numerical or measurable details.
 - Always provide a single piece of partial information only within the knowledge component. DO NOT disclose information that goes beyond what children asked for. Instead, ask the children to investigate and discover the detailed mechanics involved.
 - Avoid jargon and keep your language clear and concrete, with simple vocabulary understandable by an 8-10 year old child.
-- Optionally, end with a subtle hint that there is more to discover, pointing at the SAME concept your prompting question targets. When the prompting question moves toward {next_concept}, bridge naturally from {current_concept} toward {next_concept} without naming or revealing it; otherwise keep the hint on {current_concept}. Vary the wording each turn (see <Reminders>).
+- Optionally (NOT every turn—only occasionally, when it fits), end with a subtle hint that there is more to discover, pointing at the SAME concept your prompting question targets. When the prompting question moves toward {next_concept}, bridge naturally from {current_concept} toward {next_concept} without naming or revealing it; otherwise keep the hint on {current_concept}. Vary the wording each turn (see <Reminders>). If you skip it, use the space for a richer explanation.
 </Instruction for explanation>
 
 """
@@ -568,7 +569,7 @@ LEVEL_4_BODY = (
 - Always provide a single piece of partial information only within the knowledge component. DO NOT disclose information that goes beyond what children asked for. Instead, ask the children to investigate and discover the detailed mechanics involved.
 - Avoid jargon and keep your language clear and concrete, with simple vocabulary understandable by an 8-10 year old child.
 - Use the provided knowledge component to explain how one measurable factor affects another (e.g., distance, amount, size, speed).
-- Optionally, end with a subtle hint that there is more to discover, pointing at the SAME concept your prompting question targets. When the prompting question moves toward {next_concept}, bridge naturally from {current_concept} toward {next_concept} without naming or revealing it; otherwise keep the hint on {current_concept}. Vary the wording each turn (see <Reminders>).
+- Optionally (NOT every turn—only occasionally, when it fits), end with a subtle hint that there is more to discover, pointing at the SAME concept your prompting question targets. When the prompting question moves toward {next_concept}, bridge naturally from {current_concept} toward {next_concept} without naming or revealing it; otherwise keep the hint on {current_concept}. Vary the wording each turn (see <Reminders>). If you skip it, use the space for a richer explanation.
 </Instruction for explanation>
 
 """

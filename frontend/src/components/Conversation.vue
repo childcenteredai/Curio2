@@ -579,6 +579,245 @@ const blobToBase64 = async (blob: Blob): Promise<string> => {
   return btoa(binary)
 }
 
+// --- Sentence-by-sentence streaming TTS + progressive reveal -----------------
+// Instead of waiting for the full response AND full TTS before the child sees or
+// hears anything, we detect sentence boundaries in the streaming text, synthesize
+// each sentence as soon as it is ready, and play the clips in order while
+// revealing the matching words. This makes the first sentence audible within
+// ~1-2s of generation starting.
+
+type WordToken = { text: string; visible: boolean }
+
+interface SpeechJob {
+  text: string
+  wordStart: number
+  wordEnd: number
+  promise: Promise<Blob>
+  abort: AbortController
+}
+
+interface PlaybackSession {
+  messageIndex: number
+  queue: SpeechJob[]
+  nextIndex: number
+  finished: boolean // producer will not add any more jobs
+  cancelled: boolean
+  firstStarted: boolean // first clip has begun (bubble revealed)
+  wake: (() => void) | null // resolve the player's idle wait when a job arrives
+  activeAudio: HTMLAudioElement | null
+  activeUrl: string | null
+}
+
+let currentPlayback: PlaybackSession | null = null
+
+const MIN_SENTENCE_CHARS = 15
+
+// Pull the leading complete sentence off `pending`, or null if none is ready yet.
+// Tiny fragments are merged into the next sentence unless `allowShort` is set
+// (used for the very first sentence so time-to-first-audio stays low).
+const extractLeadingSentence = (
+  pending: string,
+  allowShort: boolean
+): { sentence: string; rest: string } | null => {
+  // A boundary is .!? (optionally followed by closing quotes/brackets) then
+  // whitespace or end-of-string. Requiring whitespace/end after avoids splitting
+  // decimals like "3.5".
+  const re = /[.!?]+[)\]"'”’]*(?=\s|$)/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(pending)) !== null) {
+    const end = m.index + m[0].length
+    const sentence = pending.slice(0, end)
+    if (!allowShort && sentence.trim().length < MIN_SENTENCE_CHARS) {
+      continue // keep scanning to merge a tiny fragment into a longer chunk
+    }
+    return { sentence, rest: pending.slice(end) }
+  }
+  return null
+}
+
+const revealWordRange = (pb: PlaybackSession, start: number, end: number) => {
+  const msg = chatHistory.value[pb.messageIndex]
+  if (!msg || !msg.words) return
+  for (let i = start; i < end && i < msg.words.length; i++) {
+    const w = msg.words[i]
+    if (w) w.visible = true
+  }
+}
+
+// Append a sentence's word tokens to the message and start its TTS request now,
+// so synthesis overlaps ongoing generation / playback of earlier sentences.
+const enqueueSentence = (pb: PlaybackSession, rawSentence: string) => {
+  const text = rawSentence.trim()
+  if (!text) return
+  const msg = chatHistory.value[pb.messageIndex]
+  if (!msg || !msg.words) return
+
+  const wordStart = msg.words.length
+  const tokens: WordToken[] = rawSentence
+    .split(/(\s+)/)
+    .filter(w => w.length > 0)
+    .map(w => ({ text: w, visible: false }))
+  msg.words.push(...tokens)
+  const wordEnd = msg.words.length
+
+  const abort = new AbortController()
+  const promise = fetch('/api/speech', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+    signal: abort.signal
+  }).then(async (resp) => {
+    if (!resp.ok) throw new Error(`Speech generation failed: ${resp.status}`)
+    return await resp.blob()
+  })
+  promise.catch(() => { /* handled in the player, or aborted on cancel */ })
+
+  pb.queue.push({ text, wordStart, wordEnd, promise, abort })
+  pb.wake?.()
+}
+
+// Play a single sentence clip, revealing its words in sync with the audio.
+const playSentenceClip = (pb: PlaybackSession, job: SpeechJob, blob: Blob): Promise<void> => {
+  return new Promise<void>((resolve) => {
+    const url = URL.createObjectURL(blob)
+    const audio = new Audio(url)
+    pb.activeAudio = audio
+    pb.activeUrl = url
+    currentAudio = audio // keep legacy stop/cleanup paths working
+
+    let intervalId: ReturnType<typeof setInterval> | null = null
+    const clearTimer = () => { if (intervalId) { clearInterval(intervalId); intervalId = null } }
+
+    const cleanup = () => {
+      clearTimer()
+      if (pb.activeUrl === url) { URL.revokeObjectURL(url); pb.activeUrl = null }
+      if (pb.activeAudio === audio) pb.activeAudio = null
+      if (currentAudio === audio) currentAudio = null
+    }
+
+    const finish = () => {
+      revealWordRange(pb, job.wordStart, job.wordEnd)
+      scrollToBottom()
+      cleanup()
+      resolve()
+    }
+
+    const startPrinter = () => {
+      const duration = audio.duration
+      const msg = chatHistory.value[pb.messageIndex]
+      if (!msg || !msg.words) return
+      const words = msg.words
+      const indices: number[] = []
+      let totalChars = 0
+      for (let i = job.wordStart; i < job.wordEnd && i < words.length; i++) {
+        const w = words[i]
+        if (!w) continue
+        const t = w.text.trim()
+        if (t.length > 0) { indices.push(i); totalChars += t.length }
+      }
+      if (indices.length === 0 || !duration || !isFinite(duration) || totalChars === 0) return
+      const timings: Array<{ i: number; t: number }> = []
+      let acc = 0
+      for (const idx of indices) {
+        timings.push({ i: idx, t: acc })
+        acc += (words[idx]!.text.trim().length / totalChars) * duration
+      }
+      let cursor = 0
+      let lastScroll = 0
+      intervalId = setInterval(() => {
+        if (pb.cancelled || audio.paused || audio.ended) { clearTimer(); return }
+        const ct = audio.currentTime || 0
+        let revealed = false
+        while (cursor < timings.length) {
+          const tm = timings[cursor]
+          if (!tm || ct < tm.t) break
+          const w = words[tm.i]
+          if (w) { w.visible = true; revealed = true }
+          cursor++
+        }
+        if (revealed) {
+          const now = Date.now()
+          if (now - lastScroll >= 200) { scrollToBottom(); lastScroll = now }
+        }
+      }, 50)
+    }
+
+    const onReady = () => {
+      if (pb.cancelled) { cleanup(); resolve(); return }
+      if (!pb.firstStarted) {
+        pb.firstStarted = true
+        const msg = chatHistory.value[pb.messageIndex]
+        if (msg) msg.audioReady = true // reveal the bubble on the first clip
+        isPlayingResponseAudio.value = true
+      }
+      startPrinter()
+      audio.play().catch(() => { finish() })
+    }
+
+    audio.onended = () => finish()
+    audio.onerror = () => finish()
+
+    if (audio.readyState >= 2) {
+      onReady()
+    } else {
+      audio.addEventListener('canplay', onReady, { once: true })
+      audio.addEventListener('loadedmetadata', () => { if (audio.readyState >= 2) onReady() }, { once: true })
+    }
+  })
+}
+
+// Sequential player: consume queued sentence clips strictly in order.
+const runSentencePlayer = async (pb: PlaybackSession): Promise<void> => {
+  while (true) {
+    if (pb.cancelled) return
+    if (pb.nextIndex >= pb.queue.length) {
+      if (pb.finished) return
+      await new Promise<void>(resolve => { pb.wake = resolve })
+      pb.wake = null
+      continue
+    }
+    const job = pb.queue[pb.nextIndex]
+    pb.nextIndex++
+    if (!job) continue
+    let blob: Blob | null = null
+    try {
+      blob = await job.promise
+    } catch {
+      if (pb.cancelled) return
+      // This sentence's TTS failed: reveal its text without audio and continue.
+      const msg = chatHistory.value[pb.messageIndex]
+      if (msg && msg.audioReady === false) msg.audioReady = true
+      revealWordRange(pb, job.wordStart, job.wordEnd)
+      await scrollToBottom()
+      continue
+    }
+    if (pb.cancelled || !blob) return
+    await playSentenceClip(pb, job, blob)
+  }
+}
+
+// Stop and fully tear down the active streaming playback (if any).
+const cancelPlayback = () => {
+  const pb = currentPlayback
+  if (!pb) return
+  pb.cancelled = true
+  for (const job of pb.queue) {
+    try { job.abort.abort() } catch { /* ignore */ }
+  }
+  if (pb.activeAudio) {
+    try { pb.activeAudio.pause() } catch { /* ignore */ }
+    pb.activeAudio.currentTime = 0
+    if (currentAudio === pb.activeAudio) currentAudio = null
+    pb.activeAudio = null
+  }
+  if (pb.activeUrl && pb.activeUrl.startsWith('blob:')) {
+    URL.revokeObjectURL(pb.activeUrl)
+    pb.activeUrl = null
+  }
+  pb.wake?.()
+  if (currentPlayback === pb) currentPlayback = null
+}
+
 const processAudio = async (audioBlob: Blob, mimeType: string) => {
   isLoading.value = true
   
@@ -607,10 +846,27 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
       words: [],
       audioReady: false
     })
-    
+
+    // Start a fresh sentence-by-sentence playback session for this turn.
+    cancelPlayback()
+    const playback: PlaybackSession = {
+      messageIndex: assistantMessageIndex,
+      queue: [],
+      nextIndex: 0,
+      finished: false,
+      cancelled: false,
+      firstStarted: false,
+      wake: null,
+      activeAudio: null,
+      activeUrl: null
+    }
+    currentPlayback = playback
+    const playerPromise = runSentencePlayer(playback)
+
     let fullText = ''
+    let pendingText = '' // streamed text not yet emitted as a sentence
+    let emittedSentenceCount = 0
     let nextState: typeof convState.value = convState.value
-    let lastFirstTimeMatched: string[] = []
     
     try {
       const response = await fetch('/api/chat/stream', {
@@ -645,8 +901,6 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
       }
       
       let buffer = ''
-      let lastScrollTime = 0
-      const scrollThrottle = 100 // Throttle scrolling to every 100ms during streaming
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
@@ -669,26 +923,45 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
               const data = JSON.parse(jsonStr)
               
               if (data.type === 'token') {
-                fullText += data.content || ''
-                // Update content for display (will be hidden until audio plays)
+                const delta = data.content || ''
+                fullText += delta
+                pendingText += delta
+                // Update stored content (bubble stays hidden until first audio)
                 const assistantMsg = chatHistory.value[assistantMessageIndex]
                 if (assistantMsg) {
                   assistantMsg.content = fullText
                 }
-                // Auto-scroll during streaming (throttled)
-                const now = Date.now()
-                if (now - lastScrollTime >= scrollThrottle) {
-                  await scrollToBottom()
-                  lastScrollTime = now
+                // Detect complete sentences and start their TTS immediately.
+                let piece = extractLeadingSentence(pendingText, emittedSentenceCount === 0)
+                while (piece) {
+                  enqueueSentence(playback, piece.sentence)
+                  emittedSentenceCount++
+                  pendingText = piece.rest
+                  piece = extractLeadingSentence(pendingText, emittedSentenceCount === 0)
                 }
               } else if (data.type === 'done') {
                 fullText = data.response || fullText
                 nextState = data.next_state as typeof convState.value
                 convState.value = nextState
-                lastFirstTimeMatched = Array.isArray(data.first_time_matched_concepts)
+                // Flush any trailing text as the final sentence (use the streamed
+                // remainder so word offsets stay aligned with the clips we fired).
+                if (pendingText.trim().length > 0) {
+                  enqueueSentence(playback, pendingText)
+                  pendingText = ''
+                  emittedSentenceCount++
+                }
+                playback.finished = true
+                playback.wake?.()
+                const concepts = Array.isArray(data.first_time_matched_concepts)
                   ? data.first_time_matched_concepts
                   : []
-                // Emit when audio starts playing (not here)
+                if (concepts.length) {
+                  emit('firstTimeMatchedConcepts', concepts)
+                }
+                const assistantMsg = chatHistory.value[assistantMessageIndex]
+                if (assistantMsg) {
+                  assistantMsg.content = fullText
+                }
                 // Final scroll when done
                 await scrollToBottom()
               } else if (data.type === 'error') {
@@ -713,6 +986,8 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
       }
     } catch (error) {
       console.error('Error in streaming:', error)
+      // Stop any sentence clips already queued/playing before the whole-text fallback.
+      cancelPlayback()
       // Fallback to regular non-streaming endpoint
       try {
         const chatResponse = await fetch('/api/chat', {
@@ -766,36 +1041,38 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
       }
     }
     
-    // Check if we have any text to display
-    if (!fullText || fullText.trim().length === 0) {
+    // Stream ended. Flush any trailing text and let the player finish all clips.
+    // (Normally the 'done' event already flushed and set finished; this also covers
+    // a stream that ended without a 'done' event, e.g. a mid-stream error that still
+    // produced partial text.)
+    if (pendingText.trim().length > 0) {
+      enqueueSentence(playback, pendingText)
+      pendingText = ''
+    }
+    playback.finished = true
+    playback.wake?.()
+
+    if (playback.queue.length === 0) {
+      // Nothing usable was generated.
       console.error('No text received from stream')
+      cancelPlayback()
       const assistantMsg = chatHistory.value[assistantMessageIndex]
       if (assistantMsg) {
-        assistantMsg.content = 'Sorry, I encountered an error generating a response. Please try again.'
-        assistantMsg.audioReady = true // Show message even without audio
+        if (!fullText || fullText.trim().length === 0) {
+          assistantMsg.content = 'Sorry, I encountered an error generating a response. Please try again.'
+        }
+        assistantMsg.audioReady = true // show message even without audio
       }
       await scrollToBottom()
       return
     }
-    
-    // Split text into words for printer effect
-    const words = fullText.split(/(\s+)/).filter(w => w.length > 0).map(w => ({
-      text: w,
-      visible: false
-    }))
-    
-    const assistantMsg = chatHistory.value[assistantMessageIndex]
-    if (assistantMsg) {
-      assistantMsg.words = words
-      assistantMsg.content = fullText
-      // Keep audioReady as false - will be set to true when audio is ready
-    }
-    
-    await scrollToBottom()
-    
-    // Generate and play audio with printer effect (emit bubbles when audio starts)
-    await generateAndPlayAudioWithPrinterEffect(fullText, assistantMessageIndex, lastFirstTimeMatched)
-    
+
+    // Wait until every sentence clip has finished playing (keeps the mic disabled
+    // while Nova is still talking, matching the previous behavior).
+    await playerPromise
+    isPlayingResponseAudio.value = false
+    if (currentPlayback === playback) currentPlayback = null
+
   } catch (error) {
     console.error('Error processing audio:', error)
     chatHistory.value.push({
@@ -1295,8 +1572,9 @@ const startNewChat = async () => {
   if (isLoading.value) return
 
   roomChoiceShowPending.value = false
-  
-  // Stop any playing audio
+
+  // Stop any playing audio (streaming sentence clips + standalone playback)
+  cancelPlayback()
   isPlayingResponseAudio.value = false
   if (currentAudio) {
     currentAudio.pause()
@@ -1306,7 +1584,7 @@ const startNewChat = async () => {
     }
     currentAudio = null
   }
-  
+
   // Create a new conversation ID but keep the same session ID
   conversationId.value = crypto.randomUUID()
   
@@ -1354,7 +1632,8 @@ watch(() => props.selectedImagePath, async (newPath, oldPath) => {
   // If image path changes, always reload conversation for the new image
   if (newPath !== oldPath) {
     startRoomChoiceTimer()
-    // Stop any playing audio first
+    // Stop any playing audio first (streaming sentence clips + standalone playback)
+    cancelPlayback()
     isPlayingResponseAudio.value = false
     if (currentAudio) {
       currentAudio.pause()
@@ -1364,7 +1643,7 @@ watch(() => props.selectedImagePath, async (newPath, oldPath) => {
       }
       currentAudio = null
     }
-    
+
     // Clear current state
     chatHistory.value = []
     convState.value = 'greet'
@@ -1453,8 +1732,9 @@ onUnmounted(() => {
   if (mediaRecorder && mediaRecorder.state === 'recording') {
     mediaRecorder.stop()
   }
-  
-  // Stop any playing audio
+
+  // Stop any playing audio (streaming sentence clips + standalone playback)
+  cancelPlayback()
   isPlayingResponseAudio.value = false
   if (currentAudio) {
     currentAudio.pause()

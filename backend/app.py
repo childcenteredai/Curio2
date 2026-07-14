@@ -96,8 +96,26 @@ client = OpenAI(api_key=openai_api_key)
 # OpenAI Model Configuration
 OPENAI_CHAT_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-4.1-2025-04-14")
 OPENAI_WHISPER_MODEL = os.getenv("OPENAI_WHISPER_MODEL", "whisper-1")
-OPENAI_TTS_MODEL = os.getenv("OPENAI_TTS_MODEL", "tts-1")
-OPENAI_TTS_VOICE = os.getenv("OPENAI_TTS_VOICE", "alloy")
+# gpt-4o-mini-tts supports the `instructions` tone param and the "coral" voice
+# (the legacy tts-1 model does not support `instructions`).
+OPENAI_TTS_MODEL = os.getenv("OPENAI_TTS_MODEL", "gpt-4o-mini-tts")
+OPENAI_TTS_VOICE = os.getenv("OPENAI_TTS_VOICE", "coral")
+# Tone/vibe guidance for the TTS voice so Nova sounds warm, cheerful, and
+# encouraging to an 8-10 year old. Overridable via OPENAI_TTS_INSTRUCTIONS.
+OPENAI_TTS_INSTRUCTIONS = os.getenv(
+    "OPENAI_TTS_INSTRUCTIONS",
+    (
+        "Affect/personality: A cheerful, encouraging science guide for kids.\n"
+        "Tone: Friendly, warm, and reassuring - upbeat and playful, helping an "
+        "8-10 year old feel confident, curious, and comfortable exploring.\n"
+        "Pronunciation: Clear, articulate, and steady, so every word is easy to "
+        "understand, with a natural, conversational flow.\n"
+        "Pause: Brief, purposeful pauses after key ideas and before a question, "
+        "giving the child a moment to think and follow along.\n"
+        "Emotion: Warm, supportive, and genuinely excited to discover things "
+        "together - celebrate the child's progress with delight."
+    ),
+)
 OPENAI_MAX_TOKENS = int(os.getenv("OPENAI_MAX_TOKENS", "500"))
 
 # Database setup
@@ -510,7 +528,9 @@ def format_prompt(
         else:
             state_prompt = state_prompt.replace("{clues_hint}", "")
 
-    # Scienceqa levels > 1: add "You just spotted one clue!" when new concept matched
+    # Scienceqa levels > 1: celebrate a newly-unlocked clue when a new concept matched.
+    # This fires ONLY on turns where the child genuinely unlocked a new clue, so the
+    # clue-specific praise is always accurate.
     if "{clue_spotted_hint}" in state_prompt:
         levels_with_hint = ("explanatory", "general_causal", "specific_causal")
         if (
@@ -519,7 +539,11 @@ def format_prompt(
             and len(first_time_matched_concepts) > 0
         ):
             state_prompt = state_prompt.replace(
-                "{clue_spotted_hint}", " You just spotted one clue in the bubbles 🫧!"
+                "{clue_spotted_hint}",
+                "- IMPORTANT: The child just unlocked a NEW clue this turn — make your "
+                "acknowledgement an enthusiastic celebration of this discovery, varying "
+                'phrases like "Woohoo! You\'ve found another clue!", "Yay, you got '
+                'another one!", or "You just spotted another clue in the bubbles 🫧!".',
             )
         else:
             state_prompt = state_prompt.replace("{clue_spotted_hint}", "")
@@ -3063,12 +3087,16 @@ def generate_speech():
         # The original text with markdown is preserved in the database/display
         cleaned_text = clean_text_for_speech(text)
 
-        # Generate speech using OpenAI TTS
+        # Generate speech using OpenAI TTS.
+        # `instructions` (tone/vibe) is supported by gpt-4o-mini-tts. It is passed
+        # via extra_body so it works across openai SDK versions (older SDKs don't
+        # expose it as a typed kwarg, but the REST API accepts it in the body).
         response = client.audio.speech.create(
             model=OPENAI_TTS_MODEL,
             voice=OPENAI_TTS_VOICE,
             input=cleaned_text,
             response_format="mp3",
+            extra_body={"instructions": OPENAI_TTS_INSTRUCTIONS},
         )
 
         # Return the audio data
@@ -3095,4 +3123,8 @@ app.register_blueprint(db_viewer)
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5001))  # Default 5001 for local dev
     debug = os.getenv("FLASK_ENV", "development") == "development"
-    app.run(debug=debug, host="0.0.0.0", port=port)
+    # threaded=True lets the frontend fire per-sentence /api/speech requests while
+    # the /api/chat/stream SSE connection is still open (see progressive-reveal /
+    # streamed-voice flow). Without it, a single worker would deadlock.
+    # NOTE: in production run under gunicorn/uwsgi with multiple threads/workers.
+    app.run(debug=debug, host="0.0.0.0", port=port, threaded=True)

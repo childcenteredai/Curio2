@@ -105,15 +105,12 @@ OPENAI_TTS_VOICE = os.getenv("OPENAI_TTS_VOICE", "coral")
 OPENAI_TTS_INSTRUCTIONS = os.getenv(
     "OPENAI_TTS_INSTRUCTIONS",
     (
-        "Affect/personality: A cheerful, encouraging science guide for kids.\n"
-        "Tone: Friendly, warm, and reassuring - upbeat and playful, helping an "
-        "8-10 year old feel confident, curious, and comfortable exploring.\n"
+        "Affect/personality: A cheerful eight year old.\n"
+        "Tone: Friendly, warm, upbeat and playful. You should sound like a kid, with a high pitch.\n"
         "Pronunciation: Clear, articulate, and steady, so every word is easy to "
         "understand, with a natural, conversational flow.\n"
-        "Pause: Brief, purposeful pauses after key ideas and before a question, "
-        "giving the child a moment to think and follow along.\n"
-        "Emotion: Warm, supportive, and genuinely excited to discover things "
-        "together - celebrate the child's progress with delight."
+        "Pause: Brief, purposeful pauses after key ideas and before a question.\n"
+        "Emotion: Warm, supportive, and genuinely excited to discover things."
     ),
 )
 OPENAI_MAX_TOKENS = int(os.getenv("OPENAI_MAX_TOKENS", "500"))
@@ -523,7 +520,7 @@ def format_prompt(
             num_clues = len(concepts_dict) if concepts_dict else 8
             state_prompt = state_prompt.replace(
                 "{clues_hint}",
-                f"See! There are **{num_clues}** **clues** **in** **bubbles** 🫧 waiting for you to discover to solve this mystery! ",
+                f"See! There are **{num_clues}** **clues** waiting for you to discover to solve this mystery! ",
             )
         else:
             state_prompt = state_prompt.replace("{clues_hint}", "")
@@ -543,7 +540,7 @@ def format_prompt(
                 "- IMPORTANT: The child just unlocked a NEW clue this turn — make your "
                 "acknowledgement an enthusiastic celebration of this discovery, varying "
                 'phrases like "Woohoo! You\'ve found another clue!", "Yay, you got '
-                'another one!", or "You just spotted another clue in the bubbles 🫧!".',
+                'another one!", or "You just spotted another clue!".',
             )
         else:
             state_prompt = state_prompt.replace("{clue_spotted_hint}", "")

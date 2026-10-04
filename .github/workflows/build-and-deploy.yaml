@@ -73,10 +73,21 @@ jobs:
     if: github.event_name == 'release' || github.event.inputs.deploy == 'true'
     needs: build
     runs-on: ubuntu-latest
+    permissions: {}
     steps:
+      - name: Create helm-charts dispatch token
+        id: ci-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.CCAI_CI_DISPATCH_CLIENT_ID }}
+          private-key: ${{ secrets.CCAI_CI_DISPATCH_PRIVATE_KEY }}
+          owner: childcenteredai
+          repositories: helm-charts
+          permission-actions: write
+
       - name: Trigger helm-charts workflow to deploy new image tags
         env:
-          GH_TOKEN: ${{ secrets.HELM_CHARTS_GHA_PAT_TOKEN }}
+          GH_TOKEN: ${{ steps.ci-token.outputs.token }}
         run: |
           UPDATES=$(jq -n -c --arg vf "values-scienceqa.yaml" --arg t "${{ needs.build.outputs.tag }}" '[{values_file: $vf, tag: $t}]')
           PAYLOAD=$(jq -n --arg updates "$UPDATES" '{"ref": "main", "inputs": {"updates": $updates}}')

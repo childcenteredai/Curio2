@@ -84,5 +84,5 @@ jobs:
           curl -f -sS -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer $GH_TOKEN" \
-            https://api.github.com/repos/ying-xu/helm-charts/actions/workflows/update-fullstack-app-image-tags.yaml/dispatches \
+            https://api.github.com/repos/childcenteredai/helm-charts/actions/workflows/update-fullstack-app-image-tags.yaml/dispatches \
             -d "$PAYLOAD"

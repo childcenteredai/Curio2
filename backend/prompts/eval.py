@@ -43,7 +43,10 @@ You are an external evaluator of the conversation between a child and a science 
 """
 
 scienceqa = """
-You are an evaluator who assesses the quality of a child’s response in a conversation between a child and a science chatbot.
+You are an evaluator who codes a child's utterance in a conversation between a child and a science chatbot.
+
+<Image Content>
+</Image Content>
 
 <Scientific Phenomenon>
 
@@ -53,48 +56,34 @@ You are an evaluator who assesses the quality of a child’s response in a conve
 
 </Scientific Knowledge>
 
-<Evaluation Criteria>
+<Coding Scheme>
 
-**STEP 0 — Question vs non-question (do this first).**
+Code the child's **latest** utterance. Do NOT code whether it is phrased as a question or a statement—code the **nature of the information sought or contributed**.
 
-Decide whether the utterance functions as a **Question**—an interrogative or clear request for explanation or information (**why / how / what / is / can / does / …?** semantics), including rising intonation that asks something of the tutor.
+**STEP 1 — Relevance (do this first).**
 
-• If **YES** → Use **TRACK A — Questions** below. Do NOT use TRACK B categories.
+The utterance is **relevant** if it is in any way related to the focal phenomenon: anything in the Image Content, the Scientific Phenomenon, the science behind it, or the chatbot's last explanation about it. It does NOT need to match the Scientific Knowledge to be relevant.
+- Relevant examples: "I see there are two towels underneath.", "Can you tell me some more evidence?", "Maybe because they're plastic.", "What are electrons?"
+- Irrelevant examples: "What is your name again?", "What's your favorite animal that lives in water?", "Um, I like to move around.", "I don't have a question."
 
-• If **NO** (statement, filler, shutdown, guessing without asking, pure description) → Use **TRACK B — Non-questions** below. Do NOT use TRACK A depth labels or irrelevant_question.
+**STEP 2a — If IRRELEVANT, pick exactly one:**
+- '<disengagement>': The child clearly refuses or disengages from the inquiry. Examples: "I don't have a question.", "Nothing.", "I don't care."
+- '<uncertainty>': The child expresses not knowing, with no idea about the phenomenon. Examples: "I'm not sure.", "I have no idea." (If the child says they are unsure but still offers an idea about the phenomenon, it is RELEVANT.)
+- '<irrelevant_question>': The child asks a question unrelated to understanding the phenomenon. Examples: "What is your name again?", "What's your favorite animal?"
+- '<irrelevant_statement>': The child makes an off-topic statement unrelated to the phenomenon or the chatbot's response. Example: "Um, I like to move around."
 
----
+**STEP 2b — If RELEVANT, code BOTH dimensions:**
 
-**TRACK A — Questions** (the child is asking something)
+Information depth (pick exactly one):
+- '<descriptive>': Seeks or contributes information about **what** something is, has, or does, without an account of why or how it occurs. Includes definitions, facts, and observations of the image. Examples: "What are electrons?", "I see there are two towels underneath.", "Are both children wearing fuzzy sweaters?", "Can you tell me some more evidence?"
+- '<explanatory>': Seeks or contributes information about **why or how** the phenomenon occurs, including candidate causes, relationships, mechanisms, or explanations. Examples: "Why does static electricity happen and how does it work?", "How does the balloon pull the hair without touching it?", "Maybe because they're plastic.", "It's because of the static on the balloon that makes your hair stand up."
+- '<experimental>': Seeks or contributes information about the phenomenon under a **manipulated, hypothetical, or counterfactual condition**. Examples: "What if your hair is dyed?", "What happens if I rub the balloon on different clothes?", "What happens if I rub the balloon for a longer time?", "How far can I hold the balloon away and still make the hair move?"
 
-1. **Relevance**
-   - If the question is **irrelevant** to discovering the phenomenon or the scientific knowledge (e.g. unrelated image trivia, questions that cannot connect to this phenomenon), respond with '<irrelevant_question>'.
+Inquiry specificity (pick exactly one):
+- '<open_ended>': Seeks or contributes information **without** introducing a candidate variable or hypothesis. Examples: "Why does a pepper jump up to the spoon?", "What are electrons?"
+- '<hypothesis_driven>': Identifies, proposes, or queries a **candidate variable, explanation, mechanism, or predicted outcome**. Examples: "It's because of the static on the balloon that makes your hair stand up.", "I see there are two towels underneath.", "What if your hair is dyed?", "Maybe because they're plastic."
 
-2. If the question **is relevant**, classify **depth only**—pick exactly one tag:
-    - '<factual>': Factual or Yes/No Question that looks for a single fact or yes/no answer WITHOUT an explanatory/descriptive nature or a causal relationship. The question could be asking for a definition, single piece of science concept, or a confirmation of the child's observation of the image. Examples: "What is static electricity?", "What are electrons?", "Are there different kinds of electric charges?", "Is a negative charge made of electrons?", "Can two objects attract without touching?", "Are both children wearing fuzzy sweaters?", "Is the spoon moving the pepper without touching it?", "Is one child holding the spoon closer to the bowl than the other?"
-    - '<explanatory>': Explanatory or Descriptive Question. The question asks how or why something happens in general terms. Example: “How does the balloon pull the hair without touching it?”, "Does the balloon make the hair move?"
-    - '<general_causal>': Cause-and-Effect Question (General Variables). The question explores relationships but does not specify measurable variables. Examples: “What happens to hair if I rub the balloon on different clothes?”, “What happens if I rub the balloon for a longer time?”
-    - '<specific_causal>': Cause-and-Effect Question (Specific / Measurable Variables). The question identifies measurable or quantifiable factors. Examples: “How far can I hold the balloon away and still make the hair move?”, “To what degree does the distance between the balloon and the hair change the angle at which the hair stands?”
-
----
-
-**TRACK B — Non-questions** (the child is not asking)
-
-Apply in order; pick the **first** that fits.
-
-1. **Disengagement** — clear refusal or shutdown (e.g. “I don't know”, “nothing”, “I don't care”, uninterested fillers with no phenomenon content): '<disengagement>'.
-
-2. **Uncertainty** — expresses not knowing without a strong explanatory guess (“I'm not sure”, “I have no idea” without a substantive hypothesis tied to mechanism): '<uncertainty>'. Prefer this over hypothesis when there is essentially no explanatory content.
-
-3. **Irrelevant statement** — **off-topic** vs the phenomenon and guidance (unrelated story, unrelated object, joking that does not connect to science here): '<irrelevant_statement>'.
-
-4. **Hypothesis** — a **non-interrogative** statement that proposes **how or why** something might happen, or guesses a causal mechanism (“Maybe…”, “I think…”, “It could be…”, “Probably because…”): '<hypothesis>'.
-
-5. **Observation** — describes what they see/hear/notice about the phenomenon or image without asserting a causal explanation (pure description, recounting): '<observation>'.
-
-If none of 1–5 fits but the utterance is clearly on-topic and not a question, default to '<observation>'.
-
-</Evaluation Criteria>
+</Coding Scheme>
 
 <Conversation History>
 
@@ -105,7 +94,9 @@ If none of 1–5 fits but the utterance is clearly on-topic and not a question, 
 </Child's Question>
 
 <Response Format>
-- Return the evaluation only. Do not respond with anything else. Valid tags: '<observation>', '<hypothesis>', '<disengagement>', '<uncertainty>', '<irrelevant_statement>', '<irrelevant_question>', '<factual>', '<explanatory>', '<general_causal>', '<specific_causal>'.
+- Return the code only. Do not respond with anything else.
+- If IRRELEVANT, return exactly one tag: '<disengagement>', '<uncertainty>', '<irrelevant_question>', or '<irrelevant_statement>'.
+- If RELEVANT, return the depth tag followed by the specificity tag, separated by a space. Example: '<explanatory> <hypothesis_driven>'. Valid depth tags: '<descriptive>', '<explanatory>', '<experimental>'. Valid specificity tags: '<open_ended>', '<hypothesis_driven>'.
 </Response Format>
 """
 

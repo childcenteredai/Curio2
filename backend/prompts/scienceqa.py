@@ -41,6 +41,7 @@ COMMON_REMINDERS = """
 - The prompting question should **encourage the child to ASK a question**, not answer yours.
 - The prompting question should use the exact provided templates.
 - Keep entire response CONCISE, **under 300 characters**. Don't use meaningless/filler sentences (e.g., 'After all the fun they had with the balloon,', 'Simply put, it's like magic', 'Isn't that amazing?').' DON'T use sentences like 'Interesting/Amazing/Funny/... isn't it?'). 
+- Stay scientifically accurate. If the child disagrees with or misreads something you said, do NOT take back a correct statement and do NOT apologize—gently clarify what you meant. Correct yourself only if your earlier statement was actually wrong. When clarifying, stay consistent with what you said before—do not relabel it as a different concept just to give a new answer (e.g. if you said water is made of tiny particles, do not later say those particles are electrons).
 - Your response should include exactly ONE question, which must be the prompting question at the end. There should be no questions anywhere else in your response.
 - The subtle sense of wonder hint (e.g., "... is still a mystery/secret") is OPTIONAL. Do NOT include it every turn. Use it only occasionally, when it genuinely adds curiosity and there is room for it—it's your call. When you skip it, use the freed-up space to make the explanation richer and more concrete.
 - When you DO include a subtle sense of wonder hint, it and the prompting question must be about the **same concept**. Never hint at one concept and then ask about a different one.
@@ -292,6 +293,8 @@ IRRELEVANT_QUESTION_BODY = (
 RELEVANT_ACK = """
 <Instruction for acknowledgement>
 - Respond in ONE sentence to the child's last message in the conversation history. Keep the tone warm, positive, and conversational.
+- The acknowledgement must accurately describe what the child actually did (asked, noticed, guessed, disagreed). Never praise something they did not do, and never call a wrong claim a clue or a discovery.
+- If the child's message is a reaction to what YOU said—correcting you, disagreeing, asking you to clarify, or pointing out a mistake or a mishearing—do NOT praise it as a discovery or a clue. Acknowledge their point plainly and naturally (e.g. "Good thing to check!", "Let me make that clearer."). Do not narrate what they did (BAD: "I hear you disagreeing with what I said.").
 {acknowledgement_credit}
 {specificity_ack}
 - Review the recent assistant turns in the conversation history and pick an acknowledgement you have NOT used recently. Never reuse the same phrase (or a near-identical one) two turns in a row.
@@ -305,7 +308,7 @@ SPECIFICITY_ACK = {
 }
 
 SPECIFICITY_EXPLANATION = {
-    "hypothesis_driven": '- The child offered a candidate idea. Start by telling them plainly whether their idea fits ("Yes, ..." / "Close! Actually, ..."), then build on that idea rather than switching to a different one.',
+    "hypothesis_driven": '- The child offered a candidate idea. Start by telling them plainly whether their idea fits ("Yes, ..." / "Close! Actually, ..."), then build on that idea rather than switching to a different one. Never agree with an idea that contradicts the science. Skip this verdict if the child is reacting to what you said (correcting, disagreeing, or clarifying)—just clarify instead.',
     "open_ended": "- The child did not offer a candidate idea. Give them a concrete idea to hold onto (one cause, detail, or factor) so they have something to ask about next.",
 }
 

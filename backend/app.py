@@ -9,10 +9,16 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from urllib.parse import quote_plus
 
+import httpx
 from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, request, stream_with_context
 from flask_cors import CORS
-from openai import OpenAI
+from openai import (
+    APIConnectionError,
+    InternalServerError,
+    OpenAI,
+    RateLimitError,
+)
 from sqlalchemy import create_engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import scoped_session, sessionmaker
@@ -91,7 +97,7 @@ if not openai_api_key:
 client = OpenAI(api_key=openai_api_key)
 
 # OpenAI Model Configuration
-OPENAI_CHAT_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-6.1-sol")
+OPENAI_CHAT_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-6-sol")
 OPENAI_WHISPER_MODEL = os.getenv("OPENAI_WHISPER_MODEL", "whisper-1")
 # gpt-4o-mini-tts supports the `instructions` tone param and the "coral" voice
 # (the legacy tts-1 model does not support `instructions`).
@@ -118,6 +124,89 @@ OPENAI_REASONING_EFFORT = os.getenv("OPENAI_REASONING_EFFORT", "").strip()
 OPENAI_CHAT_PARAMS = {"max_completion_tokens": OPENAI_MAX_TOKENS}
 if OPENAI_REASONING_EFFORT:
     OPENAI_CHAT_PARAMS["reasoning_effort"] = OPENAI_REASONING_EFFORT
+# Optional processing tier (e.g. "priority" for lower latency at higher cost).
+OPENAI_SERVICE_TIER = os.getenv("OPENAI_SERVICE_TIER", "").strip()
+if OPENAI_SERVICE_TIER:
+    OPENAI_CHAT_PARAMS["service_tier"] = OPENAI_SERVICE_TIER
+
+# Timeout + fallback: if the primary model does not answer within
+# OPENAI_TIMEOUT_SECONDS (or fails transiently), resend the request once to
+# OPENAI_FALLBACK_MODEL so a slow call never stalls the child.
+OPENAI_TIMEOUT_SECONDS = float(os.getenv("OPENAI_TIMEOUT_SECONDS", "10"))
+OPENAI_FALLBACK_MODEL = os.getenv("OPENAI_FALLBACK_MODEL", "gpt-4.1-2025-04-14").strip()
+OPENAI_FALLBACK_PARAMS = {"max_completion_tokens": OPENAI_MAX_TOKENS}
+# APIConnectionError covers APITimeoutError; httpx errors can surface mid-stream.
+OPENAI_FALLBACK_ERRORS = (
+    APIConnectionError,
+    InternalServerError,
+    RateLimitError,
+    httpx.TimeoutException,
+    httpx.TransportError,
+)
+primary_client = client.with_options(timeout=OPENAI_TIMEOUT_SECONDS, max_retries=0)
+
+
+def _can_fall_back(error):
+    if not OPENAI_FALLBACK_MODEL or OPENAI_FALLBACK_MODEL == OPENAI_CHAT_MODEL:
+        return False
+    print(
+        f"[LLM Fallback] {OPENAI_CHAT_MODEL} failed ({type(error).__name__}: {error}); "
+        f"retrying with {OPENAI_FALLBACK_MODEL}"
+    )
+    return True
+
+
+def create_chat_completion(messages, **kwargs):
+    """Non-streaming chat completion on the primary model, with timeout fallback."""
+    try:
+        return primary_client.chat.completions.create(
+            model=OPENAI_CHAT_MODEL, messages=messages, **OPENAI_CHAT_PARAMS, **kwargs
+        )
+    except OPENAI_FALLBACK_ERRORS as e:
+        if not _can_fall_back(e):
+            raise
+    return client.chat.completions.create(
+        model=OPENAI_FALLBACK_MODEL,
+        messages=messages,
+        **OPENAI_FALLBACK_PARAMS,
+        **kwargs,
+    )
+
+
+def _content_tokens(stream):
+    for chunk in stream:
+        if chunk.choices and chunk.choices[0].delta.content:
+            yield chunk.choices[0].delta.content
+
+
+def stream_chat_tokens(messages):
+    """
+    Yield response tokens from the primary model. Falls back to the backup model only
+    if the primary fails before its first token (a half-sent answer cannot be redone).
+    """
+    started = False
+    try:
+        stream = primary_client.chat.completions.create(
+            model=OPENAI_CHAT_MODEL,
+            messages=messages,
+            **OPENAI_CHAT_PARAMS,
+            stream=True,
+        )
+        for token in _content_tokens(stream):
+            started = True
+            yield token
+        return
+    except OPENAI_FALLBACK_ERRORS as e:
+        if started or not _can_fall_back(e):
+            raise
+    stream = client.chat.completions.create(
+        model=OPENAI_FALLBACK_MODEL,
+        messages=messages,
+        **OPENAI_FALLBACK_PARAMS,
+        stream=True,
+    )
+    yield from _content_tokens(stream)
+
 
 # Database setup
 # Prioritize POSTGRES_* environment variables (set by docker-compose) over DATABASE_URL
@@ -417,10 +506,8 @@ def state_classification(state, messages, phenomenon):
     messages = [{"role": "system", "content": eval_prompt}]
     # print(f"messages: {messages}")
 
-    response = client.chat.completions.create(
-        model=OPENAI_CHAT_MODEL,
+    response = create_chat_completion(
         messages=messages,
-        **OPENAI_CHAT_PARAMS,
         temperature=1.0,
     )
 
@@ -544,12 +631,24 @@ def scienceqa_acknowledgement_credit(
     child_question_level, kc_matched, first_time_matched_concepts
 ):
     """Acknowledgement instructions for relevant levels, split by content match."""
+    genuine_only = (
+        "- Give this credit ONLY if the message is the child's own question, idea, or observation "
+        "about the phenomenon and is not scientifically wrong. If it is a reaction to what you said "
+        "(a correction, disagreement, clarification, or mishearing) or a wrong claim, give no credit."
+    )
+    no_clue_streak = (
+        '- Saying "clue" is fine, but not every time: if your previous acknowledgement used the '
+        'word "clue", pick a phrase without it this turn.'
+    )
     if kc_matched and first_time_matched_concepts:
         return (
-            "- IMPORTANT: The child just unlocked a NEW clue this turn — make your "
-            "acknowledgement an enthusiastic celebration of this discovery, varying "
-            'phrases like "Woohoo! You\'ve found another clue!", "Yay, you got '
-            'another one!", or "You just spotted another clue!".'
+            "- The child's message reaches a NEW science idea this turn, so you may celebrate it warmly.\n"
+            f"{genuine_only}\n"
+            "- Because this is a new idea, a clue phrase fits well—tie it to what they said, e.g. "
+            '"You found a new clue by asking about [their topic]!", "Your idea about [their topic] is another clue!". '
+            'Otherwise use general praise such as "You got this!", "There you go!", '
+            '"It\'s great that you asked about [their topic]!", "You\'re on to something!".\n'
+            f"{no_clue_streak}"
         )
     if kc_matched:
         phrases = [
@@ -557,7 +656,7 @@ def scienceqa_acknowledgement_credit(
             "You're almost there!",
             "Wow! You're figuring it out!",
             "You are on the right track!",
-            "Great job!",
+            "There you go!",
             "Great question!",
             "Good thinking!",
         ]
@@ -565,10 +664,11 @@ def scienceqa_acknowledgement_credit(
             phrases.insert(0, "Wow! You are really thinking deeply about that!")
         listed = "\n".join(f'    - "{p}"' for p in phrases)
         return (
-            "- The child's message connects to a science clue, so you may give progress credit.\n"
+            "- The child's message connects to a science idea, so you may give progress credit.\n"
+            f"{genuine_only}\n"
             "- Vary your encouragement — rotate through a mix of progress-oriented phrases and simple praise so it feels fresh each turn. Good options include:\n"
             f"{listed}\n"
-            "- Lean toward the progress-oriented phrases, but the simple praise is welcome too — the key is variety."
+            f"{no_clue_streak}"
         )
     return (
         "- The child's message is about the picture, but it does not connect to a science clue yet. "
@@ -1046,10 +1146,8 @@ def knowledge_retrieval(
 
     # print(f"retrieval_prompt: {retrieval_prompt}")
     messages_for_llm = [{"role": "system", "content": retrieval_prompt}]
-    response = client.chat.completions.create(
-        model=OPENAI_CHAT_MODEL,
+    response = create_chat_completion(
         messages=messages_for_llm,
-        **OPENAI_CHAT_PARAMS,
         temperature=1.0,
     )
 
@@ -2019,10 +2117,8 @@ def chat_completion():
             child_question_level=child_question_level,
         )
 
-        response = client.chat.completions.create(
-            model=OPENAI_CHAT_MODEL,
+        response = create_chat_completion(
             messages=all_messages,
-            **OPENAI_CHAT_PARAMS,
             temperature=1.0,
         )
 
@@ -2590,19 +2686,10 @@ def chat_completion_stream():
             saved_conversation_id = conversation_id
             db_session = SessionLocal()
             try:
-                # Use streaming API
-                stream = client.chat.completions.create(
-                    model=OPENAI_CHAT_MODEL,
-                    messages=all_messages,
-                    **OPENAI_CHAT_PARAMS,
-                    stream=True,
-                )
-
-                for chunk in stream:
-                    if chunk.choices[0].delta.content:
-                        token = chunk.choices[0].delta.content
-                        full_content += token
-                        yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+                # Use streaming API (timeout fallback handled in stream_chat_tokens)
+                for token in stream_chat_tokens(all_messages):
+                    full_content += token
+                    yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
 
                 # Print next concept used for this response (if in scienceqa state)
                 if current_state == "scienceqa":

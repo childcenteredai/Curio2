@@ -1,8 +1,7 @@
 <template>
   <div class="chat-container">
     <header class="chat-panel-header">
-      <h1 class="chat-panel-title">Let's Learn Together!</h1>
-      <!-- <p class="chat-panel-subtitle">Ask me anything about this picture</p> -->
+      <h1 class="chat-panel-title">ASK NOVA ANYTHING!</h1>
     </header>
 
     <!-- Chat messages area -->
@@ -22,7 +21,7 @@
         <div class="message-inner">
           <img
             v-if="msg.role === 'assistant'"
-            src="/imgs/owl.svg"
+            src="/imgs/nova/nova-avatar-circle.png"
             alt=""
             class="message-avatar"
           >
@@ -55,24 +54,23 @@
       <div class="voice-input-container">
         <button 
           @click="handleVoiceClick"
-          :disabled="isLoading"
-          :class="`voice-input-button ${isRecording ? 'recording' : ''} ${isLoading ? 'loading' : ''}`"
-          :title="isLoading ? 'Processing...' : isRecording ? 'Click to send' : 'Click to speak'"
+          :disabled="novaBusy"
+          :class="`voice-input-button ${isRecording ? 'recording' : ''} ${novaBusy ? 'loading' : ''}`"
+          :title="novaBusy ? 'Nova is talking...' : isRecording ? 'Click to send' : 'Click to speak'"
         >
-          <i
-            v-if="isLoading"
-            class="fa-solid fa-spinner fa-spin voice-icon loading-icon"
-            aria-hidden="true"
-          />
-          <i
+          <!-- While Nova thinks or talks: plain button face with a spinner, no mic -->
+          <span v-if="novaBusy" class="voice-loading-face">
+            <i class="fa-solid fa-spinner fa-spin loading-icon" aria-hidden="true" />
+          </span>
+          <img
             v-else
-            class="fa-solid fa-microphone voice-icon mic-icon"
-            :class="{ 'recording-icon': isRecording }"
-            aria-hidden="true"
+            class="voice-icon"
+            :src="isRecording ? '/imgs/ui/mic-button-active.png' : '/imgs/ui/mic-button.png'"
+            alt=""
           />
         </button>
       </div>
-      <!-- <p class="voice-hint">💡 PRESS to describe what you see or ask questions!</p> -->
+      <p class="voice-hint">PRESS to Describe what you see or ask questions!</p>
     </div>
 
     <!-- 10-min room choice popup -->
@@ -81,16 +79,16 @@
       class="room-choice-overlay"
       @click.self.stop
     >
-      <div class="room-choice-container" role="dialog" aria-modal="true" aria-label="Room choice">
-        <div class="room-choice-title">Quick check-in</div>
+      <div class="room-choice-container popup-card" role="dialog" aria-modal="true" aria-label="Room choice">
+        <div class="room-choice-title">Quick Check-in</div>
         <div class="room-choice-question">
           Do you want to explore another room or continue exploring this room?
         </div>
         <div class="room-choice-actions">
-          <button class="room-choice-button secondary" @click="handleExploreAnotherRoom">
+          <button class="popup-button secondary" @click="handleExploreAnotherRoom">
             Another room
           </button>
-          <button class="room-choice-button primary" @click="handleContinueThisRoom">
+          <button class="popup-button primary" @click="handleContinueThisRoom">
             This room
           </button>
         </div>
@@ -103,11 +101,15 @@
       class="mission-complete-overlay"
       @click.self="handleMissionCompleteDismiss"
     >
-      <div class="mission-complete-container" role="dialog" aria-modal="true" aria-label="Session reminder">
+      <div class="mission-complete-container popup-card" role="dialog" aria-modal="true" aria-label="Session reminder">
+        <img class="happy-nova" src="/imgs/nova/nova-happy.png" alt="" />
+        <img class="star star-1" src="/imgs/ui/star.png" alt="" />
+        <img class="star star-2" src="/imgs/ui/star.png" alt="" />
+        <img class="star star-3" src="/imgs/ui/star.png" alt="" />
         <div class="mission-complete-message">
           Excellent work! We successfully completed our detective mission today. Let's get back to your researcher!
         </div>
-        <button type="button" class="mission-complete-button" @click="handleMissionCompleteDismiss">
+        <button type="button" class="popup-button primary" @click="handleMissionCompleteDismiss">
           OK
         </button>
       </div>
@@ -117,15 +119,25 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { CURIO_APP_VERSION, loadAppConfig } from '../constants/appConfig'
+import { PHENOMENA, phenomenonForImage } from '../constants/phenomena'
+import { getOrCreateSessionId } from '../utils/session'
 // Use relative paths - works with nginx reverse proxy (local) and Ingress (prod)
 
 // Props
 const props = defineProps<{
   selectedImagePath?: string
+  phenomenonId?: string
 }>()
+
+const phenomenon = computed(() =>
+  (props.phenomenonId && PHENOMENA[props.phenomenonId]) || phenomenonForImage(props.selectedImagePath)
+)
+// Nova's fixed first line for this room
+const openingLine = computed(() =>
+  phenomenon.value?.opening ?? "Hi, I'm Nova, your friendly science assistant. What do you find odd in this picture?"
+)
 // State
 const isLoading = ref(false)
 const isRecording = ref(false)
@@ -140,22 +152,16 @@ const messagesContainer = ref<HTMLElement>()
 const isScrolled = ref(false)
 const convState = ref<'greet' | 'scaffolding' | 'scienceqa_init' | 'scienceqa' | 'reflection' | 'close'>('greet')
 const conversationId = ref<string>(crypto.randomUUID())
-// Get or create session_id from localStorage
-const getOrCreateSessionId = (): string => {
-  const stored = localStorage.getItem('curio_session_id')
-  if (stored) {
-    return stored
-  }
-  const newSessionId = crypto.randomUUID()
-  localStorage.setItem('curio_session_id', newSessionId)
-  return newSessionId
-}
 const sessionId = ref<string>(getOrCreateSessionId())
 const isGeneratingGreeting = ref(false)
 
 const router = useRouter()
 
 const isPlayingResponseAudio = ref(false)
+// Nova is preparing or speaking a line (greeting or reply): the mic is locked
+const novaBusy = computed(
+  () => isLoading.value || isGeneratingGreeting.value || isPlayingResponseAudio.value
+)
 
 // 10-minute popup: ask whether to explore another room (never while TTS is playing)
 const showRoomChoicePopup = ref(false)
@@ -183,7 +189,7 @@ const startRoomChoiceTimer = () => {
 const handleExploreAnotherRoom = () => {
   showRoomChoicePopup.value = false
   startRoomChoiceTimer() // reset when child re-enters a (new) room
-  router.push('/')
+  router.push(phenomenon.value ? `/area/${phenomenon.value.area}` : '/')
 }
 const handleContinueThisRoom = () => {
   showRoomChoicePopup.value = false
@@ -242,11 +248,6 @@ const scheduleMissionCompleteTimer = () => {
 const handleMissionCompleteDismiss = () => {
   showMissionCompletePopup.value = false
 }
-
-// Emit first-time matched concepts for concept bubbles (displayed in Home)
-const emit = defineEmits<{
-  (e: 'firstTimeMatchedConcepts', concepts: string[]): void
-}>()
 
 const PREFERRED_MIC_KEY = 'curio_preferred_mic_device_id'
 
@@ -526,7 +527,7 @@ const updateScrollState = () => {
 }
 
 const handleVoiceClick = async () => {
-  if (isLoading.value) return
+  if (novaBusy.value) return
   if (isRecording.value) {
     stopRecording()
   } else {
@@ -885,7 +886,7 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
           session_id: sessionId.value,
           user_audio: audioBase64,
           user_audio_mime_type: mimeType,
-          curio_app_version: CURIO_APP_VERSION.value
+          phenomenon: phenomenon.value?.id
         })
       })
 
@@ -952,12 +953,6 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
                 }
                 playback.finished = true
                 playback.wake?.()
-                const concepts = Array.isArray(data.first_time_matched_concepts)
-                  ? data.first_time_matched_concepts
-                  : []
-                if (concepts.length) {
-                  emit('firstTimeMatchedConcepts', concepts)
-                }
                 const assistantMsg = chatHistory.value[assistantMessageIndex]
                 if (assistantMsg) {
                   assistantMsg.content = fullText
@@ -976,7 +971,9 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
                 }
               }
             } catch (e) {
-              // Only log if it's not a JSON parse error for empty/incomplete lines
+              // Rethrow stream errors (e.g. an 'error' event with no text) so the
+              // outer catch falls back to /api/chat; only swallow JSON parse errors.
+              if (!(e instanceof SyntaxError)) throw e
               if (line.slice(6).trim().length > 0) {
                 console.error('Error parsing SSE data:', e, 'Line:', line.substring(0, 100))
               }
@@ -1006,7 +1003,7 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
             session_id: sessionId.value,
             user_audio: audioBase64,
             user_audio_mime_type: mimeType,
-            curio_app_version: CURIO_APP_VERSION.value
+            phenomenon: phenomenon.value?.id
           })
         })
         
@@ -1032,8 +1029,7 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
         }
         
         await scrollToBottom()
-        const firstTime = chatData.first_time_matched_concepts
-        await generateAndPlayAudioWithPrinterEffect(fullText, assistantMessageIndex, firstTime)
+        await generateAndPlayAudioWithPrinterEffect(fullText, assistantMessageIndex)
         return
       } catch (fallbackError) {
         console.error('Fallback also failed:', fallbackError)
@@ -1133,8 +1129,7 @@ const generateAndPlayAudio = async (text: string) => {
 
 const generateAndPlayAudioWithPrinterEffect = async (
   text: string,
-  messageIndex: number,
-  firstTimeMatchedConcepts?: string[]
+  messageIndex: number
 ) => {
   try {
     // Validate text before sending
@@ -1306,10 +1301,6 @@ const generateAndPlayAudioWithPrinterEffect = async (
     
     setupPrinterEffect()
     
-    // Emit concept bubbles when audio starts playing
-    if (firstTimeMatchedConcepts?.length) {
-      emit('firstTimeMatchedConcepts', firstTimeMatchedConcepts)
-    }
     isPlayingResponseAudio.value = true
     await audio.play()
     await audioEndedPromise
@@ -1391,7 +1382,6 @@ const loadExistingConversation = async () => {
       if (messagesResponse.ok) {
         const messagesData = await messagesResponse.json()
         const messages = messagesData.messages || []
-        const restoredMatchedConcepts = messagesData.matched_concepts || []
         
         if (messages.length === 0) {
           return false
@@ -1399,7 +1389,7 @@ const loadExistingConversation = async () => {
         
         // Restore chat history from messages
         // Filter out system messages and only include user and assistant messages
-        const greetingText = "Hi, I'm Nova, your friendly science assistant. We are going to explore the scientific mystery in the image together! What do you find odd in this picture?"
+        const greetingText = openingLine.value
         
         chatHistory.value = messages
           .filter((msg: any) => msg.role === 'user' || msg.role === 'assistant')
@@ -1446,11 +1436,6 @@ const loadExistingConversation = async () => {
           convState.value = convData.current_state || 'greet'
         }
 
-        // Restore concept bubbles from matched concepts in this conversation
-        if (restoredMatchedConcepts.length > 0) {
-          emit('firstTimeMatchedConcepts', restoredMatchedConcepts)
-        }
-        
         await scrollToBottom()
         return true // Conversation loaded
       } else {
@@ -1466,7 +1451,7 @@ const loadExistingConversation = async () => {
 }
 
 const generateInitialGreeting = async () => {
-  const greetingText = "Hi, I'm Nova, your friendly science assistant. We are going to explore the scientific mystery in the image together! What do you find odd in this picture?"
+  const greetingText = openingLine.value
   
   // Prevent duplicate greeting calls - check if greeting already exists in chat history
   const hasGreeting = chatHistory.value.some(msg => 
@@ -1660,7 +1645,6 @@ watch(() => props.selectedImagePath, async (newPath, oldPath) => {
 
 onMounted(async () => {
   document.addEventListener('keydown', handleKeyDown)
-  await loadAppConfig()
   startRoomChoiceTimer()
   ensureFirstConversationClockAnchor()
   scheduleMissionCompleteTimer()
@@ -1755,246 +1739,74 @@ defineExpose({
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Kodchasan:wght@400;500;600;700&display=swap');
-
-@font-face {
-  font-family: 'Krona One';
-  src: url('../assets/fonts/KronaOne-Regular.ttf') format('truetype');
-  font-weight: normal;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Lao Muang Don';
-  src: url('../assets/fonts/LaoMuangDon-Regular.ttf') format('truetype');
-  font-weight: normal;
-  font-style: normal;
-  font-display: swap;
-}
-
-/* Design tokens — match learn-together panel */
+/* "ASK NOVA ANYTHING!" panel from the Lab-Design chat frames (03D, 04D, 05E, 07B-09B).
+   Sizes are Figma pixels: the panel is 528×699 inside a FigmaStage. */
 .chat-container {
-  --border-blue: #B9E0EA;
-  --header-bg: #C7E8F0;
-  --title-color: #3D576A;
-  --subtitle-color: #364B5C;
-  --user-bubble: #C7E8F0;
-  --voice-blue: #79AAFF;
-  --text-body: #486174;
-  /* Chat window (outer card) — single drop shadow */
-  --shadow-chat-window: 0 15px 50px 0 rgba(0, 0, 0, 0.2);
-  /* Bubbles, avatar, mic — stacked drop shadows */
-  --shadow-layered: 0 8px 10px -6px rgba(0, 0, 0, 0.1), 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  --panel-border: var(--curio-navy);
+  --panel-header: #05365c;
+  --panel-body: var(--curio-cream);
+  --bubble-rim: #7695ce;
+  --bubble-nova: #05365c;
+  --bubble-child: #fec566;
+  --panel-footer: #c0c9d6;
   --voice-btn-size: 112px;
-}
+  --voice-btn-width: 120px;
 
-/* Chat Section */
-.chat-container {
   width: 100%;
-  max-width: 560px;
-  height: 90vh;
-  background: #ffffff;
-  border: 6px solid var(--border-blue);
-  border-radius: 24px;
+  height: 100%;
+  box-sizing: border-box;
+  background: var(--panel-body);
+  border: 8px solid var(--panel-border);
+  border-radius: 30px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   position: relative;
   z-index: 200;
-  box-shadow: var(--shadow-chat-window);
-}
-
-.mission-complete-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.45);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 13000;
-  animation: fadeIn 0.25s ease;
-}
-
-.mission-complete-container {
-  background: #ffffff;
-  border: 4px solid #BFE4F0;
-  border-radius: 24px;
-  width: min(680px, 92vw);
-  box-shadow: var(--shadow-chat-window);
-  padding: 26px 26px 22px;
-  animation: slideUp 0.25s ease;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-}
-
-.mission-complete-message {
-  font-family: 'Kodchasan';
-  font-size: 1.4em;
-  font-weight: 500;
-  color: #3D576A;
-  line-height: 1.45;
-  margin-bottom: 20px;
-  max-width: 100%;
-}
-
-.mission-complete-button {
-  font-family: 'Kodchasan';
-  font-size: 1.05em;
-  font-weight: 700;
-  padding: 10px 22px;
-  border-radius: 999px;
-  cursor: pointer;
-  border: 2px solid #79AAFF;
-  box-shadow: none;
-  background: #ffffff;
-  color: #000000;
-  transition: background 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
-}
-
-.mission-complete-button:hover {
-  background: #C7E3FF;
-  border-color: #79AAFF;
-  transform: scale(1.02);
-}
-
-.mission-complete-button:active {
-  transform: scale(0.98);
-}
-
-.room-choice-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.55);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 12000;
-  animation: fadeIn 0.25s ease;
-}
-
-.room-choice-container {
-  background: #ffffff;
-  border: 4px solid #BFE4F0;
-  border-radius: 24px;
-  width: min(680px, 92vw);
-  box-shadow: var(--shadow-chat-window);
-  padding: 26px 26px 22px;
-  animation: slideUp 0.25s ease;
-}
-
-.room-choice-title {
-  font-family: 'Krona One', sans-serif;
-  font-size: 1.5em;
-  font-weight: 400;
-  color: #3D576A;
-  margin-bottom: 12px;
-}
-
-.room-choice-question {
-  font-family: 'Kodchasan';
-  font-size: 1.4em;
-  font-weight: 500;
-  color: #3D576A;
-  line-height: 1.45;
-  margin-bottom: 18px;
-}
-
-.room-choice-actions {
-  display: flex;
-  gap: 14px;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.room-choice-button {
-  font-family: 'Kodchasan';
-  font-size: 1.05em;
-  font-weight: 700;
-  padding: 10px 18px;
-  border-radius: 999px;
-  cursor: pointer;
-  border: 2px solid #79AAFF;
-  box-shadow: none;
-  background: #ffffff;
-  color: #000000;
-  transition: background 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
-}
-
-.room-choice-button:hover {
-  background: #C7E3FF;
-  border-color: #79AAFF;
-  transform: scale(1.02);
-}
-
-.room-choice-button:active {
-  transform: scale(0.98);
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes slideUp {
-  from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  box-shadow: 0 14px 30px rgba(25, 52, 79, 0.25);
 }
 
 .chat-panel-header {
   flex-shrink: 0;
-  background: var(--header-bg);
-  padding: 18px 20px 16px;
-  border-bottom: 1px solid var(--border-blue);
+  height: 92px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel-header);
 }
 
 .chat-panel-title {
   margin: 0;
-  font-family: 'Krona One', sans-serif;
-  font-size: clamp(1.05rem, 2.8vw, 1.35rem);
-  font-weight: 400;
-  color: var(--title-color);
+  font-family: var(--curio-font-mono);
+  font-weight: 700;
+  font-size: 30px;
   letter-spacing: 0.02em;
-  line-height: 1.25;
-  text-align: left;
+  color: #ffffff;
 }
 
-.chat-panel-subtitle {
-  margin: 8px 0 0;
-  font-family: 'Lao Muang Don', sans-serif;
-  font-size: 0.95rem;
-  font-weight: 500;
-  color: var(--subtitle-color);
-  line-height: 1.35;
-  text-align: left;
-}
-
-/* Chat Messages */
+/* Messages */
 .chat-messages {
   flex: 1;
   min-height: 0;
-  padding: 16px 18px calc(12px + var(--voice-btn-size) / 2);
+  padding: 18px 22px calc(12px + var(--voice-btn-size) / 2);
   overflow-y: auto;
   overflow-x: hidden;
-  background: #FAFAFA;
+  background: var(--panel-body);
   position: relative;
   z-index: 1;
-  transform: translateZ(0);
 }
 
 .message {
-  margin-bottom: 14px;
+  margin-bottom: 18px;
   display: flex;
-  position: relative;
-  z-index: 1;
+}
+
+.message.user {
+  justify-content: flex-end;
+}
+
+.message.assistant {
+  justify-content: flex-start;
 }
 
 .message-inner {
@@ -2006,87 +1818,60 @@ defineExpose({
 
 .message.user .message-inner {
   margin-left: auto;
-  flex-direction: row;
   justify-content: flex-end;
-}
-
-.message.assistant .message-inner {
-  margin-right: auto;
 }
 
 .message-avatar {
-  width: 60px;
-  height: 60px;
-  border-radius: 8px;
-  object-fit: contain;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
   flex-shrink: 0;
-}
-
-.message.user {
-  justify-content: flex-end;
-}
-
-.message.assistant {
-  justify-content: flex-start;
+  margin-top: 4px;
 }
 
 .message-bubble {
-  padding: 12px 16px;
-  border-radius: 18px;
-  position: relative;
-  z-index: 10;
-  font-family: 'Kodchasan';
-  font-size: 1.2rem;
-  box-shadow: var(--shadow-layered);
+  padding: 16px 22px;
+  border: 4px solid var(--bubble-rim);
+  border-radius: 20px;
+  font-family: var(--curio-font-round);
+  font-size: 18px;
+  font-weight: 500;
+  transition: opacity 0.3s ease-in;
+}
+
+/* The corner nearest the speaker is square, like a speech-bubble tail */
+.message.assistant .message-bubble {
+  background: var(--bubble-nova);
+  color: #ffffff;
+  border-bottom-left-radius: 4px;
 }
 
 .message.user .message-bubble {
-  background: var(--user-bubble);
-  color: var(--text-body);
-  border: none;
-  border-bottom-right-radius: 6px;
-}
-
-.message.assistant .message-bubble {
-  background: #ffffff;
-  color: var(--text-body);
-  border: 1px solid var(--border-blue);
-  border-top-left-radius: 6px;
+  background: var(--bubble-child);
+  color: var(--curio-navy);
+  border-bottom-right-radius: 4px;
 }
 
 .message-text {
-  font-size: 1em;
-  line-height: 1.45;
-  margin-bottom: 6px;
+  line-height: 1.6;
   text-align: left;
 }
 
-.message.user .message-text :deep(.bold-highlight),
-.message.user .message-text .bold-highlight {
+.message-text :deep(.bold-highlight),
+.message-text .bold-highlight {
   font-weight: 700;
-  color: #2a4a5c;
-  font-family: 'Kodchasan';
   display: inline;
-  padding: 0;
-  border-radius: 0;
-  background-image: linear-gradient(
-    transparent 60%,
-    rgba(127, 179, 245, 0.45) 60%
-  );
 }
 
 .message.assistant .message-text :deep(.bold-highlight),
 .message.assistant .message-text .bold-highlight {
-  font-weight: 700;
-  color: #2a4a5c;
-  font-family: 'Kodchasan';
-  display: inline;
-  padding: 0;
-  border-radius: 0;
-  background-image: linear-gradient(
-    transparent 60%,
-    rgba(127, 179, 245, 0.4) 60%
-  );
+  color: var(--curio-yellow);
+}
+
+.message.user .message-text :deep(.bold-highlight),
+.message.user .message-text .bold-highlight {
+  color: var(--curio-navy-deep);
 }
 
 .word-visible {
@@ -2098,278 +1883,241 @@ defineExpose({
   opacity: 0;
 }
 
-.message-bubble {
-  transition: opacity 0.3s ease-in;
-}
-
-.message-time {
-  font-family: 'Kodchasan';
-  font-size: 0.85rem;
-  opacity: 0.55;
-  color: var(--text-body);
-  text-align: right;
-}
-
-/* Welcome Message */
-.welcome-message {
-  display: flex;
-  justify-content: center;
-  margin-top: 20px;
-}
-
-.welcome-bubble {
-  background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
-  padding: 20px;
-  border-radius: 20px;
-  text-align: center;
-  border: 3px solid #ff6b9d;
-}
-
-.welcome-text {
-  font-size: 1.1em;
-  color: #333;
-  line-height: 1.5;
-}
-
-/* Push-to-Talk Input — mic sits half above / half inside this bar */
+/* Footer: the mic sits half above the bar */
 .chat-input-area {
   flex-shrink: 0;
-  padding: 0 18px 8px;
+  height: 100px;
+  box-sizing: border-box;
+  padding: 0 12px 14px;
   position: relative;
   z-index: 4;
-  background: #F2F7F9;
-  border-top: 4.5px solid var(--border-blue);
+  background: var(--panel-footer);
+  border-top: 4px solid var(--bubble-rim);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
 }
 
 .voice-input-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin-top: calc(-0.5 * var(--voice-btn-size));
-  margin-bottom: 2px;
+  position: absolute;
+  left: 50%;
+  top: calc(-0.5 * var(--voice-btn-size));
+  transform: translateX(-50%);
 }
 
 .voice-hint {
-  margin: 4px 0 0;
-  font-family: 'Lao Muang Don', sans-serif;
-  font-size: 0.82rem;
+  margin: 0;
+  font-family: var(--curio-font-mono);
   font-weight: 500;
-  color: rgba(61, 87, 106, 0.72);
+  font-size: 16px;
+  white-space: nowrap;
+  color: #111111;
   text-align: center;
-  line-height: 1.35;
 }
 
 .voice-input-button {
-  color: #ffffff;
-  font-size: 2em;
-  width: var(--voice-btn-size);
+  width: var(--voice-btn-width);
   height: var(--voice-btn-size);
-  min-width: var(--voice-btn-size);
-  min-height: var(--voice-btn-size);
   padding: 0;
+  border: none;
   border-radius: 50%;
-  border: 2px solid rgba(191, 228, 240, 0.85);
-  background: #79AAFF;
+  background: transparent;
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease, border-color 0.2s ease;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: var(--shadow-layered);
-  position: relative;
-  overflow: hidden;
-  box-sizing: border-box;
-  aspect-ratio: 1;
+  transition: transform 0.2s ease, filter 0.2s ease;
 }
 
 .voice-input-button:hover:not(:disabled) {
-  transform: scale(1.04);
-  filter: brightness(1.03);
-  border-color: #568E9C;
+  transform: scale(1.05);
 }
 
-.voice-input-button:active {
+.voice-input-button:active:not(:disabled) {
   transform: scale(0.96);
 }
 
+.voice-input-button:focus-visible {
+  outline: 4px solid var(--curio-yellow);
+  outline-offset: 2px;
+}
+
 .voice-input-button.recording {
-  background: #3C69B8;
-  border-color: rgba(232, 120, 154, 0.55);
   animation: pulse 1.5s infinite;
-  box-shadow: var(--shadow-layered);
 }
 
-
-.voice-input-button.loading {
-  background: linear-gradient(180deg, #c5d8e8 0%, #9eb8d4 100%);
-  border-color: var(--border-blue);
-  box-shadow: var(--shadow-layered);
-  cursor: not-allowed;
-}
-
-
+.voice-input-button.loading,
 .voice-input-button:disabled {
   cursor: not-allowed;
-  transform: none;
+}
+
+/* Same navy disc as the mic artwork, drawn without the mic glyph */
+.voice-loading-face {
+  width: 110px;
+  height: 110px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 38%, #2d5f96 0%, #1a4677 55%, #0f3157 100%);
+  border: 6px solid #0b2a4a;
+  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.18), 0 4px 10px rgba(11, 42, 74, 0.35);
 }
 
 .voice-icon {
-  font-size: 3.25rem;
-  line-height: 1;
-  flex-shrink: 0;
-  color: currentColor;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
 }
 
-.recording-icon {
-  animation: bounce 0.6s infinite alternate;
+.loading-icon {
+  font-size: 40px;
+  color: #ffffff;
 }
 
 @keyframes pulse {
-  0%,
-  100% {
-    box-shadow: 0 8px 10px -6px rgba(0, 0, 0, 0.08), 0 20px 25px -5px rgba(0, 0, 0, 0.08);
-  }
-  50% {
-    box-shadow: 0 8px 12px -6px rgba(0, 0, 0, 0.14), 0 20px 30px -5px rgba(0, 0, 0, 0.14);
-  }
+  0%, 100% { filter: drop-shadow(0 0 0 rgba(255, 211, 77, 0)); }
+  50% { filter: drop-shadow(0 0 14px rgba(255, 211, 77, 0.9)); }
 }
 
-@keyframes bounce {
-  0% {
-    transform: translateY(0);
-  }
-  100% {
-    transform: translateY(-10px);
-  }
-}
-
-/* Responsive Design */
-@media (max-width: 1024px) {
-  .chat-container {
-    --voice-btn-size: 100px;
-  }
-
-  .chat-messages {
-    padding: 14px 14px calc(10px + var(--voice-btn-size) / 2);
-  }
-  
-  .voice-icon {
-    font-size: 2.875rem;
-  }
-}
-
-@media (max-width: 768px) {
-  .chat-container {
-    height: min(78vh, 720px);
-    max-width: 100%;
-    border-radius: 20px;
-    --voice-btn-size: 96px;
-  }
-
-  .chat-panel-header {
-    padding: 14px 16px 12px;
-  }
-
-  .chat-messages {
-    padding: 12px 12px calc(8px + var(--voice-btn-size) / 2);
-  }
-  
-  .message-bubble {
-    padding: 10px 14px;
-  }
-  
-  .message.user .message-bubble,
-  .message.assistant .message-bubble {
-    font-size: 1.12rem;
-  }
-  
-  .message-text {
-    font-size: 1.2em;
-  }
-  
-  .message-time {
-    font-size: 0.7em;
-  }
-  
-  .chat-input-area {
-    padding: 0 14px 6px;
-  }
-  
-  .voice-icon {
-    font-size: 2.75rem;
-  }
-
-  .voice-hint {
-    font-size: 0.78rem;
-  }
-}
-
-@media (max-width: 480px) {
-  .chat-container {
-    height: min(82vh, 680px);
-    border-radius: 18px;
-    --voice-btn-size: 88px;
-  }
-
-  .chat-messages {
-    padding: 10px 10px calc(6px + var(--voice-btn-size) / 2);
-  }
-  
-  .message {
-    margin-bottom: 12px;
-  }
-  
-  .message-bubble {
-    padding: 8px 12px;
-    border-radius: 14px;
-  }
-  
-  .message.user .message-bubble,
-  .message.assistant .message-bubble {
-    font-size: 1.08rem;
-  }
-  
-  .message-text {
-    font-size: 1em;
-  }
-  
-  .message-time {
-    font-size: 0.68em;
-  }
-  
-  .chat-input-area {
-    padding: 0 12px 6px;
-  }
-  
-  .voice-icon {
-    font-size: 2.5rem;
-  }
-
-  .message-avatar {
-    width: 36px;
-    height: 36px;
-  }
-}
-
-/* Scrollbar Styling */
 .chat-messages::-webkit-scrollbar {
   width: 8px;
 }
 
 .chat-messages::-webkit-scrollbar-track {
-  background: #eef6f9;
-  border-radius: 10px;
+  background: transparent;
 }
 
 .chat-messages::-webkit-scrollbar-thumb {
-  background: #c5dde8;
-  border-radius: 10px;
+  background: rgba(25, 52, 79, 0.25);
+  border-radius: 4px;
 }
 
-.chat-messages::-webkit-scrollbar-thumb:hover {
-  background: #a8ccd9;
+/* Popups (Frame 70 / 71): built from shapes and text, not images */
+.room-choice-overlay,
+.mission-complete-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 30, 50, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: fadeIn 0.25s ease;
+}
+
+.popup-card {
+  position: relative;
+  width: min(880px, 92vw);
+  box-sizing: border-box;
+  padding: 44px 56px 40px;
+  background: #fcf0d9;
+  border: 12px solid #03365f;
+  border-radius: 40px;
+  box-shadow: 0 6px 0 #03365f;
+  text-align: center;
+  font-family: var(--curio-font-mono);
+  color: var(--curio-navy);
+  animation: slideUp 0.3s ease;
+}
+
+.room-choice-title {
+  font-weight: 700;
+  font-size: 40px;
+  margin-bottom: 10px;
+}
+
+.room-choice-question {
+  font-weight: 600;
+  font-size: 26px;
+  line-height: 1.4;
+  margin-bottom: 32px;
+}
+
+.room-choice-actions {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+}
+
+.popup-button {
+  min-width: 237px;
+  height: 72px;
+  padding: 0 28px;
+  border: 5px solid var(--curio-navy);
+  border-radius: 999px;
+  font-family: var(--curio-font-mono);
+  font-weight: 700;
+  font-size: 26px;
+  cursor: pointer;
+  box-shadow: 0 5px 0 var(--curio-navy);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+
+.popup-button.primary {
+  background: var(--curio-yellow);
+  color: var(--curio-navy);
+}
+
+.popup-button.secondary {
+  background: #ffffff;
+  color: var(--curio-navy);
+}
+
+.popup-button:hover {
+  filter: brightness(1.05);
+  transform: translateY(-2px);
+}
+
+.popup-button:active {
+  transform: translateY(3px);
+  box-shadow: 0 2px 0 var(--curio-navy);
+}
+
+.mission-complete-container {
+  padding-right: 300px;
+  text-align: left;
+}
+
+.mission-complete-message {
+  font-weight: 700;
+  font-size: 32px;
+  line-height: 1.4;
+  margin-bottom: 28px;
+}
+
+.happy-nova {
+  position: absolute;
+  right: -30px;
+  bottom: -20px;
+  width: 300px;
+  pointer-events: none;
+}
+
+.star {
+  position: absolute;
+  pointer-events: none;
+  animation: twinkle 1.6s ease-in-out infinite;
+}
+
+.star-1 { width: 72px; right: 236px; top: 34px; }
+.star-2 { width: 56px; right: 44px; top: 26px; animation-delay: 0.4s; }
+.star-3 { width: 84px; right: 250px; bottom: 36px; animation-delay: 0.8s; }
+
+@keyframes twinkle {
+  50% { transform: scale(1.12) rotate(8deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(24px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }
 </style>

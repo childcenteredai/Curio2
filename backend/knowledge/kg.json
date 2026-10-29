@@ -1,6 +1,6 @@
 {
   "Hair Stands Up Near a Balloon": {
-    "mechanism": "When a child rubs a balloon on a fleece sweater, the rubbing gives energy that makes tiny negative particles called electrons move from the sweater onto the balloon. Because of this movement, the balloon ends up with more negative charge and the sweater with less, so the charges are no longer balanced and the balloon becomes charged for a short time. Everything around the balloon, including the child’s hair, has positive and negative charges inside it. When the charged balloon with more negative charges is held near the hair, it can pull the hair with more positive charges without touching it. At the same time, each strand of hair has the same kind of positive charge, so the hairs push away from one another and spread out like a spiky crown. This works best with a balloon and fleece because those materials let charges move and stay in place for a while, and we can explore this by changing how much they rub the balloon, how close it is to the hair, or what materials they test.",
+    "mechanism": "The child's hair stands up and spreads out when a balloon is held nearby, even though the balloon does not touch the hair. This happens because of static electricity, an invisible force that lets objects push or pull on one another without touching. When a child rubs a balloon on a fleece sweater, the rubbing gives energy that helps tiny particles move from one object to another. Everything around the balloon, including the sweater and the child's hair, has tiny particles with charges inside it. There are two kinds of charge, positive and negative, which are usually balanced. When the child rubs the balloon on the sweater, tiny negative particles called electrons move from the sweater onto the balloon. Because of this movement, the balloon ends up with more negative charge and the sweater with less, so the charges are no longer balanced and the balloon becomes charged for a short time. When the charged balloon is held near the hair, it can pull the hair toward it without touching it. At the same time, hair strands with the same kind of charge can push away from one another and spread out like a spiky crown. This works best with a balloon and fleece because those materials let charges move and stay in place for a while. We can explore this by changing how much we rub the balloon, how close it is to the hair, or what materials we test.",
     "concepts": {
       "Invisible Force": {
         "definition": "Static electricity is an invisible force that allows charged objects to push or pull on other objects without touching them.",
@@ -10,20 +10,18 @@
         "definition": "Rubbing gives energy that helps tiny particles move from one object to another. This movement of these particles is what builds up static electricity we see, like objects pulling or pushing without touching.",
         "explanation": "Rubbing the balloon on the sweater can give enough energy to move tiny particles inside the object, which creates static electricity. Without rubbing, those particles would stay mostly in place, and the balloon would not affect the hair."
       },
+      "Charges": {
+        "definition": "All objects are made of tiny particles that have an electric charge. There are two kinds of charge: positive and negative. Most of the time, objects have equal amounts of both, so the charges are balanced and nothing special happens.",
+        "explanation": "The balloon, sweater, and hair all contain tiny positive and negative charges. Before rubbing, these charges are balanced, so the hair hangs down normally."
+      },
+      "Electrons": {
+        "definition": "Electrons are tiny particles that carry a negative charge. Negative does not mean bad—it just means this is one of the two kinds of charge. Electrons can move from one object to another, especially when objects rub together.",
+        "explanation": "When the balloon is rubbed on the sweater, tiny particles that carry a negative charge, which are called electrons, move from the sweater onto the balloon."
+      },
       "Different Charges": {
         "definition": "The different charges happen when electrons move so that one object has more negative charge and another has less. When this happens, the object is said to be charged. This charged state, which is called static electricity, lasts for a short time before it slowly goes away.",
-        "explanation": "After rubbing, the balloon has more electrons than before, and the sweater has fewer. Because the charges are no longer balanced, the balloon becomes charged and can cause static electricity.",
-        "subconcepts": {
-          "Charges": {
-            "definition": "All objects are made of tiny particles that have an electric charge. There are two kinds of charge: positive and negative. Most of the time, objects have equal amounts of both, so the charges are balanced and nothing special happens.",
-            "explanation": "The balloon, sweater, and hair all contain tiny positive and negative charges. Before rubbing, these charges are balanced, so the hair hangs down normally."
-          },
-          "Electrons": {
-            "definition": "Electrons are tiny particles that carry a negative charge. Negative does not mean bad—it just means this is one of the two kinds of charge. Electrons can move from one object to another, especially when objects rub together.",
-            "explanation": "When the balloon is rubbed on the sweater, tiny particles that carry a negative charge, which are called electrons, move from the sweater onto the balloon."
-          }
-        }
-      },  
+        "explanation": "After rubbing, the balloon has more electrons than before, and the sweater has fewer. Because the charges are no longer balanced, the balloon becomes charged and can cause static electricity."
+      },
       "Push and Pull": {
         "definition": "Electric charges can push or pull on other objects without touching them. When two objects have different kinds of charge (positive and negative), they pull toward each other. When two objects have the same kind of charge (two positives or two negatives), they push away from each other. These pushes and pulls can happen even when the objects don’t touch.",
         "explanation": "The charged balloon and the hair have different kinds of charge. In this situation, the balloon has a more negative charge, and the hair has a more positive charge. Because opposite charges pull toward each other, the hair is pulled toward the balloon, even though they do not touch. At the same time, each strand of hair has the same kind of positive charges, so the hairs push away from one another and spread out."
@@ -38,8 +36,8 @@
       }
     }
   },
-   "Pepper Leaping up to Spoon": {
-    "mechanism": "When a child rubs a plastic spoon on a fuzzy sweater, the rubbing gives energy that makes tiny negative particles called electrons move from the sweater onto the spoon. Because of this movement, the spoon ends up with more negative charge and the sweater with less, so the charges are no longer balanced and the spoon becomes charged for a short time. Everything around the spoon, including tiny pieces of pepper and salt, has positive and negative charges inside it. When the charged spoon with more negative charges is held near the pepper, it can pull the pepper with more positive charges without touching it. Heavier salt grains do not move as easily with static electricity and stay in the bowl. This works best with a plastic spoon and dry materials because they let charges move and stay in place for a while, and we can explore this by changing how much they rub the spoon, how close it is, or what materials they test.",
+  "Pepper Leaping up to Spoon": {
+    "mechanism": "The pepper flakes leap up toward the plastic spoon, even though the spoon does not touch them. This happens because of static electricity, an invisible force that lets objects push or pull on one another without touching. When a child rubs a plastic spoon on a fuzzy sweater, the rubbing gives energy that helps tiny particles move from one object to another. Everything around the spoon, including the sweater, pepper, and salt, has tiny particles with charges inside it. There are two kinds of charge, positive and negative, which are usually balanced. When the child rubs the spoon on the sweater, tiny negative particles called electrons move from the sweater onto the spoon. Because of this movement, the spoon ends up with more negative charge and the sweater with less, so the charges are no longer balanced and the spoon becomes charged for a short time. When the charged spoon is held near the pepper, it can pull the pepper flakes upward without touching them. Heavier salt grains do not move as easily under these conditions and stay in the bowl. This works best with a plastic spoon and dry materials because they let charges move and stay in place for a while. We can explore this by changing how much we rub the spoon, how close it is to the pepper, or what materials we test.",
     "concepts": {
       "Invisible Force": {
         "definition": "Static electricity is an invisible force that allows charged objects to push or pull on other objects without touching them.",
@@ -49,19 +47,17 @@
         "definition": "Rubbing gives energy that helps tiny particles move from one object to another. This movement of these particles is what builds up static electricity we see, like objects pulling or pushing without touching.",
         "explanation": "Rubbing the spoon on the sweater can give enough energy to move tiny particles inside the object, which creates static electricity. Without rubbing, those particles would stay mostly in place, and the spoon would not be able to pull pepper flakes upward."
       },
+      "Charges": {
+        "definition": "All objects are made of tiny particles that have an electric charge. There are two kinds of charge: positive and negative. Most of the time, objects have equal amounts of both, so the charges are balanced and nothing special happens.",
+        "explanation": "The spoon, sweater, pepper, and salt all contain tiny positive and negative charges. Before rubbing, these charges are balanced, so the pepper and salt stay still in the bowl."
+      },
+      "Electrons": {
+        "definition": "Electrons are tiny particles that carry a negative charge. Negative does not mean bad—it just means this is one of the two kinds of charge. Electrons can move from one object to another, especially when objects rub together.",
+        "explanation": "When the plastic spoon is rubbed on the fuzzy sweater, tiny particles that carry a negative charge, which are called electrons, move from the sweater onto the spoon."
+      },
       "Different Charges": {
         "definition": "The different charges happen when electrons move so that one object has more negative charge and another has less. When this happens, the object is said to be charged. This charged state, which is called static electricity, lasts for a short time before it slowly goes away.",
-        "explanation": "After rubbing, the spoon has more electrons than before, and the sweater has fewer. Because the charges are no longer balanced, the spoon becomes charged and can cause static electricity.",
-        "subconcepts": {
-          "Charges": {
-            "definition": "All objects are made of tiny particles that have an electric charge. There are two kinds of charge: positive and negative. Most of the time, objects have equal amounts of both, so the charges are balanced and nothing special happens.",
-            "explanation": "The spoon, sweater, pepper, and salt all contain tiny positive and negative charges. Before rubbing, these charges are balanced, so the pepper and salt stay still in the bowl."
-          },
-          "Electrons": {
-            "definition": "Electrons are tiny particles that carry a negative charge. Negative does not mean bad—it just means this is one of the two kinds of charge. Electrons can move from one object to another, especially when objects rub together.",
-            "explanation": "When the plastic spoon is rubbed on the fuzzy sweater, tiny particles that carry a negative charge, which are called electrons, move from the sweater onto the spoon."
-          }
-        }
+        "explanation": "After rubbing, the spoon has more electrons than before, and the sweater has fewer. Because the charges are no longer balanced, the spoon becomes charged and can cause static electricity."
       },
       "Push and Pull": {
         "definition": "Electric charges can push or pull on other objects without touching them. When two objects have different kinds of charge (positive and negative), they pull toward each other. When two objects have the same kind of charge  (two positives or two negatives), they push away from each other. These pushes and pulls can happen even when the objects don’t touch.",
@@ -77,8 +73,8 @@
       }
     }
   },
-"Bending Water Stream with a Comb": {
-    "mechanism": "When a child rubs a plastic comb on dry hair, the rubbing gives energy that makes tiny negative particles called electrons move from the hair onto the comb. Because of this movement, the comb ends up with more negative charge and the hair with less, so the charges are no longer balanced and the comb becomes charged for a short time. Everything, including water, has tiny positive and negative charges inside it.  When the charged comb with more negative charges is held near the water, it can pull the water stream with more positive charges even without touching it. This works best with a plastic comb and dry hair because those materials let the charges move and stay in place for a while, and we can explore this by changing how much they rub the comb, how close it is to the water, or how fast the water flows.",
+  "Bending Water Stream with a Comb": {
+    "mechanism": "The water stream bends toward the plastic comb, even though the comb does not touch the water. This happens because of static electricity, an invisible force that lets objects push or pull on one another without touching. When a child rubs a plastic comb on dry hair, the rubbing gives energy that helps tiny particles move from one object to another. Everything, including the comb, hair, and water, has tiny particles with charges inside it. There are two kinds of charge, positive and negative, which are usually balanced. When the child rubs the comb on hair, tiny negative particles called electrons move from the hair onto the comb. Because of this movement, the comb ends up with more negative charge and the hair with less, so the charges are no longer balanced and the comb becomes charged for a short time. When the charged comb is held near the water, it can pull the water stream toward it without touching it. This works best with a plastic comb and dry hair because those materials let charges move and stay in place for a while. We can explore this by changing how much we rub the comb, how close it is to the water, or how fast the water flows.",
     "concepts": {
       "Invisible Force": {
         "definition": "Static electricity is an invisible force that allows charged objects to push or pull on other objects without touching them.",
@@ -88,19 +84,17 @@
         "definition": "Rubbing gives energy that helps tiny particles move from one object to another. This movement of these particles is what builds up static electricity we see, like objects pulling or pushing without touching.",
         "explanation": "Rubbing the comb through hair can give enough energy to move tiny particles inside the object, which creates static electricity. Without rubbing, those particles would stay mostly in place, and the comb would not affect the water."
       },
+      "Charges": {
+        "definition": "All objects are made of tiny particles that have an electric charge. There are two kinds of charge: positive and negative. Most of the time, objects have equal amounts of both, so the charges are balanced and nothing special happens.",
+        "explanation": "The hair, comb, and water all contain tiny positive and negative charges. When these charges are balanced, the objects do not push or pull on each other in noticeable ways."
+      },
+      "Electrons": {
+        "definition": "Electrons are tiny particles that carry a negative charge. Negative does not mean bad—it just means this is one of the two kinds of charge. Electrons can move from one object to another, especially when objects rub together.",
+        "explanation": "When the plastic comb is rubbed on hair, tiny particles that carry a negative charge, which are called electrons, move from the hair onto the plastic comb."
+      },
       "Different Charges": {
         "definition": "The different charges happen when electrons move so that one object has more negative charge and another has less. When this happens, the object is said to be charged. This charged state, which is called static electricity, lasts for a short time before it slowly goes away.",
-        "explanation": "After rubbing, the comb has more electrons than before, and the hair has fewer. Because the charges are no longer balanced, the comb becomes charged and can cause static electricity.",
-        "subconcepts": {
-          "Charges": {
-            "definition": "All objects are made of tiny particles that have an electric charge. There are two kinds of charge: positive and negative. Most of the time, objects have equal amounts of both, so the charges are balanced and nothing special happens.",
-            "explanation": "The hair, comb, and water all contain tiny positive and negative charges. When these charges are balanced, the objects do not push or pull on each other in noticeable ways."
-          },
-          "Electrons": {
-            "definition": "Electrons are tiny particles that carry a negative charge. Negative does not mean bad—it just means this is one of the two kinds of charge. Electrons can move from one object to another, especially when objects rub together.",
-            "explanation": "When the plastic comb is rubbed on hair, tiny particles that carry a negative charge, which are called electrons, move from the hair onto the plastic comb."
-          }
-        }
+        "explanation": "After rubbing, the comb has more electrons than before, and the hair has fewer. Because the charges are no longer balanced, the comb becomes charged and can cause static electricity."
       },
       "Push and Pull": {
         "definition": "Electric charges can push or pull on other objects without touching them. When two objects have different kinds of charge (positive and negative), they pull toward each other. When two objects have the same kind of charge  (two positives or two negatives), they push away from each other. These pushes and pulls can happen even when the objects don’t touch.",
@@ -113,6 +107,117 @@
       "Test the Effect of Static Electricity": {
         "definition": "We can explore static electricity by changing what we do and watching what happens. By testing one thing at a time, we can find out what affects how strong the effect is.",
         "explanation": "We can invent our own ways to test how the effect of static electricity changes by rubbing the comb more or fewer times, holding it closer or farther from the water, or changing how strong the water flows."
+      }
+    }
+  },
+  "Labrador Puppy Family": {
+    "mechanism": "The Labrador puppies have different fur colors, even though they share the same parents. Fur color is a trait, or characteristic, that can be different among living things. These puppies are the mother's offspring, and they can look similar to their parents and siblings without looking exactly the same. Through inheritance, each puppy receives information from both its mother and father that helps determine its traits. All the puppies are made of cells, tiny building blocks that keep their bodies growing and working, including making the colors in their fur. Inside their cells, DNA acts like an instruction book containing information that helps determine how each puppy grows, looks, and works. Chromosomes are bundles of DNA that carry many genes, and each puppy receives a different combination of chromosomes from its parents. Genes are small sections of DNA that give instructions. Different versions of genes can give different instructions, and a dark-colored mother can carry a version for golden fur without being golden herself. Proteins are tiny workers that help cells do their jobs, including controlling the pigments that give fur its color. When a puppy inherits the golden color-related gene version from both parents, a protein that normally helps produce dark coloring does not work properly, so the puppy has golden fur instead of dark fur. This explains how puppies from the same parents can inherit different information and develop different fur colors.",
+    "concepts": {
+      "Traits": {
+        "definition": "Traits are characteristics of living things, such as fur color, eye color, or body shape. Traits can be similar or different among living things, even within the same family.",
+        "explanation": "The Labrador puppies share many traits, such as their body shape and type of fur, but they have different fur colors. Some puppies have dark fur, while another has golden fur. Fur color is a trait, and dark and golden are different forms of that trait."
+      },
+      "Offspring": {
+        "definition": "Offspring are the children of living things. They often look like their parents and siblings because they are related, but they do not always look exactly the same.",
+        "explanation": "The puppies are the offspring of the dark Labrador mother and a father who is not shown. They share the same parents and many similar traits, but they are not exact copies of one another."
+      },
+      "Inheritance": {
+        "definition": "Inheritance is how parents pass genetic information to their offspring. This information helps determine traits such as fur color and body patterns. Offspring receive information from both parents, but the combination can be different for each offspring.",
+        "explanation": "Each Labrador puppy receives genetic information from both its mother and father through inheritance. This information helps determine traits such as fur color. Even though the puppies share the same parents, each can receive a different combination of genetic information."
+      },
+      "Cells": {
+        "definition": "Cells are the tiny building blocks that make up all living things. They do important jobs that keep plants and animals growing and working. Cells also contain the information that helps determine how living things develop.",
+        "explanation": "The Labrador mother and her puppies are made of many tiny cells. These cells do different jobs to help the puppies grow and develop, including producing the coloring in their fur."
+      },
+      "DNA": {
+        "definition": "DNA is like an instruction book inside living things. It contains genetic information that helps determine how a living thing grows, looks, and works. Offspring receive DNA from both of their parents.",
+        "explanation": "Inside most of the puppies' cells is DNA containing instructions inherited from their mother and father. These instructions help determine many traits, including fur color. The puppies share much of their DNA because they have the same parents, but they can receive different combinations of instructions."
+      },
+      "Chromosomes": {
+        "definition": "Chromosomes are bundles of DNA inside cells. They carry many genes, which contain instructions for different traits. Offspring receive chromosomes from both parents, so they can inherit different combinations of genetic information.",
+        "explanation": "Inside the puppies’ cells, DNA is organized into chromosomes that carry genes related to traits such as fur color. Each puppy receives chromosomes from both its mother and father. Because the puppies can receive different combinations of chromosomes, they can also inherit different versions of genes that affect fur color."
+      },
+      "Genes": {
+        "definition": "Genes are small sections of DNA that carry instructions. Different versions of the same gene can give different instructions, which can affect traits such as color or pattern.",
+        "explanation": "Labrador puppies inherit genes from their parents, including genes that help determine fur color. These genes can have different versions that give different instructions. A dark Labrador mother can carry a gene version related to golden fur without being golden herself because she also carries a version that allows dark fur."
+      },
+      "Proteins": {
+        "definition": "Proteins are tiny workers inside cells that help them do important jobs. Genes provide instructions for making proteins, and different gene versions can make proteins work differently. Some proteins help control the pigments, or colors, that appear in living things.",
+        "explanation": "In Labrador puppies, some genes give instructions for making proteins that help control fur color. One of these proteins works like a switch that helps cells produce dark pigment, which gives fur its dark or brown color. When a puppy inherits the golden color-related gene version from both parents, this protein does not work normally, so the cells mainly produce golden pigment instead of dark pigment."
+      }
+    }
+  },
+  "Chicken Siblings with Different Comb Shapes": {
+    "mechanism": "The young chickens have different comb shapes, even though they share the same parents. Comb shape is a trait, or characteristic, that can differ among living things. Five chickens have low, bumpy rose combs like their mother, while one has a pointed, upright single comb. These chickens are their mother's offspring, and they can resemble their parents and siblings without looking exactly the same. Through inheritance, each chicken receives genetic information from both its mother and father that helps determine its traits. All the chickens are made of cells, tiny building blocks that help their bodies grow and work, including developing the combs on their heads. Inside their cells, DNA acts like an instruction book containing information that helps determine how each chicken grows, looks, and works. Chromosomes are bundles of DNA that carry many genes, and each chicken receives a different combination of chromosomes from its parents. Genes are small sections of DNA that give instructions. Different versions of genes can give different instructions, and a mother with a rose comb can carry a version related to a single comb without having one herself. Proteins are tiny workers that help cells do their jobs, including guiding how the comb grows and takes shape. When a chick inherits the single-comb version from both parents, proteins involved in comb development work according to those inherited instructions, allowing a pointed, upright single comb to develop instead of a low, bumpy rose comb. This explains how chickens from the same parents can inherit different information and develop different comb shapes.",
+    "concepts": {
+      "Traits": {
+        "definition": "Traits are characteristics of living things, such as fur color, eye color, or body shape. Traits can be similar or different among living things, even within the same family.",
+        "explanation": "The young chickens share many traits, such as their feather color and body shape, but they have different comb shapes. Five chickens have low, bumpy rose combs like their mother, while one has a pointed, upright single comb. Comb shape is a trait, and rose and single combs are different forms of that trait."
+      },
+      "Offspring": {
+        "definition": "Offspring are the children of living things. They often look like their parents and siblings because they are related, but they do not always look exactly the same.",
+        "explanation": "The six young chickens are the offspring of the mother hen and a father who is not shown. They share the same parents and many similar traits, but they are not exact copies of one another."
+      },
+      "Inheritance": {
+        "definition": "Inheritance is how parents pass genetic information to their offspring. This information helps determine traits such as fur color and body patterns. Offspring receive information from both parents, but the combination can be different for each offspring.",
+        "explanation": "Each young chicken receives genetic information from both its mother and father through inheritance. This information helps determine traits such as comb shape. Even though the chickens share the same parents, each can receive a different combination of genetic information."
+      },
+      "Cells": {
+        "definition": "Cells are the tiny building blocks that make up all living things. They do important jobs that keep plants and animals growing and working. Cells also contain the information that helps determine how living things develop.",
+        "explanation": "The mother hen and her six young chickens are made of many tiny cells. These cells do different jobs to help the chickens grow and develop, including forming the combs on their heads."
+      },
+      "DNA": {
+        "definition": "DNA is like an instruction book inside living things. It contains genetic information that helps determine how a living thing grows, looks, and works. Offspring receive DNA from both of their parents.",
+        "explanation": "Inside most of the young chickens' cells is DNA containing instructions inherited from their mother and father. These instructions help determine many traits, including comb shape. The chickens share much of their DNA because they have the same parents, but they can receive different combinations of instructions."
+      },
+      "Chromosomes": {
+        "definition": "Chromosomes are bundles of DNA inside cells. They carry many genes, which contain instructions for different traits. Offspring receive chromosomes from both parents, so they can inherit different combinations of genetic information.",
+        "explanation": "Inside the young chickens' cells, DNA is organized into chromosomes that carry genes related to traits such as comb shape. Each chicken receives chromosomes from both its mother and father. Because the chickens can receive different combinations of chromosomes, they can also inherit different versions of genes that affect comb shape."
+      },
+      "Genes": {
+        "definition": "Genes are small sections of DNA that carry instructions. Different versions of the same gene can give different instructions, which can affect traits such as color or pattern.",
+        "explanation": "Young chickens inherit genes from their parents, including genes that help determine comb shape. These genes can have different versions that give different instructions. A mother hen with a rose comb can carry a gene version related to a single comb without having one herself because she also carries a version that allows a rose comb."
+      },
+      "Proteins": {
+        "definition": "Proteins are tiny workers inside cells that help them do important jobs. Genes provide instructions for making proteins, and different gene versions can make proteins work differently. Some proteins help control the pigments, or colors, that appear in living things.",
+        "explanation": "In chickens, some genes give instructions for making proteins that help control how their combs grow. These proteins help guide the growth and shape of the comb. When a chick inherits the single-comb gene version from both parents, the proteins involved in comb development work according to those instructions, allowing the chick to develop a pointed, upright single comb instead of a low, bumpy rose comb."
+      }
+    }
+  },
+  "Multicolored Corn Kernels on One Cob": {
+    "mechanism": "The kernels on the same corn cob have different colors, such as yellow, orange, red, and purple. Kernel color is a trait, or characteristic, that can differ among living things. Each kernel contains a baby corn plant, an offspring that can grow into a new plant. Through inheritance, each kernel receives genetic information from the mother plant and from pollen. Because each kernel forms through a separate fertilization, the kernels can receive different combinations of genetic information. Corn is made of cells, tiny building blocks that help it grow and work, including producing colors in the kernels. Inside cells, DNA acts like an instruction book containing information that helps determine how corn grows, looks, and works. Chromosomes are bundles of DNA that carry many genes, and each seed receives chromosomes from the mother plant and from pollen. Genes are small sections of DNA that give instructions. Different versions of genes can give different instructions that affect kernel color. Proteins are tiny workers that help cells do their jobs, including making or controlling pigments, the coloring substances that give kernels their colors. Different inherited instructions can affect how these proteins work, leading to different colors among kernels on the same cob. This helps explain why kernels growing together on the same cob can have different colors.",
+    "concepts": {
+      "Traits": {
+        "definition": "Traits are characteristics of living things, such as fur color, eye color, or body shape. Traits can be similar or different among living things, even within the same family.",
+        "explanation": "The kernels on the same corn cob have different colors, such as yellow, orange, red, and purple. Although they grow together on the same cob and have similar shapes, their colors can be different. Kernel color is a trait, and these colors are different forms of that trait."
+      },
+      "Offspring": {
+        "definition": "Offspring are the children of living things. They often look like their parents and siblings because they are related, but they do not always look exactly the same.",
+        "explanation": "Each corn kernel contains a seed with a baby corn plant that can grow into a new plant. Each baby plant is an offspring formed through a separate fertilization."
+      },
+      "Inheritance": {
+        "definition": "Inheritance is how parents pass genetic information to their offspring. This information helps determine traits such as fur color and body patterns. Offspring receive information from both parents, but the combination can be different for each offspring.",
+        "explanation": "Each corn seed receives genetic information from the mother plant and from pollen through inheritance. Although the kernels grow together on the same cob, they can receive different combinations of genetic information."
+      },
+      "Cells": {
+        "definition": "Cells are the tiny building blocks that make up all living things. They do important jobs that keep plants and animals growing and working. Cells also contain the information that helps determine how living things develop.",
+        "explanation": "The corn plant and its kernels are made of many tiny cells. These cells do different jobs to help the corn grow and develop, including producing the coloring in its kernels."
+      },
+      "DNA": {
+        "definition": "DNA is like an instruction book inside living things. It contains genetic information that helps determine how a living thing grows, looks, and works. Offspring receive DNA from both of their parents.",
+        "explanation": "Inside the cells of each corn seed is DNA containing instructions received from the mother plant and from pollen. These instructions help determine many characteristics, including kernel color. Because each seed forms through a separate fertilization, the seeds can receive different combinations of DNA instructions."
+      },
+      "Chromosomes": {
+        "definition": "Chromosomes are bundles of DNA inside cells. They carry many genes, which contain instructions for different traits. Offspring receive chromosomes from both parents, so they can inherit different combinations of genetic information.",
+        "explanation": "Inside the corn seeds' cells, DNA is organized into chromosomes that carry genes related to characteristics such as kernel color. Each seed receives chromosomes from the mother plant and from pollen. These chromosomes carry different combinations of genetic information."
+      },
+      "Genes": {
+        "definition": "Genes are small sections of DNA that carry instructions. Different versions of the same gene can give different instructions, which can affect traits such as color or pattern.",
+        "explanation": "Corn seeds inherit genes that help determine characteristics such as kernel color. These genes can have different versions that give different instructions. Different combinations of gene versions can affect which colors develop in the kernels on the same cob."
+      },
+      "Proteins": {
+        "definition": "Proteins are tiny workers inside cells that help them do important jobs. Genes provide instructions for making proteins, and different gene versions can make proteins work differently. Some proteins help control the pigments, or colors, that appear in living things.",
+        "explanation": "In corn kernels, some genes give instructions for making proteins that help produce or control pigments, the coloring substances that give kernels their colors. Different inherited instructions can affect how these proteins work, helping produce different colors such as yellow, orange, red, and purple."
       }
     }
   }

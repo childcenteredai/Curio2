@@ -1,0 +1,31 @@
+/* Curio look from the Lab-Design Figma file. Swap the font files here once the
+   exact Figma fonts are confirmed; components only use the variables below. */
+@font-face {
+  font-family: 'Curio Mono';
+  src: url('./fonts/RedHatMono-Variable.ttf') format('truetype');
+  font-weight: 300 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Curio Round';
+  src: url('./fonts/Comfortaa-Variable.ttf') format('truetype');
+  font-weight: 300 700;
+  font-display: swap;
+}
+
+:root {
+  --curio-font-mono: 'Curio Mono', ui-monospace, monospace;
+  --curio-font-round: 'Curio Round', system-ui, sans-serif;
+
+  --curio-navy: #19344f;
+  --curio-navy-deep: #0f3557;
+  --curio-cream: #fff4dc;
+  --curio-cream-light: #fff9ef;
+  --curio-yellow: #ffd34d;
+  --curio-yellow-soft: #ffc866;
+  --curio-teal: #67cbd9;
+  --curio-blue-rim: #7b9fd4;
+  --curio-lavender: #d3cfdc;
+  --curio-footer: #c3ccd9;
+}

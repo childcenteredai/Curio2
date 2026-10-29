@@ -107,7 +107,7 @@ const handleImageError = () => {
 
 const handleSwitchImage = () => {
   // Navigate back to image selection
-  router.push('/')
+  router.push('/legacy')
 }
 
 const handleNewChat = async () => {
@@ -133,7 +133,7 @@ onMounted(() => {
     }
   } else {
     // If no image is selected, redirect back to home
-    router.push('/')
+    router.push('/legacy')
   }
 })
 </script>
@@ -349,6 +349,12 @@ onMounted(() => {
   overflow: visible;
   position: relative;
   z-index: 1;
+}
+
+/* Conversation fills its parent; give it the old panel size here */
+.chat-section :deep(.chat-container) {
+  max-width: 560px;
+  height: 90vh;
 }
 
 /* Icon-only pill — aligned with Back, paired on the right of the toolbar */

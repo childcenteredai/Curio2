@@ -77,16 +77,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { setCurioAppVersion, loadAppConfig } from '../constants/appConfig'
 
 const router = useRouter()
-
-onMounted(async () => {
-  await loadAppConfig()
-  setCurioAppVersion(1)
-})
 
 interface ImageOption {
   /** Full-size image URL passed to `/chat` (query `image`). */

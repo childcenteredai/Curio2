@@ -24,6 +24,13 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import scoped_session, sessionmaker
 
 from models import Conversation, Message
+from phenomena import (
+    AREAS,
+    PHENOMENA,
+    initial_hypothesis_line,
+    kg_key,
+    resolve_phenomenon,
+)
 from prompts.eval import scaffolding, scienceqa
 from prompts.scienceqa import get_scienceqa_prompt
 
@@ -144,13 +151,16 @@ OPENAI_FALLBACK_ERRORS = (
     httpx.TransportError,
 )
 primary_client = client.with_options(timeout=OPENAI_TIMEOUT_SECONDS, max_retries=0)
+# Without a timeout a stalled TTS request leaves Nova's line hidden for minutes;
+# on failure the frontend shows the text without audio instead.
+tts_client = client.with_options(timeout=15, max_retries=1)
 
 
-def _can_fall_back(error):
+def _can_fall_back(reason):
     if not OPENAI_FALLBACK_MODEL or OPENAI_FALLBACK_MODEL == OPENAI_CHAT_MODEL:
         return False
     print(
-        f"[LLM Fallback] {OPENAI_CHAT_MODEL} failed ({type(error).__name__}: {error}); "
+        f"[LLM Fallback] {OPENAI_CHAT_MODEL} failed ({reason}); "
         f"retrying with {OPENAI_FALLBACK_MODEL}"
     )
     return True
@@ -159,11 +169,19 @@ def _can_fall_back(error):
 def create_chat_completion(messages, **kwargs):
     """Non-streaming chat completion on the primary model, with timeout fallback."""
     try:
-        return primary_client.chat.completions.create(
+        response = primary_client.chat.completions.create(
             model=OPENAI_CHAT_MODEL, messages=messages, **OPENAI_CHAT_PARAMS, **kwargs
         )
+        choice = response.choices[0] if response.choices else None
+        if choice and (choice.message.content or "").strip():
+            return response
+        reason = (
+            f"empty response, finish_reason={choice.finish_reason if choice else None}"
+        )
+        if not _can_fall_back(reason):
+            return response
     except OPENAI_FALLBACK_ERRORS as e:
-        if not _can_fall_back(e):
+        if not _can_fall_back(f"{type(e).__name__}: {e}"):
             raise
     return client.chat.completions.create(
         model=OPENAI_FALLBACK_MODEL,
@@ -173,18 +191,23 @@ def create_chat_completion(messages, **kwargs):
     )
 
 
-def _content_tokens(stream):
+def _content_tokens(stream, finish_reasons=None):
     for chunk in stream:
-        if chunk.choices and chunk.choices[0].delta.content:
+        if not chunk.choices:
+            continue
+        if finish_reasons is not None and chunk.choices[0].finish_reason:
+            finish_reasons.append(chunk.choices[0].finish_reason)
+        if chunk.choices[0].delta.content:
             yield chunk.choices[0].delta.content
 
 
 def stream_chat_tokens(messages):
     """
-    Yield response tokens from the primary model. Falls back to the backup model only
-    if the primary fails before its first token (a half-sent answer cannot be redone).
+    Yield response tokens from the primary model. Falls back to the backup model if
+    the primary fails or ends before its first token (a half-sent answer cannot be redone).
     """
     started = False
+    finish_reasons = []
     try:
         stream = primary_client.chat.completions.create(
             model=OPENAI_CHAT_MODEL,
@@ -192,12 +215,15 @@ def stream_chat_tokens(messages):
             **OPENAI_CHAT_PARAMS,
             stream=True,
         )
-        for token in _content_tokens(stream):
+        for token in _content_tokens(stream, finish_reasons):
             started = True
             yield token
-        return
+        if started or not _can_fall_back(
+            f"empty stream, finish_reason={finish_reasons[-1] if finish_reasons else None}"
+        ):
+            return
     except OPENAI_FALLBACK_ERRORS as e:
-        if started or not _can_fall_back(e):
+        if started or not _can_fall_back(f"{type(e).__name__}: {e}"):
             raise
     stream = client.chat.completions.create(
         model=OPENAI_FALLBACK_MODEL,
@@ -251,9 +277,6 @@ engine = create_engine(database_url, pool_pre_ping=True)
 SessionLocal = scoped_session(
     sessionmaker(bind=engine, autocommit=False, autoflush=False)
 )
-
-# App version: 1 = bubbles on match only; 2 = all bubbles visible (gray), light up on match
-CURIO_APP_VERSION = int(os.getenv("CURIO_APP_VERSION", "1"))
 
 # Global variable to track conversation start times
 conversation_start_times = {}
@@ -685,7 +708,6 @@ def format_prompt(
     messages=None,
     child_question_level=None,
     first_time_matched_concepts=None,
-    app_version=None,
     kc_matched=False,
 ):
     if messages is None:
@@ -720,12 +742,7 @@ def format_prompt(
     if "<Mechanism Context>" in state_prompt:
         # Load mechanism from kg.json
         knowledge_base = json.load(open("knowledge/kg.json", "r"))
-        phenomenon_map = {
-            "balloon": "Hair Stands Up Near a Balloon",
-            "bend": "Bending Water Stream with a Comb",
-            "pepper": "Pepper Leaping up to Spoon",
-        }
-        phenomenon_key = phenomenon_map.get(phenomenon, "Hair Stands Up Near a Balloon")
+        phenomenon_key = kg_key(phenomenon)
         mechanism = knowledge_base.get(phenomenon_key, {}).get("mechanism", "")
         state_prompt = state_prompt.replace(
             "<Mechanism Context>",
@@ -735,12 +752,7 @@ def format_prompt(
     if "{kg_concepts}" in state_prompt:
         # Load knowledge base and extract all concepts and sub-concepts
         knowledge_base = json.load(open("knowledge/kg.json", "r"))
-        phenomenon_map = {
-            "balloon": "Hair Stands Up Near a Balloon",
-            "bend": "Bending Water Stream with a Comb",
-            "pepper": "Pepper Leaping up to Spoon",
-        }
-        phenomenon_key = phenomenon_map.get(phenomenon, "Hair Stands Up Near a Balloon")
+        phenomenon_key = kg_key(phenomenon)
         concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
         all_concepts = extract_all_concepts_and_subconcepts(concepts_dict)
 
@@ -757,30 +769,6 @@ def format_prompt(
         state_prompt = state_prompt.replace(
             "<Conversation History>", "<Conversation History>\n" + json.dumps(messages)
         )
-
-    # Version 2: clues hint for discover prompt
-    if "{clues_hint}" in state_prompt:
-        effective_version = (
-            app_version if app_version is not None else CURIO_APP_VERSION
-        )
-        if effective_version == 2:
-            knowledge_base = json.load(open("knowledge/kg.json", "r"))
-            phenomenon_map = {
-                "balloon": "Hair Stands Up Near a Balloon",
-                "bend": "Bending Water Stream with a Comb",
-                "pepper": "Pepper Leaping up to Spoon",
-            }
-            phenomenon_key = phenomenon_map.get(
-                phenomenon, "Hair Stands Up Near a Balloon"
-            )
-            concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
-            num_clues = len(concepts_dict) if concepts_dict else 8
-            state_prompt = state_prompt.replace(
-                "{clues_hint}",
-                f"See! There are **{num_clues}** **clues** waiting for you to discover to solve this mystery! ",
-            )
-        else:
-            state_prompt = state_prompt.replace("{clues_hint}", "")
 
     # Relevant scienceqa levels: give progress credit only when the child's message
     # matched a knowledge component this turn; otherwise keep the warm tone without
@@ -916,12 +904,7 @@ def parse_matched_kg_and_record_first_time(
     if not matched_kg or matched_kg == "":
         return first_time
     knowledge_base = json.load(open("knowledge/kg.json", "r"))
-    phenomenon_map = {
-        "balloon": "Hair Stands Up Near a Balloon",
-        "bend": "Bending Water Stream with a Comb",
-        "pepper": "Pepper Leaping up to Spoon",
-    }
-    phenomenon_key = phenomenon_map.get(phenomenon, "Hair Stands Up Near a Balloon")
+    phenomenon_key = kg_key(phenomenon)
     concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
     matchable_names = matchable_concept_names_ordered(concepts_dict)
     try:
@@ -964,12 +947,7 @@ def get_matched_concepts_from_db(
     knowledge_base = open("knowledge/kg.json", "r").read()
     knowledge_base = json.loads(knowledge_base)
 
-    phenomenon_map = {
-        "balloon": "Hair Stands Up Near a Balloon",
-        "bend": "Bending Water Stream with a Comb",
-        "pepper": "Pepper Leaping up to Spoon",
-    }
-    phenomenon_key = phenomenon_map.get(phenomenon, "Hair Stands Up Near a Balloon")
+    phenomenon_key = kg_key(phenomenon)
     concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
 
     # Query database for assistant messages with matched knowledge components
@@ -1026,12 +1004,7 @@ def get_next_concept_for_prompting(
     knowledge_base = open("knowledge/kg.json", "r").read()
     knowledge_base = json.loads(knowledge_base)
 
-    phenomenon_map = {
-        "balloon": "Hair Stands Up Near a Balloon",
-        "bend": "Bending Water Stream with a Comb",
-        "pepper": "Pepper Leaping up to Spoon",
-    }
-    phenomenon_key = phenomenon_map.get(phenomenon, "Hair Stands Up Near a Balloon")
+    phenomenon_key = kg_key(phenomenon)
     concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
     concept_names = ordered_concept_names_subs_before_parent(concepts_dict)
 
@@ -1094,12 +1067,7 @@ def knowledge_retrieval(
     knowledge_base = json.loads(knowledge_base)
 
     # Map phenomenon to knowledge base key
-    phenomenon_map = {
-        "balloon": "Hair Stands Up Near a Balloon",
-        "bend": "Bending Water Stream with a Comb",
-        "pepper": "Pepper Leaping up to Spoon",
-    }
-    phenomenon_key = phenomenon_map.get(phenomenon, "Hair Stands Up Near a Balloon")
+    phenomenon_key = kg_key(phenomenon)
 
     # Verify the phenomenon exists in the knowledge base
     if phenomenon_key not in knowledge_base:
@@ -1266,12 +1234,7 @@ def extract_kg_definition_and_explanation(kg_raw, phenomenon="balloon"):
     knowledge_base = json.loads(knowledge_base)
 
     # Map phenomenon to knowledge base key
-    phenomenon_map = {
-        "balloon": "Hair Stands Up Near a Balloon",
-        "bend": "Bending Water Stream with a Comb",
-        "pepper": "Pepper Leaping up to Spoon",
-    }
-    phenomenon_key = phenomenon_map.get(phenomenon, "Hair Stands Up Near a Balloon")
+    phenomenon_key = kg_key(phenomenon)
 
     if phenomenon_key not in knowledge_base:
         return None, None
@@ -1354,12 +1317,7 @@ def format_kg(mode="definition", kg_raw="", phenomenon="balloon"):
     knowledge_base = json.loads(knowledge_base)
 
     # Map phenomenon to knowledge base key
-    phenomenon_map = {
-        "balloon": "Hair Stands Up Near a Balloon",
-        "bend": "Bending Water Stream with a Comb",
-        "pepper": "Pepper Leaping up to Spoon",
-    }
-    phenomenon_key = phenomenon_map.get(phenomenon, "Hair Stands Up Near a Balloon")
+    phenomenon_key = kg_key(phenomenon)
 
     # Verify the phenomenon exists in the knowledge base
     if phenomenon_key not in knowledge_base:
@@ -1422,12 +1380,7 @@ def format_concept_for_prompting(concept_name, phenomenon="balloon"):
     knowledge_base = json.loads(knowledge_base)
 
     # Map phenomenon to knowledge base key
-    phenomenon_map = {
-        "balloon": "Hair Stands Up Near a Balloon",
-        "bend": "Bending Water Stream with a Comb",
-        "pepper": "Pepper Leaping up to Spoon",
-    }
-    phenomenon_key = phenomenon_map.get(phenomenon, "Hair Stands Up Near a Balloon")
+    phenomenon_key = kg_key(phenomenon)
 
     # Verify the phenomenon exists in the knowledge base
     if phenomenon_key not in knowledge_base:
@@ -1574,35 +1527,6 @@ def health():
     )
 
 
-@app.route("/api/config", methods=["GET"])
-def get_config():
-    """Return app config (e.g. curio_app_version for frontend)"""
-    return jsonify({"curio_app_version": CURIO_APP_VERSION})
-
-
-@app.route("/api/knowledge/concepts", methods=["GET"])
-def get_concept_explanations():
-    """Return concept explanations for a phenomenon (for bubble hover tooltips)"""
-    phenomenon = request.args.get("phenomenon", "balloon")
-    phenomenon_map = {
-        "balloon": "Hair Stands Up Near a Balloon",
-        "bend": "Bending Water Stream with a Comb",
-        "pepper": "Pepper Leaping up to Spoon",
-        "salt": "Pepper Leaping up to Spoon",
-    }
-    phenomenon_key = phenomenon_map.get(phenomenon, "Hair Stands Up Near a Balloon")
-    knowledge_base = json.load(open("knowledge/kg.json", "r"))
-    concepts = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
-    result = {
-        name: {
-            "explanation": data.get("explanation", ""),
-            "definition": data.get("definition", ""),
-        }
-        for name, data in concepts.items()
-    }
-    return jsonify(result)
-
-
 @app.route("/api/transcribe", methods=["POST"])
 def transcribe_audio():
     """Transcribe audio using OpenAI Whisper API"""
@@ -1660,13 +1584,6 @@ def chat_completion():
         conversation_id = (data.get("conversation_id") or str(uuid.uuid4())).strip()
         user_audio_b64 = data.get("user_audio")
         user_audio_mime_type = data.get("user_audio_mime_type")
-        curio_app_version = data.get("curio_app_version")
-        try:
-            app_version = (
-                int(curio_app_version) if curio_app_version is not None else None
-            )
-        except (TypeError, ValueError):
-            app_version = None
 
         user_audio_bytes = None
         if user_audio_b64:
@@ -1683,15 +1600,7 @@ def chat_completion():
             if last_message.get("role") == "user":
                 latest_user_message = last_message.get("content", "")
 
-        # Determine the phenomenon based on image path
-        if "balloon.jpg" in image_path:
-            phenomenon = "balloon"
-        elif "bend.jpg" in image_path:
-            phenomenon = "bend"
-        elif "pepper.jpg" in image_path:
-            phenomenon = "pepper"
-        else:
-            phenomenon = "balloon"  # default fallback
+        phenomenon = resolve_phenomenon(data.get("phenomenon"), image_path)
 
         conversation = db.get(Conversation, conversation_id)
         if not conversation:
@@ -1769,14 +1678,7 @@ def chat_completion():
             )
 
             knowledge_base = json.load(open("knowledge/kg.json", "r"))
-            phenomenon_map = {
-                "balloon": "Hair Stands Up Near a Balloon",
-                "bend": "Bending Water Stream with a Comb",
-                "pepper": "Pepper Leaping up to Spoon",
-            }
-            phenomenon_key = phenomenon_map.get(
-                phenomenon, "Hair Stands Up Near a Balloon"
-            )
+            phenomenon_key = kg_key(phenomenon)
             concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
             concept_names = ordered_concept_names_subs_before_parent(concepts_dict)
             all_concepts_matched_flag[conversation_id] = (
@@ -1953,14 +1855,7 @@ def chat_completion():
             # Load knowledge base to get concept list
             knowledge_base = open("knowledge/kg.json", "r").read()
             knowledge_base = json.loads(knowledge_base)
-            phenomenon_map = {
-                "balloon": "Hair Stands Up Near a Balloon",
-                "bend": "Bending Water Stream with a Comb",
-                "pepper": "Pepper Leaping up to Spoon",
-            }
-            phenomenon_key = phenomenon_map.get(
-                phenomenon, "Hair Stands Up Near a Balloon"
-            )
+            phenomenon_key = kg_key(phenomenon)
             concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
             concept_names = ordered_concept_names_subs_before_parent(concepts_dict)
 
@@ -2053,13 +1948,10 @@ def chat_completion():
                 messages,
                 child_question_level,
                 first_time_matched_concepts,
-                app_version=app_version,
                 kc_matched=bool(matched_kg),
             )
         else:
-            state_prompt = format_prompt(
-                state_prompt, phenomenon, messages, app_version=app_version
-            )
+            state_prompt = format_prompt(state_prompt, phenomenon, messages)
 
         scienceqa_eval_tag = format_scienceqa_eval_tag(
             child_question_level, child_inquiry_specificity
@@ -2117,12 +2009,18 @@ def chat_completion():
             child_question_level=child_question_level,
         )
 
-        response = create_chat_completion(
-            messages=all_messages,
-            temperature=1.0,
+        # The initial hypothesis line is fixed per phenomenon; skip the LLM for it
+        fixed_line = (
+            initial_hypothesis_line(phenomenon) if current_state == "discover" else None
         )
-
-        content = response.choices[0].message.content or ""
+        if fixed_line:
+            content = fixed_line
+        else:
+            response = create_chat_completion(
+                messages=all_messages,
+                temperature=1.0,
+            )
+            content = response.choices[0].message.content or ""
 
         # Print next concept used for this response (if in scienceqa state)
         if current_state == "scienceqa":
@@ -2214,13 +2112,6 @@ def chat_completion_stream():
         conversation_id = (data.get("conversation_id") or str(uuid.uuid4())).strip()
         user_audio_b64 = data.get("user_audio")
         user_audio_mime_type = data.get("user_audio_mime_type")
-        curio_app_version = data.get("curio_app_version")
-        try:
-            app_version = (
-                int(curio_app_version) if curio_app_version is not None else None
-            )
-        except (TypeError, ValueError):
-            app_version = None
 
         user_audio_bytes = None
         if user_audio_b64:
@@ -2237,15 +2128,7 @@ def chat_completion_stream():
             if last_message.get("role") == "user":
                 latest_user_message = last_message.get("content", "")
 
-        # Determine the phenomenon based on image path
-        if "balloon.jpg" in image_path:
-            phenomenon = "balloon"
-        elif "bend.jpg" in image_path:
-            phenomenon = "bend"
-        elif "pepper.jpg" in image_path:
-            phenomenon = "pepper"
-        else:
-            phenomenon = "balloon"
+        phenomenon = resolve_phenomenon(data.get("phenomenon"), image_path)
 
         conversation = db.get(Conversation, conversation_id)
         if not conversation:
@@ -2319,14 +2202,7 @@ def chat_completion_stream():
             )
 
             knowledge_base = json.load(open("knowledge/kg.json", "r"))
-            phenomenon_map = {
-                "balloon": "Hair Stands Up Near a Balloon",
-                "bend": "Bending Water Stream with a Comb",
-                "pepper": "Pepper Leaping up to Spoon",
-            }
-            phenomenon_key = phenomenon_map.get(
-                phenomenon, "Hair Stands Up Near a Balloon"
-            )
+            phenomenon_key = kg_key(phenomenon)
             concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
             concept_names = ordered_concept_names_subs_before_parent(concepts_dict)
             all_concepts_matched_flag[conversation_id] = (
@@ -2470,14 +2346,7 @@ def chat_completion_stream():
             # Load knowledge base to get concept list
             knowledge_base = open("knowledge/kg.json", "r").read()
             knowledge_base = json.loads(knowledge_base)
-            phenomenon_map = {
-                "balloon": "Hair Stands Up Near a Balloon",
-                "bend": "Bending Water Stream with a Comb",
-                "pepper": "Pepper Leaping up to Spoon",
-            }
-            phenomenon_key = phenomenon_map.get(
-                phenomenon, "Hair Stands Up Near a Balloon"
-            )
+            phenomenon_key = kg_key(phenomenon)
             concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
             concept_names = ordered_concept_names_subs_before_parent(concepts_dict)
 
@@ -2609,13 +2478,10 @@ def chat_completion_stream():
                 messages,
                 child_question_level,
                 first_time_matched_concepts,
-                app_version=app_version,
                 kc_matched=bool(matched_kg),
             )
         else:
-            state_prompt = format_prompt(
-                state_prompt, phenomenon, messages, app_version=app_version
-            )
+            state_prompt = format_prompt(state_prompt, phenomenon, messages)
 
         scienceqa_eval_tag = format_scienceqa_eval_tag(
             child_question_level, child_inquiry_specificity
@@ -2677,6 +2543,10 @@ def chat_completion_stream():
         saved_matched_kg = matched_kg
         saved_next_concept_for_prompting = next_concept_for_prompting
         saved_first_time_matched = first_time_matched_concepts
+        # The initial hypothesis line is fixed per phenomenon; skip the LLM for it
+        fixed_line = (
+            initial_hypothesis_line(phenomenon) if current_state == "discover" else None
+        )
 
         def generate():
             full_content = ""
@@ -2687,9 +2557,16 @@ def chat_completion_stream():
             db_session = SessionLocal()
             try:
                 # Use streaming API (timeout fallback handled in stream_chat_tokens)
-                for token in stream_chat_tokens(all_messages):
+                tokens = (
+                    [fixed_line] if fixed_line else stream_chat_tokens(all_messages)
+                )
+                for token in tokens:
                     full_content += token
                     yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+
+                if not full_content.strip():
+                    # Send an error event (not an empty 'done') so the client retries.
+                    raise RuntimeError("Model returned an empty response")
 
                 # Print next concept used for this response (if in scienceqa state)
                 if current_state == "scienceqa":
@@ -2840,6 +2717,54 @@ def get_conversations():
         db.close()
 
 
+@app.route("/api/progress", methods=["GET"])
+def get_progress():
+    """
+    Per-area progress for the map page.
+
+    A phenomenon counts as explored once the child has sent at least one message in
+    it; an area is completed (dimmed on the map) once all of its phenomena are explored.
+    """
+    db = SessionLocal()
+    try:
+        user_info = get_user_from_request(request)
+        session_id = request.args.get("session_id")
+
+        query = db.query(Conversation.phenomenon).join(Message)
+        if user_info and user_info.get("userId"):
+            query = query.filter(Conversation.user_id == user_info["userId"])
+        elif session_id:
+            query = query.filter(Conversation.session_id == session_id)
+        else:
+            return jsonify(
+                {"error": "session_id is required or user must be authenticated"}
+            ), 400
+
+        explored = {
+            phenomenon
+            for (phenomenon,) in query.filter(Message.role == "user").distinct()
+        }
+
+        areas = {}
+        for area in AREAS:
+            area_phenomena = [
+                pid for pid, info in PHENOMENA.items() if info["area"] == area
+            ]
+            area_explored = [pid for pid in area_phenomena if pid in explored]
+            areas[area] = {
+                "explored": area_explored,
+                "completed": len(area_explored) == len(area_phenomena),
+            }
+
+        return jsonify({"areas": areas}), 200
+
+    except Exception as e:
+        print(f"Error getting progress: {e}")
+        return jsonify({"error": "Failed to get progress"}), 500
+    finally:
+        db.close()
+
+
 def get_conversation_history_for_chat(conversation_id, db_session, phenomenon):
     """
     Reconstruct conversation history from database for use in chat_completion.
@@ -2851,12 +2776,7 @@ def get_conversation_history_for_chat(conversation_id, db_session, phenomenon):
 
     knowledge_base = open("knowledge/kg.json", "r").read()
     knowledge_base = json.loads(knowledge_base)
-    phenomenon_map = {
-        "balloon": "Hair Stands Up Near a Balloon",
-        "bend": "Bending Water Stream with a Comb",
-        "pepper": "Pepper Leaping up to Spoon",
-    }
-    phenomenon_key = phenomenon_map.get(phenomenon, "Hair Stands Up Near a Balloon")
+    phenomenon_key = kg_key(phenomenon)
     concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
 
     messages = (
@@ -2949,14 +2869,7 @@ def get_conversation_messages(conversation_id):
 
         knowledge_base = open("knowledge/kg.json", "r").read()
         knowledge_base = json.loads(knowledge_base)
-        phenomenon_map = {
-            "balloon": "Hair Stands Up Near a Balloon",
-            "bend": "Bending Water Stream with a Comb",
-            "pepper": "Pepper Leaping up to Spoon",
-        }
-        phenomenon_key = phenomenon_map.get(
-            conversation.phenomenon, "Hair Stands Up Near a Balloon"
-        )
+        phenomenon_key = kg_key(conversation.phenomenon)
         concepts_dict = knowledge_base.get(phenomenon_key, {}).get("concepts", {})
         concept_names = ordered_concept_names_subs_before_parent(concepts_dict)
 
@@ -3019,15 +2932,7 @@ def create_conversation():
                 }
             ), 200
 
-        # Determine the phenomenon based on image path
-        if "balloon.jpg" in image_path:
-            phenomenon = "balloon"
-        elif "bend.jpg" in image_path:
-            phenomenon = "bend"
-        elif "pepper.jpg" in image_path:
-            phenomenon = "pepper"
-        else:
-            phenomenon = "balloon"  # default fallback
+        phenomenon = resolve_phenomenon(data.get("phenomenon"), image_path)
 
         # Prepare user info for database (optional, only if token is present)
         user_groups_json = None
@@ -3217,7 +3122,7 @@ def generate_speech():
         # `instructions` (tone/vibe) is supported by gpt-4o-mini-tts. It is passed
         # via extra_body so it works across openai SDK versions (older SDKs don't
         # expose it as a typed kwarg, but the REST API accepts it in the body).
-        response = client.audio.speech.create(
+        response = tts_client.audio.speech.create(
             model=OPENAI_TTS_MODEL,
             voice=OPENAI_TTS_VOICE,
             input=cleaned_text,

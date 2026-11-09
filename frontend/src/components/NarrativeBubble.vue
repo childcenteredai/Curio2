@@ -27,6 +27,7 @@
  */
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { narrate, type Narration } from '../utils/novaVoice'
+import { useTypewriter } from '../utils/typewriter'
 
 const props = withDefaults(
   defineProps<{
@@ -40,32 +41,18 @@ const props = withDefaults(
 const emit = defineEmits<{ (e: 'done'): void }>()
 
 const current = ref(-1)
-const typed = ref(0)
+const { typed, type, finish, stop: stopTyping } = useTypewriter()
 const fullLine = computed(() => props.lines[current.value] ?? '')
 const novaSrc = computed(() =>
   props.layout === 'map' ? '/imgs/nova/nova-waving.png' : '/imgs/nova/nova-thinking.png'
 )
 
 let narration: Narration | null = null
-let typer: ReturnType<typeof setInterval> | null = null
-
-const stopTyping = () => {
-  if (typer) clearInterval(typer)
-  typer = null
-}
 
 // Typewriter paced to the spoken line: the text finishes just before the voice does
 const typeLine = (index: number, durationMs: number) => {
-  stopTyping()
   current.value = index
-  typed.value = 0
-  const total = fullLine.value.length
-  const startedAt = performance.now()
-  const span = Math.max(durationMs * 0.9, 300)
-  typer = setInterval(() => {
-    typed.value = Math.min(total, Math.ceil((total * (performance.now() - startedAt)) / span))
-    if (typed.value >= total) stopTyping()
-  }, 30)
+  type(fullLine.value.length, durationMs)
 }
 
 const start = () => {
@@ -73,8 +60,7 @@ const start = () => {
   stopTyping()
   current.value = -1
   narration = narrate(props.lines, typeLine, () => {
-    stopTyping()
-    typed.value = fullLine.value.length
+    finish(fullLine.value.length)
     emit('done')
   })
 }

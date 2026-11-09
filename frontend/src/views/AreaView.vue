@@ -37,10 +37,20 @@
         v-if="!narrating"
         class="back-to-map"
         aria-label="Back to map"
-        @click="router.push('/')"
+        @click="router.push(mapPath)"
       >
         <img class="default" src="/imgs/ui/back-to-map-button.png" alt="" />
         <img class="hover" src="/imgs/ui/back-to-map-button-hover.png" alt="" />
+      </button>
+      <button
+        v-if="!narrating"
+        class="finish-exploring"
+        :aria-label="`Finish exploring the ${config.label}`"
+        :disabled="finishing"
+        @click="finish"
+      >
+        <img class="default" src="/imgs/ui/finish-exploring-button.png" alt="" />
+        <img class="hover" src="/imgs/ui/finish-exploring-button-hover.png" alt="" />
       </button>
       <div v-if="narrating" class="wash" />
       <NarrativeBubble v-if="narrating" :lines="config.intro" @done="finishIntro" />
@@ -54,11 +64,13 @@ import { useRoute, useRouter } from 'vue-router'
 import FigmaStage from '../components/FigmaStage.vue'
 import NarrativeBubble from '../components/NarrativeBubble.vue'
 import { AREAS, phenomenaInArea, type Area, type Phenomenon } from '../constants/phenomena'
-import { fetchProgress } from '../utils/session'
+import { useAppVersion } from '../utils/appVersion'
+import { fetchProgress, finishArea } from '../utils/session'
 import { rectStyle, introPlayed, markIntroPlayed } from '../utils/stage'
 
 const route = useRoute()
 const router = useRouter()
+const { version, mapPath, roomPath, introKey: versionedKey } = useAppVersion()
 
 const area = computed(() => route.params.area as Area)
 const config = computed(() => AREAS[area.value])
@@ -90,17 +102,17 @@ const markerStyle = (p: Phenomenon, visible: Bounds) => {
 }
 
 onMounted(async () => {
-  explored.value = (await fetchProgress())[area.value]?.explored ?? []
+  explored.value = (await fetchProgress(version.value))[area.value]?.explored ?? []
 })
 const narrating = ref(false)
 
-const introKey = computed(() => `area:${area.value}`)
+const introKey = computed(() => versionedKey(`area:${area.value}`))
 
 watch(
   area,
   a => {
     if (!AREAS[a]) {
-      router.replace('/')
+      router.replace(mapPath.value)
       return
     }
     narrating.value = !introPlayed(introKey.value)
@@ -114,7 +126,19 @@ const finishIntro = () => {
 }
 
 const enterRoom = (id: string) => {
-  router.push(`/area/${area.value}/${id}`)
+  router.push(roomPath(area.value, id))
+}
+
+// Finishing is the completion signal for the area (no confirmation, available any
+// time); the map then shows it as Completed and points the child at the other area
+const finishing = ref(false)
+const finish = async () => {
+  if (finishing.value) return
+  finishing.value = true
+  if (!(await finishArea(area.value, version.value))) {
+    console.error(`Could not record ${area.value} as finished`)
+  }
+  router.push(mapPath.value)
 }
 </script>
 
@@ -198,5 +222,45 @@ const enterRoom = (id: string) => {
 
 .back-to-map:hover .hover {
   opacity: 1;
+}
+
+/* "Finish Exploring" button, bottom-right of frames 02 / 06. The exported art has
+   wide transparent margins, so the button box is the pill (art bbox 142,60 → 965,315
+   of 1085×394, shown at the same width as Back to Map) and the image overhangs it. */
+.finish-exploring {
+  --art-scale: 0.3196;
+  position: absolute;
+  right: 52px;
+  bottom: 28px;
+  width: calc(823px * var(--art-scale));
+  height: calc(255px * var(--art-scale));
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.finish-exploring img {
+  position: absolute;
+  left: calc(-142px * var(--art-scale));
+  top: calc(-60px * var(--art-scale));
+  width: calc(1085px * var(--art-scale));
+  height: calc(394px * var(--art-scale));
+  max-width: none;
+  pointer-events: none;
+}
+
+.finish-exploring .hover,
+.finish-exploring:hover .default {
+  opacity: 0;
+}
+
+.finish-exploring:hover .hover {
+  opacity: 1;
+}
+
+.finish-exploring:active {
+  transform: scale(0.97);
 }
 </style>

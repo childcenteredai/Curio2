@@ -3,9 +3,11 @@ import io
 import json
 import os
 import re
+import threading
 import time
 import uuid
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from urllib.parse import quote_plus
 
@@ -23,10 +25,13 @@ from sqlalchemy import create_engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import scoped_session, sessionmaker
 
-from models import Conversation, Message
+from models import AreaCompletion, Conversation, ExplanationEvent, Message
 from phenomena import (
     AREAS,
+    CHAT_VERSIONS,
+    DEFAULT_VERSION,
     PHENOMENA,
+    VERSIONS,
     initial_hypothesis_line,
     kg_key,
     resolve_phenomenon,
@@ -154,6 +159,14 @@ primary_client = client.with_options(timeout=OPENAI_TIMEOUT_SECONDS, max_retries
 # Without a timeout a stalled TTS request leaves Nova's line hidden for minutes;
 # on failure the frontend shows the text without audio instead.
 tts_client = client.with_options(timeout=15, max_retries=1)
+
+# Model calls within one chat turn that don't depend on each other (moderation, the
+# scienceqa classifier, knowledge matching) run concurrently instead of back to back.
+turn_executor = ThreadPoolExecutor(max_workers=16)
+
+# Headers for streamed (SSE) replies: stop nginx / ingress from buffering the stream,
+# so the frontend can start speaking the first sentence while the rest is generated.
+SSE_HEADERS = {"X-Accel-Buffering": "no", "Cache-Control": "no-cache"}
 
 
 def _can_fall_back(reason):
@@ -1561,6 +1574,11 @@ def transcribe_audio():
         return jsonify({"error": "Transcription failed"}), 500
 
 
+def _chat_version(value):
+    """The chat's app version from a request ("qa" when missing or unknown)."""
+    return value if value in CHAT_VERSIONS else DEFAULT_VERSION
+
+
 @app.route("/api/chat", methods=["POST"])
 def chat_completion():
     """Generate chat response and a next_state using OpenAI"""
@@ -1584,6 +1602,8 @@ def chat_completion():
         conversation_id = (data.get("conversation_id") or str(uuid.uuid4())).strip()
         user_audio_b64 = data.get("user_audio")
         user_audio_mime_type = data.get("user_audio_mime_type")
+        user_transcript = data.get("user_transcript") or None
+        chat_version = _chat_version(data.get("version"))
 
         user_audio_bytes = None
         if user_audio_b64:
@@ -1625,6 +1645,7 @@ def chat_completion():
                 session_id=final_session_id,
                 image_path=image_path,
                 phenomenon=phenomenon,
+                version=chat_version,
                 user_id=user_info.get("userId") if user_info else None,
                 user_email=user_info.get("email") if user_info else None,
                 username=user_info.get("username") if user_info else None,
@@ -1752,6 +1773,7 @@ def chat_completion():
                     matched_knowledge_components=None,
                     audio_data=user_audio_bytes,
                     audio_mime_type=user_audio_mime_type,
+                    transcript=user_transcript,
                 )
                 db.add(user_message_record)
 
@@ -1968,6 +1990,7 @@ def chat_completion():
                 matched_knowledge_components=matched_kg if matched_kg else None,
                 audio_data=user_audio_bytes,
                 audio_mime_type=user_audio_mime_type,
+                transcript=user_transcript,
             )
             db.add(user_message_record)
             # Commit user message immediately so it's saved
@@ -2112,6 +2135,8 @@ def chat_completion_stream():
         conversation_id = (data.get("conversation_id") or str(uuid.uuid4())).strip()
         user_audio_b64 = data.get("user_audio")
         user_audio_mime_type = data.get("user_audio_mime_type")
+        user_transcript = data.get("user_transcript") or None
+        chat_version = _chat_version(data.get("version"))
 
         user_audio_bytes = None
         if user_audio_b64:
@@ -2153,6 +2178,7 @@ def chat_completion_stream():
                 session_id=final_session_id,
                 image_path=image_path,
                 phenomenon=phenomenon,
+                version=chat_version,
                 user_id=user_info.get("userId") if user_info else None,
                 user_email=user_info.get("email") if user_info else None,
                 username=user_info.get("username") if user_info else None,
@@ -2219,49 +2245,23 @@ def chat_completion_stream():
                 f"all_matched: {all_concepts_matched_flag[conversation_id]}"
             )
 
-        # Check for harmful content
-        if latest_user_message:
-            is_flagged, categories = check_moderation(latest_user_message)
-            if is_flagged:
-                safe_response = (
-                    "I'm here to help you learn about science in a safe and positive way! "
-                    "Let's focus on exploring the scientific phenomenon in the image. "
-                    "What do you notice about what's happening?"
-                )
-
-                user_message_record = Message(
-                    conversation_id=conversation.id,
-                    role="user",
-                    content=latest_user_message,
-                    state=state,
-                    evaluation_result="moderated",
-                    matched_knowledge_components=None,
-                    audio_data=user_audio_bytes,
-                    audio_mime_type=user_audio_mime_type,
-                )
-                db.add(user_message_record)
-
-                assistant_message_record = Message(
-                    conversation_id=conversation.id,
-                    role="assistant",
-                    content=safe_response,
-                    state=state,
-                    matched_knowledge_components=None,
-                    next_concept=None,
-                )
-                db.add(assistant_message_record)
-
-                conversation.updated_at = datetime.utcnow()
-                db.commit()
-
-                # Stream the safe response
-                def generate():
-                    yield f"data: {json.dumps({'type': 'token', 'content': safe_response})}\n\n"
-                    yield f"data: {json.dumps({'type': 'done', 'response': safe_response, 'next_state': state})}\n\n"
-
-                return Response(
-                    stream_with_context(generate()), mimetype="text/event-stream"
-                )
+        turn_started = time.time()
+        # Moderation, and knowledge matching when the child is already in scienceqa,
+        # don't need the classifier's result: start them now so they run alongside it.
+        # The moderation verdict is still checked before anything is generated, and the
+        # matching result is only used if the classifier marks the question relevant.
+        moderation_future = (
+            turn_executor.submit(check_moderation, latest_user_message)
+            if latest_user_message
+            else None
+        )
+        retrieval_future = (
+            turn_executor.submit(
+                knowledge_retrieval, messages, phenomenon, conversation.id
+            )
+            if state == "scienceqa" and latest_user_message
+            else None
+        )
 
         conv_state_history = state_history[conversation_id]
         conv_scienceqa_history = scienceqa_history[conversation_id]
@@ -2331,6 +2331,53 @@ def chat_completion_stream():
                 conv_state_history.append(current_state)
             eval_state = current_state
 
+        # Check for harmful content (moderation ran alongside the classifier)
+        if moderation_future is not None:
+            is_flagged, categories = moderation_future.result()
+            if is_flagged:
+                safe_response = (
+                    "I'm here to help you learn about science in a safe and positive way! "
+                    "Let's focus on exploring the scientific phenomenon in the image. "
+                    "What do you notice about what's happening?"
+                )
+
+                user_message_record = Message(
+                    conversation_id=conversation.id,
+                    role="user",
+                    content=latest_user_message,
+                    state=state,
+                    evaluation_result="moderated",
+                    matched_knowledge_components=None,
+                    audio_data=user_audio_bytes,
+                    audio_mime_type=user_audio_mime_type,
+                    transcript=user_transcript,
+                )
+                db.add(user_message_record)
+
+                assistant_message_record = Message(
+                    conversation_id=conversation.id,
+                    role="assistant",
+                    content=safe_response,
+                    state=state,
+                    matched_knowledge_components=None,
+                    next_concept=None,
+                )
+                db.add(assistant_message_record)
+
+                conversation.updated_at = datetime.utcnow()
+                db.commit()
+
+                # Stream the safe response
+                def generate():
+                    yield f"data: {json.dumps({'type': 'token', 'content': safe_response})}\n\n"
+                    yield f"data: {json.dumps({'type': 'done', 'response': safe_response, 'next_state': state})}\n\n"
+
+                return Response(
+                    stream_with_context(generate()),
+                    mimetype="text/event-stream",
+                    headers=SSE_HEADERS,
+                )
+
         # ============================================================
         # Response Generation (生成阶段)
         # ============================================================
@@ -2355,7 +2402,11 @@ def chat_completion_stream():
 
             # A. Knowledge Retrieval: Match concept for EXPLANATION (relevant levels only)
             if child_question_level in SCIENCEQA_RELEVANT_DEPTH:
-                kg = knowledge_retrieval(messages, phenomenon, conversation.id, db)
+                kg = (
+                    retrieval_future.result()
+                    if retrieval_future is not None
+                    else knowledge_retrieval(messages, phenomenon, conversation.id, db)
+                )
                 matched_kg = kg if kg else None  # Store for database and explanation
                 print(
                     f"[Knowledge Retrieval] Matched component for explanation: {matched_kg if matched_kg else 'None'}"
@@ -2498,6 +2549,7 @@ def chat_completion_stream():
                 matched_knowledge_components=matched_kg if matched_kg else None,
                 audio_data=user_audio_bytes,
                 audio_mime_type=user_audio_mime_type,
+                transcript=user_transcript,
             )
             db.add(user_message_record)
             # Commit user message immediately so it's saved even if streaming fails
@@ -2548,8 +2600,11 @@ def chat_completion_stream():
             initial_hypothesis_line(phenomenon) if current_state == "discover" else None
         )
 
+        ready_to_generate_s = time.time() - turn_started
+
         def generate():
             full_content = ""
+            first_token_s = None
             # Create a separate database session for saving the assistant message
             # This ensures the session is available even if the outer session is closed
             # Store conversation_id in a variable to avoid accessing detached conversation object
@@ -2561,8 +2616,19 @@ def chat_completion_stream():
                     [fixed_line] if fixed_line else stream_chat_tokens(all_messages)
                 )
                 for token in tokens:
+                    if first_token_s is None:
+                        first_token_s = time.time() - turn_started
                     full_content += token
                     yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+
+                # One line per turn so slow turns can be traced in the deployed logs
+                print(
+                    f"[Timing] {saved_conversation_id} state={current_state}: "
+                    f"ready to generate {ready_to_generate_s:.2f}s, "
+                    f"first token {first_token_s or 0:.2f}s, "
+                    f"stream done {time.time() - turn_started:.2f}s",
+                    flush=True,
+                )
 
                 if not full_content.strip():
                     # Send an error event (not an empty 'done') so the client retries.
@@ -2627,7 +2693,11 @@ def chat_completion_stream():
             finally:
                 db_session.close()
 
-        return Response(stream_with_context(generate()), mimetype="text/event-stream")
+        return Response(
+            stream_with_context(generate()),
+            mimetype="text/event-stream",
+            headers=SSE_HEADERS,
+        )
 
     except Exception as e:
         db.rollback()
@@ -2638,7 +2708,9 @@ def chat_completion_stream():
             yield f"data: {json.dumps({'type': 'error', 'error': error_message})}\n\n"
 
         return Response(
-            stream_with_context(error_generate()), mimetype="text/event-stream"
+            stream_with_context(error_generate()),
+            mimetype="text/event-stream",
+            headers=SSE_HEADERS,
         )
     finally:
         if db:
@@ -2653,13 +2725,23 @@ def get_conversations():
         # Try to get user info from JWT first
         user_info = get_user_from_request(request)
         session_id = request.args.get("session_id")
+        # Optional: only conversations from one app version (qa / teacher), so the
+        # two chat versions never pick up each other's history
+        version = request.args.get("version")
+        if version is not None and version not in CHAT_VERSIONS:
+            return jsonify(
+                {"error": f"version must be one of {list(CHAT_VERSIONS)}"}
+            ), 400
+
+        query = db.query(Conversation)
+        if version is not None:
+            query = query.filter(Conversation.version == version)
 
         if user_info and user_info.get("userId"):
             user_id = user_info["userId"]
             print(f"Looking for conversations with user_id: {user_id}")
             conversations = (
-                db.query(Conversation)
-                .filter(Conversation.user_id == user_id)
+                query.filter(Conversation.user_id == user_id)
                 .order_by(Conversation.updated_at.desc())
                 .all()
             )
@@ -2672,8 +2754,7 @@ def get_conversations():
 
             print(f"Looking for conversations with session_id: {session_id}")
             conversations = (
-                db.query(Conversation)
-                .filter(Conversation.session_id == session_id)
+                query.filter(Conversation.session_id == session_id)
                 .order_by(Conversation.updated_at.desc())
                 .all()
             )
@@ -2692,6 +2773,7 @@ def get_conversations():
                     "username": conv.username,
                     "image_path": conv.image_path,
                     "phenomenon": conv.phenomenon,
+                    "version": conv.version,
                     "started_at": conv.started_at.isoformat()
                     if conv.started_at
                     else None,
@@ -2717,33 +2799,63 @@ def get_conversations():
         db.close()
 
 
+def _progress_owner_filter(query, model, user_info, session_id):
+    """Scope a progress query to the logged-in user, else to the browser session."""
+    if user_info and user_info.get("userId"):
+        return query.filter(model.user_id == user_info["userId"])
+    return query.filter(model.session_id == session_id)
+
+
 @app.route("/api/progress", methods=["GET"])
 def get_progress():
     """
-    Per-area progress for the map page.
+    Per-area progress for the map and room-selection pages, for one app version.
 
-    A phenomenon counts as explored once the child has sent at least one message in
-    it; an area is completed (dimmed on the map) once all of its phenomena are explored.
+    Question-asking version (default) and teacher version (?version=teacher): a
+    phenomenon counts as explored once at least one message has been sent in it
+    in that version. Direct-instruction version
+    (?version=direct): once the child has reached the last bullet of Nova's
+    explanation. Either way the room then shows "Done!". An area is completed
+    (dimmed on the map) once the child has clicked "Finish Exploring" for it in
+    that version.
     """
     db = SessionLocal()
     try:
         user_info = get_user_from_request(request)
         session_id = request.args.get("session_id")
-
-        query = db.query(Conversation.phenomenon).join(Message)
-        if user_info and user_info.get("userId"):
-            query = query.filter(Conversation.user_id == user_info["userId"])
-        elif session_id:
-            query = query.filter(Conversation.session_id == session_id)
-        else:
+        version = request.args.get("version") or DEFAULT_VERSION
+        if version not in VERSIONS:
+            return jsonify({"error": f"version must be one of {list(VERSIONS)}"}), 400
+        if not (user_info and user_info.get("userId")) and not session_id:
             return jsonify(
                 {"error": "session_id is required or user must be authenticated"}
             ), 400
 
-        explored = {
-            phenomenon
-            for (phenomenon,) in query.filter(Message.role == "user").distinct()
-        }
+        if version == "direct":
+            explored_query = db.query(ExplanationEvent.phenomenon).filter(
+                ExplanationEvent.action == "complete"
+            )
+            explored_query = _progress_owner_filter(
+                explored_query, ExplanationEvent, user_info, session_id
+            )
+        else:
+            explored_query = (
+                db.query(Conversation.phenomenon)
+                .join(Message)
+                .filter(Message.role == "user", Conversation.version == version)
+            )
+            explored_query = _progress_owner_filter(
+                explored_query, Conversation, user_info, session_id
+            )
+        finished_query = db.query(AreaCompletion.area).filter(
+            AreaCompletion.version == version
+        )
+        finished_query = _progress_owner_filter(
+            finished_query, AreaCompletion, user_info, session_id
+        )
+
+        explored = {phenomenon for (phenomenon,) in explored_query.distinct()}
+        finished = {area for (area,) in finished_query.distinct()}
 
         areas = {}
         for area in AREAS:
@@ -2753,14 +2865,123 @@ def get_progress():
             area_explored = [pid for pid in area_phenomena if pid in explored]
             areas[area] = {
                 "explored": area_explored,
-                "completed": len(area_explored) == len(area_phenomena),
+                "completed": area in finished,
             }
 
-        return jsonify({"areas": areas}), 200
+        return jsonify({"version": version, "areas": areas}), 200
 
     except Exception as e:
         print(f"Error getting progress: {e}")
         return jsonify({"error": "Failed to get progress"}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/progress/finish", methods=["POST"])
+def finish_area():
+    """Record a "Finish Exploring" click; the area then shows as completed on the map."""
+    db = SessionLocal()
+    try:
+        user_info = get_user_from_request(request)
+        data = request.get_json(silent=True) or {}
+        area = data.get("area")
+        session_id = data.get("session_id")
+        version = data.get("version") or DEFAULT_VERSION
+
+        if area not in AREAS:
+            return jsonify({"error": f"area must be one of {list(AREAS)}"}), 400
+        if version not in VERSIONS:
+            return jsonify({"error": f"version must be one of {list(VERSIONS)}"}), 400
+        if not session_id:
+            return jsonify({"error": "session_id is required"}), 400
+
+        completion = AreaCompletion(
+            session_id=session_id,
+            user_id=user_info.get("userId") if user_info else None,
+            area=area,
+            version=version,
+            finished_at=datetime.utcnow(),
+        )
+        db.add(completion)
+        db.commit()
+        return jsonify(
+            {
+                "area": area,
+                "version": version,
+                "finished_at": completion.finished_at.isoformat(),
+            }
+        ), 201
+
+    except Exception as e:
+        db.rollback()
+        print(f"Error finishing area: {e}")
+        return jsonify({"error": "Failed to finish area"}), 500
+    finally:
+        db.close()
+
+
+# Direct-instruction version: Nova's explanation of each phenomenon, one bullet
+# per knowledge component ("Full Explanations" in update_docs/knowledge graph by
+# phenomenon.docx), keyed like kg.json
+with open("knowledge/explanations.json", "r", encoding="utf-8") as f:
+    EXPLANATIONS = json.load(f)
+
+EXPLANATION_ACTIONS = ("listen", "next", "back", "complete", "exit")
+
+
+@app.route("/api/explanations/<phenomenon>", methods=["GET"])
+def get_explanation(phenomenon):
+    """Bullets Nova narrates for a phenomenon in the direct-instruction version."""
+    if phenomenon not in PHENOMENA:
+        return jsonify({"error": "Unknown phenomenon"}), 404
+    return jsonify(
+        {"phenomenon": phenomenon, "bullets": EXPLANATIONS[kg_key(phenomenon)]}
+    ), 200
+
+
+@app.route("/api/explanations/<phenomenon>/events", methods=["POST"])
+def log_explanation_event(phenomenon):
+    """Log one step through an explanation (see ExplanationEvent)."""
+    if phenomenon not in PHENOMENA:
+        return jsonify({"error": "Unknown phenomenon"}), 404
+    db = SessionLocal()
+    try:
+        user_info = get_user_from_request(request)
+        data = request.get_json(silent=True) or {}
+        session_id = data.get("session_id")
+        action = data.get("action")
+        step = data.get("step")
+
+        if not session_id:
+            return jsonify({"error": "session_id is required"}), 400
+        if action not in EXPLANATION_ACTIONS:
+            return jsonify(
+                {"error": f"action must be one of {list(EXPLANATION_ACTIONS)}"}
+            ), 400
+        bullets = EXPLANATIONS[kg_key(phenomenon)]
+        if step is not None and not (
+            isinstance(step, int) and 0 <= step < len(bullets)
+        ):
+            return jsonify({"error": f"step must be 0-{len(bullets) - 1}"}), 400
+
+        event = ExplanationEvent(
+            session_id=session_id,
+            user_id=user_info.get("userId") if user_info else None,
+            area=PHENOMENA[phenomenon]["area"],
+            phenomenon=phenomenon,
+            action=action,
+            step=step,
+            concept=bullets[step]["concept"] if step is not None else None,
+            created_at=datetime.utcnow(),
+        )
+        db.add(event)
+        db.commit()
+        return jsonify({"logged": action, "step": step}), 201
+
+    except Exception as e:
+        db.rollback()
+        print(f"Error logging explanation event: {e}")
+        return jsonify({"error": "Failed to log explanation event"}), 500
     finally:
         db.close()
 
@@ -2947,6 +3168,7 @@ def create_conversation():
             session_id=session_id,
             image_path=image_path,
             phenomenon=phenomenon,
+            version=_chat_version(data.get("version")),
             user_id=user_info.get("userId") if user_info else None,
             user_email=user_info.get("email") if user_info else None,
             username=user_info.get("username") if user_info else None,
@@ -3078,6 +3300,13 @@ def get_conversation(conversation_id):
         db.close()
 
 
+# Audio for Nova's scripted lines (map/area intros, direct-instruction bullets),
+# which are the same for every child. Chat replies are never cached.
+SPEECH_CACHE_MAX = 256
+speech_cache = OrderedDict()
+speech_cache_lock = threading.Lock()
+
+
 @app.route("/api/speech", methods=["POST"])
 def generate_speech():
     """Generate speech audio using OpenAI TTS"""
@@ -3118,6 +3347,23 @@ def generate_speech():
         # The original text with markdown is preserved in the database/display
         cleaned_text = clean_text_for_speech(text)
 
+        # Scripted lines opt in with {"cache": true}
+        use_cache = data.get("cache") is True
+        if use_cache:
+            with speech_cache_lock:
+                cached = speech_cache.get(cleaned_text)
+                if cached is not None:
+                    speech_cache.move_to_end(cleaned_text)
+            if cached is not None:
+                return (
+                    cached,
+                    200,
+                    {
+                        "Content-Type": "audio/mpeg",
+                        "Content-Disposition": "attachment; filename=speech.mp3",
+                    },
+                )
+
         # Generate speech using OpenAI TTS.
         # `instructions` (tone/vibe) is supported by gpt-4o-mini-tts. It is passed
         # via extra_body so it works across openai SDK versions (older SDKs don't
@@ -3129,6 +3375,13 @@ def generate_speech():
             response_format="mp3",
             extra_body={"instructions": OPENAI_TTS_INSTRUCTIONS},
         )
+
+        if use_cache:
+            with speech_cache_lock:
+                speech_cache[cleaned_text] = response.content
+                speech_cache.move_to_end(cleaned_text)
+                while len(speech_cache) > SPEECH_CACHE_MAX:
+                    speech_cache.popitem(last=False)
 
         # Return the audio data
         return (

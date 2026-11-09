@@ -1,30 +1,7 @@
 <template>
   <FigmaStage v-if="phenomenon" :align="phase === 'chat' ? 'left' : 'center'">
     <!-- Same image in both phases (house) glides; a different chat image (garden) crossfades -->
-    <Transition name="crossfade">
-      <img
-        :key="layout.background.src"
-        class="layer"
-        :src="layout.background.src"
-        :style="rectStyle(layout.background.rect)"
-        alt=""
-      />
-    </Transition>
-    <div v-if="layout.wash" class="layer wash" :style="rectStyle(layout.wash)" />
-    <img
-      v-if="layout.characters"
-      class="layer characters"
-      :src="layout.characters.src"
-      :style="rectStyle(layout.characters.rect)"
-      :alt="phenomenon.label"
-    />
-    <img
-      v-if="layout.icon"
-      class="layer icon"
-      :src="layout.icon.src"
-      :style="rectStyle(layout.icon.rect)"
-      alt=""
-    />
+    <SceneLayers :layout="layout" :alt="phenomenon.label" />
 
     <template #overlay>
       <Transition name="pop">
@@ -32,7 +9,7 @@
           v-if="phase === 'chat'"
           class="back-to-area"
           :aria-label="`Back to the ${area.label}`"
-          @click="router.push(`/area/${area.id}`)"
+          @click="router.push(areaPath(area.id))"
         >
           <img :src="area.backButton" alt="" />
         </button>
@@ -56,17 +33,21 @@
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import FigmaStage from '../components/FigmaStage.vue'
+import SceneLayers from '../components/SceneLayers.vue'
 import Conversation from '../components/Conversation.vue'
 import MicCheckModal from '../components/MicCheckModal.vue'
 import { AREAS, PHENOMENA } from '../constants/phenomena'
 import { MIC_CHECK_SESSION_KEY } from '../utils/session'
-import { rectStyle, introPlayed, markIntroPlayed } from '../utils/stage'
+import { introPlayed, markIntroPlayed } from '../utils/stage'
+import { useAppVersion } from '../utils/appVersion'
 
 /** How long the illustration is shown on its own before the chat pops up */
 const INTRO_MS = 2500
 
 const route = useRoute()
 const router = useRouter()
+// Question-asking (/) and teacher (/teacher) versions share this screen
+const { mapPath, areaPath, introKey } = useAppVersion()
 
 const phenomenon = computed(() => {
   const p = PHENOMENA[route.params.phenomenon as string]
@@ -95,10 +76,10 @@ watch(
   p => {
     if (timer) clearTimeout(timer)
     if (!p) {
-      router.replace('/')
+      router.replace(mapPath.value)
       return
     }
-    const key = `room:${p.id}`
+    const key = introKey(`room:${p.id}`)
     if (introPlayed(key)) {
       phase.value = 'chat'
       return
@@ -118,30 +99,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* Layers glide from the full-screen intro frame to the chat frame */
-.layer {
-  position: absolute;
-  object-fit: cover;
-  transition: left 0.9s ease, top 0.9s ease, width 0.9s ease, height 0.9s ease;
-}
-
-.characters,
-.icon {
-  object-fit: contain;
-}
-
-.wash {
-  background: rgba(255, 249, 239, 0.4);
-}
-
-.icon {
-  animation: wobble 1.8s ease-in-out infinite;
-}
-
-@keyframes wobble {
-  50% { transform: rotate(-6deg) scale(1.04); }
-}
-
 /* "Room Selection Button" / "outdoor button" instances */
 .back-to-area {
   position: absolute;
@@ -176,16 +133,6 @@ onUnmounted(() => {
   margin: auto 0;
   width: 528px;
   height: min(calc(100% - 124px), 820px);
-}
-
-.crossfade-enter-active,
-.crossfade-leave-active {
-  transition: opacity 0.8s ease;
-}
-
-.crossfade-enter-from,
-.crossfade-leave-to {
-  opacity: 0;
 }
 
 .slide-enter-active {

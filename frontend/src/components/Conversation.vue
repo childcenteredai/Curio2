@@ -1,5 +1,5 @@
 <template>
-  <div class="chat-container">
+  <div class="chat-container" :class="{ teacher: teacherMode }">
     <header class="chat-panel-header">
       <h1 class="chat-panel-title">ASK NOVA ANYTHING!</h1>
     </header>
@@ -49,8 +49,46 @@
       </div>
     </div>
 
+    <!-- Teacher version: the mic fills an editable box, and nothing is sent until
+         the teacher presses Send (Enter also sends, Shift+Enter is a new line) -->
+    <div v-if="teacherMode" class="chat-input-area teacher-input">
+      <textarea
+        ref="draftBox"
+        v-model="draft"
+        class="draft-box"
+        rows="3"
+        :placeholder="isRecording ? 'Listening…' : isTranscribing ? 'Writing it down…' : 'Press the mic and speak, or type here'"
+        aria-label="Message to Nova"
+        @keydown="handleDraftKeydown"
+      ></textarea>
+      <div class="teacher-actions">
+        <button
+          @click="handleVoiceClick"
+          :disabled="micLocked"
+          :class="`voice-input-button ${isRecording ? 'recording' : ''} ${isTranscribing ? 'loading' : ''}`"
+          :aria-label="isRecording ? 'Stop recording' : 'Record'"
+          :title="isTranscribing ? 'Writing it down...' : isRecording ? 'Click to stop' : 'Click to speak'"
+        >
+          <span v-if="isTranscribing" class="voice-loading-face">
+            <i class="fa-solid fa-spinner fa-spin loading-icon" aria-hidden="true" />
+          </span>
+          <img
+            v-else
+            class="voice-icon"
+            :src="isRecording ? '/imgs/ui/mic-button-active.png' : '/imgs/ui/mic-button.png'"
+            alt=""
+          />
+        </button>
+        <p class="draft-status" :class="{ warn: transcribeFailed }" aria-live="polite">{{ draftStatus }}</p>
+        <button class="send-button" :disabled="!canSend" @click="sendDraft">
+          <i v-if="isLoading" class="fa-solid fa-spinner fa-spin" aria-hidden="true" />
+          <span v-else>Send</span>
+        </button>
+      </div>
+    </div>
+
     <!-- Voice input: click to start, click again to send -->
-    <div class="chat-input-area">
+    <div v-else class="chat-input-area">
       <div class="voice-input-container">
         <button 
           @click="handleVoiceClick"
@@ -123,6 +161,8 @@ import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { PHENOMENA, phenomenonForImage } from '../constants/phenomena'
 import { getOrCreateSessionId } from '../utils/session'
+import { atNovaRate } from '../utils/novaVoice'
+import { useAppVersion } from '../utils/appVersion'
 // Use relative paths - works with nginx reverse proxy (local) and Ingress (prod)
 
 // Props
@@ -156,12 +196,46 @@ const sessionId = ref<string>(getOrCreateSessionId())
 const isGeneratingGreeting = ref(false)
 
 const router = useRouter()
+const { version, mapPath, areaPath } = useAppVersion()
+// Teacher version (/teacher): Nova's lines are shown as text only (no speech), and
+// the mic fills an editable box that the teacher sends when it's right
+const teacherMode = computed(() => version.value === 'teacher')
 
 const isPlayingResponseAudio = ref(false)
 // Nova is preparing or speaking a line (greeting or reply): the mic is locked
 const novaBusy = computed(
   () => isLoading.value || isGeneratingGreeting.value || isPlayingResponseAudio.value
 )
+
+// --- Teacher version input ----------------------------------------------------
+const draft = ref('')
+const draftBox = ref<HTMLTextAreaElement>()
+const isTranscribing = ref(false)
+const transcribeFailed = ref(false)
+// What speech-to-text produced for the current draft, and the latest recording,
+// stored with the message so the edits can be compared later
+let draftTranscripts: string[] = []
+let draftAudio: { blob: Blob; mimeType: string } | null = null
+
+// Teacher version: recording and editing stay open while Nova replies; only
+// sending waits. Question-asking version: the mic is locked while Nova is busy.
+const micLocked = computed(() => (teacherMode.value ? isTranscribing.value : novaBusy.value))
+const canSend = computed(
+  () =>
+    draft.value.trim().length > 0 &&
+    !isLoading.value &&
+    !isGeneratingGreeting.value &&
+    !isRecording.value &&
+    !isTranscribing.value
+)
+const draftStatus = computed(() => {
+  if (isRecording.value) return 'Listening… press the mic again to stop'
+  if (isTranscribing.value) return 'Writing it down…'
+  if (transcribeFailed.value) return "Didn't catch that. Try again, or type it."
+  if (isLoading.value) return 'Nova is replying…'
+  if (draft.value.trim()) return 'Check the text, then send'
+  return 'Press the mic to speak'
+})
 
 // 10-minute popup: ask whether to explore another room (never while TTS is playing)
 const showRoomChoicePopup = ref(false)
@@ -189,7 +263,7 @@ const startRoomChoiceTimer = () => {
 const handleExploreAnotherRoom = () => {
   showRoomChoicePopup.value = false
   startRoomChoiceTimer() // reset when child re-enters a (new) room
-  router.push(phenomenon.value ? `/area/${phenomenon.value.area}` : '/')
+  router.push(phenomenon.value ? areaPath(phenomenon.value.area) : mapPath.value)
 }
 const handleContinueThisRoom = () => {
   showRoomChoicePopup.value = false
@@ -527,7 +601,7 @@ const updateScrollState = () => {
 }
 
 const handleVoiceClick = async () => {
-  if (novaBusy.value) return
+  if (micLocked.value) return
   if (isRecording.value) {
     stopRecording()
   } else {
@@ -681,7 +755,7 @@ const enqueueSentence = (pb: PlaybackSession, rawSentence: string) => {
 const playSentenceClip = (pb: PlaybackSession, job: SpeechJob, blob: Blob): Promise<void> => {
   return new Promise<void>((resolve) => {
     const url = URL.createObjectURL(blob)
-    const audio = new Audio(url)
+    const audio = atNovaRate(new Audio(url))
     pb.activeAudio = audio
     pb.activeUrl = url
     currentAudio = audio // keep legacy stop/cleanup paths working
@@ -819,58 +893,280 @@ const cancelPlayback = () => {
   if (currentPlayback === pb) currentPlayback = null
 }
 
+const pushErrorReply = async () => {
+  chatHistory.value.push({
+    role: 'assistant',
+    content: 'Sorry, I encountered an error. Please try again.',
+    time: getCurrentTime()
+  })
+  await scrollToBottom()
+}
+
 const processAudio = async (audioBlob: Blob, mimeType: string) => {
+  if (teacherMode.value) {
+    await transcribeIntoDraft(audioBlob, mimeType)
+    return
+  }
   isLoading.value = true
+  try {
+    // Question-asking version: what the child said is sent straight away
+    const userMessage = await transcribeWithBackend(audioBlob)
+    await sendUserMessage(userMessage, { blob: audioBlob, mimeType }, null)
+  } catch (error) {
+    console.error('Error processing audio:', error)
+    await pushErrorReply()
+  } finally {
+    isLoading.value = false
+  }
+}
+
+/** Teacher version: add a recording's transcript to the end of the editable box */
+const transcribeIntoDraft = async (audioBlob: Blob, mimeType: string) => {
+  isTranscribing.value = true
+  transcribeFailed.value = false
+  try {
+    const text = (await transcribeWithBackend(audioBlob)).trim()
+    if (!text) {
+      transcribeFailed.value = true
+      return
+    }
+    const before = draft.value.trimEnd()
+    draft.value = before ? `${before} ${text}` : text
+    draftTranscripts.push(text)
+    draftAudio = { blob: audioBlob, mimeType }
+    // Ready to correct: cursor at the end of the text
+    await nextTick()
+    const box = draftBox.value
+    if (box) {
+      box.focus()
+      box.setSelectionRange(box.value.length, box.value.length)
+      box.scrollTop = box.scrollHeight
+    }
+  } catch (error) {
+    console.error('Error transcribing audio:', error)
+    transcribeFailed.value = true
+  } finally {
+    isTranscribing.value = false
+  }
+}
+
+/** Teacher version: send the box's (possibly edited) text */
+const sendDraft = async () => {
+  if (!canSend.value) return
+  const text = draft.value.trim()
+  const audio = draftAudio
+  const transcript = draftTranscripts.length > 0 ? draftTranscripts.join(' ') : null
+  draft.value = ''
+  draftAudio = null
+  draftTranscripts = []
+  transcribeFailed.value = false
+  isLoading.value = true
+  try {
+    await sendUserMessage(text, audio, transcript)
+  } catch (error) {
+    console.error('Error sending message:', error)
+    await pushErrorReply()
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const handleDraftKeydown = (e: KeyboardEvent) => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+    e.preventDefault()
+    sendDraft()
+  }
+}
+
+/**
+ * Add the user's message to the chat and stream Nova's reply. The question-asking
+ * version speaks the reply sentence by sentence as it streams; the teacher
+ * version shows the text as it streams, with no speech. `transcript` is the raw
+ * speech-to-text result when the teacher edited it (teacher version only).
+ */
+const sendUserMessage = async (
+  userMessage: string,
+  audio: { blob: Blob; mimeType: string } | null,
+  transcript: string | null
+) => {
+  const speak = !teacherMode.value
+
+  chatHistory.value.push({
+    role: 'user',
+    content: userMessage,
+    time: getCurrentTime()
+  })
+
+  await scrollToBottom()
+
+  // Get AI response using streaming chat completion
+  const audioBase64 = audio ? await blobToBase64(audio.blob) : undefined
+  const mimeType = audio?.mimeType
+
+  // Placeholder for the reply, hidden until its first clip plays (or, without
+  // speech, until its first words arrive)
+  const assistantMessageIndex = chatHistory.value.length
+  chatHistory.value.push({
+    role: 'assistant',
+    content: '',
+    time: getCurrentTime(),
+    words: speak ? [] : undefined,
+    audioReady: false
+  })
+
+  // Start a fresh sentence-by-sentence playback session for this turn.
+  cancelPlayback()
+  const playback: PlaybackSession | null = speak
+    ? {
+        messageIndex: assistantMessageIndex,
+        queue: [],
+        nextIndex: 0,
+        finished: false,
+        cancelled: false,
+        firstStarted: false,
+        wake: null,
+        activeAudio: null,
+        activeUrl: null
+      }
+    : null
+  currentPlayback = playback
+  const playerPromise = playback ? runSentencePlayer(playback) : Promise.resolve()
+
+  let fullText = ''
+  let pendingText = '' // streamed text not yet emitted as a sentence
+  let emittedSentenceCount = 0
+  let nextState: typeof convState.value = convState.value
   
   try {
-    // 1) Transcribe audio via backend
-    const userMessage = await transcribeWithBackend(audioBlob)
-    
-    // Add user message to chat history
-    chatHistory.value.push({
-      role: 'user',
-      content: userMessage,
-      time: getCurrentTime()
-    })
-    
-    await scrollToBottom()
-    
-    // Get AI response using streaming chat completion
-    const audioBase64 = await blobToBase64(audioBlob)
-
-    // Add placeholder assistant message for streaming (hidden until audio is ready)
-    const assistantMessageIndex = chatHistory.value.length
-    chatHistory.value.push({
-      role: 'assistant',
-      content: '',
-      time: getCurrentTime(),
-      words: [],
-      audioReady: false
+    const response = await fetch('/api/chat/stream', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        messages: chatHistory.value.slice(0, -1).map(msg => ({
+          role: msg.role,
+          content: msg.content
+        })),
+        state: convState.value,
+        image_path: props.selectedImagePath,
+        conversation_id: conversationId.value,
+        session_id: sessionId.value,
+        user_audio: audioBase64,
+        user_audio_mime_type: mimeType,
+        user_transcript: transcript ?? undefined,
+        phenomenon: phenomenon.value?.id,
+        version: version.value
+      })
     })
 
-    // Start a fresh sentence-by-sentence playback session for this turn.
-    cancelPlayback()
-    const playback: PlaybackSession = {
-      messageIndex: assistantMessageIndex,
-      queue: [],
-      nextIndex: 0,
-      finished: false,
-      cancelled: false,
-      firstStarted: false,
-      wake: null,
-      activeAudio: null,
-      activeUrl: null
+    if (!response.ok) {
+      throw new Error('Chat completion failed')
     }
-    currentPlayback = playback
-    const playerPromise = runSentencePlayer(playback)
 
-    let fullText = ''
-    let pendingText = '' // streamed text not yet emitted as a sentence
-    let emittedSentenceCount = 0
-    let nextState: typeof convState.value = convState.value
+    const reader = response.body?.getReader()
+    const decoder = new TextDecoder()
     
+    if (!reader) {
+      throw new Error('No response body')
+    }
+    
+    let buffer = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      
+      const chunk = decoder.decode(value, { stream: true })
+      buffer += chunk
+      const lines = buffer.split('\n')
+      
+      // Keep the last incomplete line in buffer
+      buffer = lines.pop() || ''
+      
+      for (const line of lines) {
+        if (line.trim() === '') continue
+        
+        if (line.startsWith('data: ')) {
+          try {
+            const jsonStr = line.slice(6).trim()
+            if (!jsonStr) continue
+            
+            const data = JSON.parse(jsonStr)
+            
+            if (data.type === 'token') {
+              const delta = data.content || ''
+              fullText += delta
+              pendingText += delta
+              // Update stored content (bubble stays hidden until first audio)
+              const assistantMsg = chatHistory.value[assistantMessageIndex]
+              if (assistantMsg) {
+                assistantMsg.content = fullText
+              }
+              if (!playback) {
+                // No speech: the text appears as it streams
+                if (assistantMsg && fullText.trim()) assistantMsg.audioReady = true
+                scrollToBottom()
+                continue
+              }
+              // Detect complete sentences and start their TTS immediately.
+              let piece = extractLeadingSentence(pendingText, emittedSentenceCount === 0)
+              while (piece) {
+                enqueueSentence(playback, piece.sentence)
+                emittedSentenceCount++
+                pendingText = piece.rest
+                piece = extractLeadingSentence(pendingText, emittedSentenceCount === 0)
+              }
+            } else if (data.type === 'done') {
+              fullText = data.response || fullText
+              nextState = data.next_state as typeof convState.value
+              convState.value = nextState
+              // Flush any trailing text as the final sentence (use the streamed
+              // remainder so word offsets stay aligned with the clips we fired).
+              if (playback) {
+                if (pendingText.trim().length > 0) {
+                  enqueueSentence(playback, pendingText)
+                  pendingText = ''
+                  emittedSentenceCount++
+                }
+                playback.finished = true
+                playback.wake?.()
+              }
+              const assistantMsg = chatHistory.value[assistantMessageIndex]
+              if (assistantMsg) {
+                assistantMsg.content = fullText
+                if (!playback && fullText.trim()) assistantMsg.audioReady = true
+              }
+              // Final scroll when done
+              await scrollToBottom()
+            } else if (data.type === 'error') {
+              const errorMsg = data.error || 'Streaming error'
+              console.error('Stream error received:', errorMsg)
+              // If we have partial text, continue with it; otherwise throw error
+              if (!fullText || fullText.trim().length === 0) {
+                throw new Error(errorMsg)
+              } else {
+                // We have partial text, log the error but continue
+                console.warn('Stream error occurred but continuing with partial response')
+              }
+            }
+          } catch (e) {
+            // Rethrow stream errors (e.g. an 'error' event with no text) so the
+            // outer catch falls back to /api/chat; only swallow JSON parse errors.
+            if (!(e instanceof SyntaxError)) throw e
+            if (line.slice(6).trim().length > 0) {
+              console.error('Error parsing SSE data:', e, 'Line:', line.substring(0, 100))
+            }
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error in streaming:', error)
+    // Stop any sentence clips already queued/playing before the whole-text fallback.
+    cancelPlayback()
+    // Fallback to regular non-streaming endpoint
     try {
-      const response = await fetch('/api/chat/stream', {
+      const chatResponse = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -886,200 +1182,96 @@ const processAudio = async (audioBlob: Blob, mimeType: string) => {
           session_id: sessionId.value,
           user_audio: audioBase64,
           user_audio_mime_type: mimeType,
-          phenomenon: phenomenon.value?.id
+          user_transcript: transcript ?? undefined,
+          phenomenon: phenomenon.value?.id,
+          version: version.value
         })
       })
-
-      if (!response.ok) {
+      
+      if (!chatResponse.ok) {
         throw new Error('Chat completion failed')
       }
-
-      const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
       
-      if (!reader) {
-        throw new Error('No response body')
-      }
+      const chatData = await chatResponse.json()
+      fullText = chatData.response
+      nextState = chatData.next_state as typeof convState.value
+      convState.value = nextState
       
-      let buffer = ''
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        
-        const chunk = decoder.decode(value, { stream: true })
-        buffer += chunk
-        const lines = buffer.split('\n')
-        
-        // Keep the last incomplete line in buffer
-        buffer = lines.pop() || ''
-        
-        for (const line of lines) {
-          if (line.trim() === '') continue
-          
-          if (line.startsWith('data: ')) {
-            try {
-              const jsonStr = line.slice(6).trim()
-              if (!jsonStr) continue
-              
-              const data = JSON.parse(jsonStr)
-              
-              if (data.type === 'token') {
-                const delta = data.content || ''
-                fullText += delta
-                pendingText += delta
-                // Update stored content (bubble stays hidden until first audio)
-                const assistantMsg = chatHistory.value[assistantMessageIndex]
-                if (assistantMsg) {
-                  assistantMsg.content = fullText
-                }
-                // Detect complete sentences and start their TTS immediately.
-                let piece = extractLeadingSentence(pendingText, emittedSentenceCount === 0)
-                while (piece) {
-                  enqueueSentence(playback, piece.sentence)
-                  emittedSentenceCount++
-                  pendingText = piece.rest
-                  piece = extractLeadingSentence(pendingText, emittedSentenceCount === 0)
-                }
-              } else if (data.type === 'done') {
-                fullText = data.response || fullText
-                nextState = data.next_state as typeof convState.value
-                convState.value = nextState
-                // Flush any trailing text as the final sentence (use the streamed
-                // remainder so word offsets stay aligned with the clips we fired).
-                if (pendingText.trim().length > 0) {
-                  enqueueSentence(playback, pendingText)
-                  pendingText = ''
-                  emittedSentenceCount++
-                }
-                playback.finished = true
-                playback.wake?.()
-                const assistantMsg = chatHistory.value[assistantMessageIndex]
-                if (assistantMsg) {
-                  assistantMsg.content = fullText
-                }
-                // Final scroll when done
-                await scrollToBottom()
-              } else if (data.type === 'error') {
-                const errorMsg = data.error || 'Streaming error'
-                console.error('Stream error received:', errorMsg)
-                // If we have partial text, continue with it; otherwise throw error
-                if (!fullText || fullText.trim().length === 0) {
-                  throw new Error(errorMsg)
-                } else {
-                  // We have partial text, log the error but continue
-                  console.warn('Stream error occurred but continuing with partial response')
-                }
-              }
-            } catch (e) {
-              // Rethrow stream errors (e.g. an 'error' event with no text) so the
-              // outer catch falls back to /api/chat; only swallow JSON parse errors.
-              if (!(e instanceof SyntaxError)) throw e
-              if (line.slice(6).trim().length > 0) {
-                console.error('Error parsing SSE data:', e, 'Line:', line.substring(0, 100))
-              }
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error in streaming:', error)
-      // Stop any sentence clips already queued/playing before the whole-text fallback.
-      cancelPlayback()
-      // Fallback to regular non-streaming endpoint
-      try {
-        const chatResponse = await fetch('/api/chat', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            messages: chatHistory.value.slice(0, -1).map(msg => ({
-              role: msg.role,
-              content: msg.content
-            })),
-            state: convState.value,
-            image_path: props.selectedImagePath,
-            conversation_id: conversationId.value,
-            session_id: sessionId.value,
-            user_audio: audioBase64,
-            user_audio_mime_type: mimeType,
-            phenomenon: phenomenon.value?.id
-          })
-        })
-        
-        if (!chatResponse.ok) {
-          throw new Error('Chat completion failed')
-        }
-        
-        const chatData = await chatResponse.json()
-        fullText = chatData.response
-        nextState = chatData.next_state as typeof convState.value
-        convState.value = nextState
-        
-        // Update the assistant message
-        const words = fullText.split(/(\s+)/).filter(w => w.length > 0).map(w => ({
-          text: w,
-          visible: false
-        }))
+      if (!speak) {
         const assistantMsg = chatHistory.value[assistantMessageIndex]
         if (assistantMsg) {
-          assistantMsg.words = words
           assistantMsg.content = fullText
-          assistantMsg.audioReady = false
+          assistantMsg.audioReady = true
         }
-        
         await scrollToBottom()
-        await generateAndPlayAudioWithPrinterEffect(fullText, assistantMessageIndex)
         return
-      } catch (fallbackError) {
-        console.error('Fallback also failed:', fallbackError)
-        throw error // Throw original error
       }
-    }
-    
-    // Stream ended. Flush any trailing text and let the player finish all clips.
-    // (Normally the 'done' event already flushed and set finished; this also covers
-    // a stream that ended without a 'done' event, e.g. a mid-stream error that still
-    // produced partial text.)
-    if (pendingText.trim().length > 0) {
-      enqueueSentence(playback, pendingText)
-      pendingText = ''
-    }
-    playback.finished = true
-    playback.wake?.()
 
-    if (playback.queue.length === 0) {
-      // Nothing usable was generated.
-      console.error('No text received from stream')
-      cancelPlayback()
+      // Update the assistant message
+      const words = fullText.split(/(\s+)/).filter(w => w.length > 0).map(w => ({
+        text: w,
+        visible: false
+      }))
       const assistantMsg = chatHistory.value[assistantMessageIndex]
       if (assistantMsg) {
-        if (!fullText || fullText.trim().length === 0) {
-          assistantMsg.content = 'Sorry, I encountered an error generating a response. Please try again.'
-        }
-        assistantMsg.audioReady = true // show message even without audio
+        assistantMsg.words = words
+        assistantMsg.content = fullText
+        assistantMsg.audioReady = false
       }
+      
       await scrollToBottom()
+      await generateAndPlayAudioWithPrinterEffect(fullText, assistantMessageIndex)
       return
+    } catch (fallbackError) {
+      console.error('Fallback also failed:', fallbackError)
+      throw error // Throw original error
     }
-
-    // Wait until every sentence clip has finished playing (keeps the mic disabled
-    // while Nova is still talking, matching the previous behavior).
-    await playerPromise
-    isPlayingResponseAudio.value = false
-    if (currentPlayback === playback) currentPlayback = null
-
-  } catch (error) {
-    console.error('Error processing audio:', error)
-    chatHistory.value.push({
-      role: 'assistant',
-      content: 'Sorry, I encountered an error. Please try again.',
-      time: getCurrentTime()
-    })
-    await scrollToBottom()
-  } finally {
-    isLoading.value = false
   }
+  
+  if (!playback) {
+    const assistantMsg = chatHistory.value[assistantMessageIndex]
+    if (assistantMsg) {
+      if (!fullText.trim()) {
+        console.error('No text received from stream')
+        assistantMsg.content = 'Sorry, I encountered an error generating a response. Please try again.'
+      }
+      assistantMsg.audioReady = true
+    }
+    await scrollToBottom()
+    return
+  }
+
+  // Stream ended. Flush any trailing text and let the player finish all clips.
+  // (Normally the 'done' event already flushed and set finished; this also covers
+  // a stream that ended without a 'done' event, e.g. a mid-stream error that still
+  // produced partial text.)
+  if (pendingText.trim().length > 0) {
+    enqueueSentence(playback, pendingText)
+    pendingText = ''
+  }
+  playback.finished = true
+  playback.wake?.()
+
+  if (playback.queue.length === 0) {
+    // Nothing usable was generated.
+    console.error('No text received from stream')
+    cancelPlayback()
+    const assistantMsg = chatHistory.value[assistantMessageIndex]
+    if (assistantMsg) {
+      if (!fullText || fullText.trim().length === 0) {
+        assistantMsg.content = 'Sorry, I encountered an error generating a response. Please try again.'
+      }
+      assistantMsg.audioReady = true // show message even without audio
+    }
+    await scrollToBottom()
+    return
+  }
+
+  // Wait until every sentence clip has finished playing (keeps the mic disabled
+  // while Nova is still talking, matching the previous behavior).
+  await playerPromise
+  isPlayingResponseAudio.value = false
+  if (currentPlayback === playback) currentPlayback = null
 }
 
 const generateAndPlayAudio = async (text: string) => {
@@ -1106,7 +1298,7 @@ const generateAndPlayAudio = async (text: string) => {
     
     const audioBlob = await response.blob()
     const audioUrl = URL.createObjectURL(audioBlob)
-    const audio = new Audio(audioUrl)
+    const audio = atNovaRate(new Audio(audioUrl))
     
     // Store reference to current audio
     currentAudio = audio
@@ -1159,7 +1351,7 @@ const generateAndPlayAudioWithPrinterEffect = async (
     
     const audioBlob = await response.blob()
     const audioUrl = URL.createObjectURL(audioBlob)
-    const audio = new Audio(audioUrl)
+    const audio = atNovaRate(new Audio(audioUrl))
     
     // Store reference to current audio
     currentAudio = audio
@@ -1316,7 +1508,9 @@ const generateAndPlayAudioWithPrinterEffect = async (
 const loadExistingConversation = async () => {
   try {
     // Get the most recent conversation for this session
-    const response = await fetch(`/api/conversations?session_id=${sessionId.value}`)
+    // Only this version's conversations: QA and teacher chats never mix
+    const params = new URLSearchParams({ session_id: sessionId.value, version: version.value })
+    const response = await fetch(`/api/conversations?${params}`)
     if (!response.ok) {
       console.error('Failed to fetch conversations:', response.status, response.statusText)
       throw new Error('Failed to fetch conversations')
@@ -1476,7 +1670,9 @@ const generateInitialGreeting = async () => {
         body: JSON.stringify({
           id: conversationId.value,
           session_id: sessionId.value,
-          image_path: props.selectedImagePath || '/imgs/balloon.jpg'
+          image_path: props.selectedImagePath || '/imgs/balloon.jpg',
+          phenomenon: phenomenon.value?.id,
+          version: version.value
         })
       })
       
@@ -1528,6 +1724,17 @@ const generateInitialGreeting = async () => {
       console.error('Error saving greeting message:', error)
     }
     
+    if (teacherMode.value) {
+      // No speech in the teacher version: the line is just shown
+      chatHistory.value.push({
+        role: 'assistant',
+        content: greetingText,
+        time: getCurrentTime()
+      })
+      await scrollToBottom()
+      return
+    }
+
     // Split text into words for printer effect
     const words = greetingText.split(/(\s+)/).filter(w => w.length > 0).map(w => ({
       text: w,
@@ -1582,7 +1789,11 @@ const startNewChat = async () => {
 }
 
 const handleKeyDown = (e: KeyboardEvent) => {
-  if (e.code === 'Space' && !e.repeat && !isLoading.value) {
+  // Typing in the teacher's box: Space is just a space
+  const target = e.target as HTMLElement | null
+  if (target?.closest?.('textarea, input, select, [contenteditable="true"]')) return
+  const locked = teacherMode.value ? micLocked.value : isLoading.value
+  if (e.code === 'Space' && !e.repeat && !locked) {
     e.preventDefault()
     if (isRecording.value) {
       stopRecording()
@@ -1944,7 +2155,18 @@ defineExpose({
 }
 
 .voice-input-button.recording {
-  animation: pulse 1.5s infinite;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+/* While listening the mic stays in place and throbs (grows and shrinks), in step
+   with the glow */
+.voice-input-button.recording .voice-icon {
+  animation: throb 1.2s ease-in-out infinite;
+}
+
+@keyframes throb {
+  0%, 100% { transform: scale(0.9); }
+  50% { transform: scale(1.1); }
 }
 
 .voice-input-button.loading,
@@ -1981,6 +2203,121 @@ defineExpose({
 @keyframes pulse {
   0%, 100% { filter: drop-shadow(0 0 0 rgba(255, 211, 77, 0)); }
   50% { filter: drop-shadow(0 0 14px rgba(255, 211, 77, 0.9)); }
+}
+
+/* Teacher version footer: editable box on top; mic, status and Send below.
+   The mic sits inside the bar here, so the messages need no extra room for it. */
+.chat-container.teacher .chat-messages {
+  padding-bottom: 18px;
+}
+
+.chat-input-area.teacher-input {
+  height: auto;
+  padding: 14px 16px;
+  gap: 10px;
+  justify-content: flex-start;
+}
+
+.draft-box {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 10px 14px;
+  resize: none;
+  border: 4px solid var(--bubble-rim);
+  border-radius: 16px;
+  background: #ffffff;
+  font-family: var(--curio-font-round);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--curio-navy);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.draft-box::placeholder {
+  color: #6b7a8c;
+}
+
+.draft-box:focus {
+  outline: none;
+  border-color: var(--curio-navy);
+  box-shadow: 0 0 0 4px rgba(255, 211, 77, 0.8);
+}
+
+.teacher-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.teacher-input .voice-input-button {
+  flex: 0 0 auto;
+  width: 77px;
+  height: 72px;
+}
+
+.teacher-input .voice-loading-face {
+  width: 70px;
+  height: 70px;
+  border-width: 4px;
+}
+
+.teacher-input .loading-icon {
+  font-size: 28px;
+}
+
+.draft-status {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--curio-font-mono);
+  font-weight: 500;
+  font-size: 15px;
+  line-height: 1.3;
+  color: #111111;
+  text-align: left;
+}
+
+.draft-status.warn {
+  color: #a4311f;
+}
+
+.send-button {
+  flex: 0 0 auto;
+  min-width: 128px;
+  height: 60px;
+  padding: 0 24px;
+  border: 5px solid var(--curio-navy);
+  border-radius: 999px;
+  background: var(--curio-yellow);
+  color: var(--curio-navy);
+  font-family: var(--curio-font-mono);
+  font-weight: 700;
+  font-size: 24px;
+  cursor: pointer;
+  box-shadow: 0 4px 0 var(--curio-navy);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+
+.send-button:hover:not(:disabled) {
+  filter: brightness(1.05);
+  transform: translateY(-2px);
+}
+
+.send-button:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 var(--curio-navy);
+}
+
+.send-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.send-button:focus-visible {
+  outline: 4px solid var(--curio-yellow);
+  outline-offset: 3px;
 }
 
 .chat-messages::-webkit-scrollbar {

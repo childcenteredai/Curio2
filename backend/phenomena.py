@@ -50,6 +50,15 @@ PHENOMENA = {
 
 AREAS = ("house", "garden")
 
+# App versions served side by side: "qa" (question-asking with AI, at /),
+# "direct" (direct instruction with AI, at /direct) and "teacher" (the QA chat
+# run by a teacher, at /teacher: Nova's replies are text only and the teacher
+# can correct the transcribed voice input before sending it)
+VERSIONS = ("qa", "direct", "teacher")
+# Versions that use the question-asking chat (conversations table)
+CHAT_VERSIONS = ("qa", "teacher")
+DEFAULT_VERSION = "qa"
+
 
 def resolve_phenomenon(phenomenon_id=None, image_path=""):
     """Return a known phenomenon id, preferring the explicit id over the image path."""

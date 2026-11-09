@@ -1,0 +1,206 @@
+{
+  "Hair Stands Up Near a Balloon": [
+    {
+      "concept": "Invisible Force",
+      "text": "The child's hair stands up and spreads out when a balloon is held nearby, even though the balloon does not touch the hair. This happens because of static electricity, an invisible force that lets objects push or pull on one another without touching."
+    },
+    {
+      "concept": "Energy from Rubbing",
+      "text": "When a child rubs a balloon on a fleece sweater, the rubbing gives energy that helps tiny particles move from one object to another."
+    },
+    {
+      "concept": "Charges",
+      "text": "Everything around the balloon, including the sweater and the child's hair, has tiny particles with charges inside it. There are two kinds of charge, positive and negative, which are usually balanced."
+    },
+    {
+      "concept": "Electrons",
+      "text": "When the child rubs the balloon on the sweater, tiny negative particles called electrons move from the sweater onto the balloon."
+    },
+    {
+      "concept": "Different Charges",
+      "text": "Because of this movement, the balloon ends up with more negative charge and the sweater with less, so the charges are no longer balanced and the balloon becomes charged for a short time."
+    },
+    {
+      "concept": "Push and Pull",
+      "text": "When the charged balloon is held near the hair, it can pull the hair toward it without touching it. At the same time, hair strands with the same kind of charge can push away from one another and spread out like a spiky crown."
+    },
+    {
+      "concept": "Material Properties",
+      "text": "This works best with a balloon and fleece because those materials let charges move and stay in place for a while."
+    },
+    {
+      "concept": "Test the Effect of Static Electricity",
+      "text": "We can explore this by changing how much we rub the balloon, how close it is to the hair, or what materials we test."
+    }
+  ],
+  "Pepper Leaping up to Spoon": [
+    {
+      "concept": "Invisible Force",
+      "text": "The pepper flakes leap up toward the plastic spoon, even though the spoon does not touch them. This happens because of static electricity, an invisible force that lets objects push or pull on one another without touching."
+    },
+    {
+      "concept": "Energy from Rubbing",
+      "text": "When a child rubs a plastic spoon on a fuzzy sweater, the rubbing gives energy that helps tiny particles move from one object to another."
+    },
+    {
+      "concept": "Charges",
+      "text": "Everything around the spoon, including the sweater, pepper, and salt, has tiny particles with charges inside it. There are two kinds of charge, positive and negative, which are usually balanced."
+    },
+    {
+      "concept": "Electrons",
+      "text": "When the child rubs the spoon on the sweater, tiny negative particles called electrons move from the sweater onto the spoon."
+    },
+    {
+      "concept": "Different Charges",
+      "text": "Because of this movement, the spoon ends up with more negative charge and the sweater with less, so the charges are no longer balanced and the spoon becomes charged for a short time."
+    },
+    {
+      "concept": "Push and Pull",
+      "text": "When the charged spoon is held near the pepper, it can pull the pepper flakes upward without touching them."
+    },
+    {
+      "concept": "Material Properties",
+      "text": "Heavier salt grains do not move as easily under these conditions and stay in the bowl. This works best with a plastic spoon and dry materials because they let charges move and stay in place for a while."
+    },
+    {
+      "concept": "Test the Effect of Static Electricity",
+      "text": "We can explore this by changing how much we rub the spoon, how close it is to the pepper, or what materials we test."
+    }
+  ],
+  "Bending Water Stream with a Comb": [
+    {
+      "concept": "Invisible Force",
+      "text": "The water stream bends toward the plastic comb, even though the comb does not touch the water. This happens because of static electricity, an invisible force that lets objects push or pull on one another without touching."
+    },
+    {
+      "concept": "Energy from Rubbing",
+      "text": "When a child rubs a plastic comb on dry hair, the rubbing gives energy that helps tiny particles move from one object to another."
+    },
+    {
+      "concept": "Charges",
+      "text": "Everything, including the comb, hair, and water, has tiny particles with charges inside it. There are two kinds of charge, positive and negative, which are usually balanced."
+    },
+    {
+      "concept": "Electrons",
+      "text": "When the child rubs the comb on hair, tiny negative particles called electrons move from the hair onto the comb."
+    },
+    {
+      "concept": "Different Charges",
+      "text": "Because of this movement, the comb ends up with more negative charge and the hair with less, so the charges are no longer balanced and the comb becomes charged for a short time."
+    },
+    {
+      "concept": "Push and Pull",
+      "text": "When the charged comb is held near the water, it can pull the water stream toward it without touching it."
+    },
+    {
+      "concept": "Material Properties",
+      "text": "This works best with a plastic comb and dry hair because those materials let charges move and stay in place for a while."
+    },
+    {
+      "concept": "Test the Effect of Static Electricity",
+      "text": "We can explore this by changing how much we rub the comb, how close it is to the water, or how fast the water flows."
+    }
+  ],
+  "Labrador Puppy Family": [
+    {
+      "concept": "Traits",
+      "text": "The Labrador puppies have different fur colors, even though they share the same parents. Fur color is a trait, or characteristic, that can be different among living things."
+    },
+    {
+      "concept": "Offspring",
+      "text": "These puppies are the mother's offspring, and they can look similar to their parents and siblings without looking exactly the same."
+    },
+    {
+      "concept": "Inheritance",
+      "text": "Through inheritance, each puppy receives information from both its mother and father that helps determine its traits."
+    },
+    {
+      "concept": "Cells",
+      "text": "All the puppies are made of cells, tiny building blocks that keep their bodies growing and working, including making the colors in their fur."
+    },
+    {
+      "concept": "DNA",
+      "text": "Inside their cells, DNA acts like an instruction book containing information that helps determine how each puppy grows, looks, and works."
+    },
+    {
+      "concept": "Chromosomes",
+      "text": "Chromosomes are bundles of DNA that carry many genes, and each puppy receives a different combination of chromosomes from its parents."
+    },
+    {
+      "concept": "Genes",
+      "text": "Genes are small sections of DNA that give instructions. Different versions of genes can give different instructions, and a dark-colored mother can carry a version for golden fur without being golden herself."
+    },
+    {
+      "concept": "Proteins",
+      "text": "Proteins are tiny workers that help cells do their jobs, including controlling the pigments that give fur its color. When a puppy inherits the golden color-related gene version from both parents, a protein that normally helps produce dark coloring does not work properly, so the puppy has golden fur instead of dark fur."
+    }
+  ],
+  "Chicken Siblings with Different Comb Shapes": [
+    {
+      "concept": "Traits",
+      "text": "The young chickens have different comb shapes, even though they share the same parents. Comb shape is a trait, or characteristic, that can differ among living things. Five chickens have low, bumpy rose combs like their mother, while one has a pointed, upright single comb."
+    },
+    {
+      "concept": "Offspring",
+      "text": "These chickens are their mother's offspring, and they can resemble their parents and siblings without looking exactly the same."
+    },
+    {
+      "concept": "Inheritance",
+      "text": "Through inheritance, each chicken receives genetic information from both its mother and father that helps determine its traits."
+    },
+    {
+      "concept": "Cells",
+      "text": "All the chickens are made of cells, tiny building blocks that help their bodies grow and work, including developing the combs on their heads."
+    },
+    {
+      "concept": "DNA",
+      "text": "Inside their cells, DNA acts like an instruction book containing information that helps determine how each chicken grows, looks, and works."
+    },
+    {
+      "concept": "Chromosomes",
+      "text": "Chromosomes are bundles of DNA that carry many genes, and each chicken receives a different combination of chromosomes from its parents."
+    },
+    {
+      "concept": "Genes",
+      "text": "Genes are small sections of DNA that give instructions. Different versions of genes can give different instructions, and a mother with a rose comb can carry a version related to a single comb without having one herself."
+    },
+    {
+      "concept": "Proteins",
+      "text": "Proteins are tiny workers that help cells do their jobs, including guiding how the comb grows and takes shape. When a chick inherits the single-comb version from both parents, proteins involved in comb development work according to those inherited instructions, allowing a pointed, upright single comb to develop instead of a low, bumpy rose comb."
+    }
+  ],
+  "Multicolored Corn Kernels on One Cob": [
+    {
+      "concept": "Traits",
+      "text": "The kernels on the same corn cob have different colors, such as yellow, orange, red, and purple. Kernel color is a trait, or characteristic, that can differ among living things."
+    },
+    {
+      "concept": "Offspring",
+      "text": "Each kernel contains a baby corn plant, an offspring that can grow into a new plant."
+    },
+    {
+      "concept": "Inheritance",
+      "text": "Through inheritance, each kernel receives genetic information from the mother plant and from pollen. Because each kernel forms through a separate fertilization, the kernels can receive different combinations of genetic information."
+    },
+    {
+      "concept": "Cells",
+      "text": "Corn is made of cells, tiny building blocks that help it grow and work, including producing colors in the kernels."
+    },
+    {
+      "concept": "DNA",
+      "text": "Inside cells, DNA acts like an instruction book containing information that helps determine how corn grows, looks, and works."
+    },
+    {
+      "concept": "Chromosomes",
+      "text": "Chromosomes are bundles of DNA that carry many genes, and each seed receives chromosomes from the mother plant and from pollen."
+    },
+    {
+      "concept": "Genes",
+      "text": "Genes are small sections of DNA that give instructions. Different versions of genes can give different instructions that affect kernel color."
+    },
+    {
+      "concept": "Proteins",
+      "text": "Proteins are tiny workers that help cells do their jobs, including making or controlling pigments, the coloring substances that give kernels their colors. Different inherited instructions can affect how these proteins work, leading to different colors among kernels on the same cob."
+    }
+  ]
+}

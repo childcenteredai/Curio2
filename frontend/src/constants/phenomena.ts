@@ -13,14 +13,50 @@ export interface SceneLayer {
   rect: Rect
 }
 
-/** One arrangement of the scene: full-screen intro, or shifted left beside the chat */
+/**
+ * One arrangement of the scene: full-screen intro, shifted left beside the chat,
+ * or above Nova's explanation bubble
+ */
 export interface SceneLayout {
   background: SceneLayer
   /** Washes out the background so the characters stand out */
   wash?: Rect
+  washColor?: string
   characters?: SceneLayer
   icon?: SceneLayer
+  /**
+   * Edges of the background that end inside the window (top, right, bottom, left):
+   * the picture is continued there with a mirrored, toned-down copy
+   */
+  extend?: [boolean, boolean, boolean, boolean]
 }
+
+/**
+ * Direct-instruction description frames (03D/04D/05E, 07B/08B/09B): the scene as
+ * laid out in Figma, plus what has to stay in view. On screen the whole scene is
+ * scaled and moved (utils/explainLayout.ts) so `keep` sits above Nova's bubble,
+ * whatever the window shape and however long the bullet is.
+ */
+export interface ExplainLayout extends SceneLayout {
+  /**
+   * 'card': a framed picture on the cream page (house), free to float with cream
+   * around it. 'fill': a full-window picture (garden); it keeps covering the window
+   * where it can, and its subject also stays clear of Nova.
+   */
+  fit: 'card' | 'fill'
+  /** Region (Figma px of this frame) that must stay above the bubble, margins included */
+  keep: Rect
+  /**
+   * Also keep `keep` out from under Nova (peeking over the bubble's top-left).
+   * Off for the Figma frames, which let Nova overlap the scene's lower-left a little.
+   */
+  avoidNova?: boolean
+}
+
+/** Explanation frames (03D/04D/05E): the room sits in a cream frame, washed out by half */
+const EXPLAIN_WASH = 'rgba(255, 246, 228, 0.5)'
+/** Figma's bubble line: the top of a one-to-three-line bubble on the 823px frame */
+const BUBBLE_LINE = 639
 
 export interface Phenomenon {
   id: string
@@ -35,6 +71,10 @@ export interface Phenomenon {
   hitbox: Rect
   intro: SceneLayout
   chat: SceneLayout
+  /** Direct-instruction version, before Nova explains, where its frame differs from `intro` */
+  look?: SceneLayout
+  /** Direct-instruction version, while Nova explains */
+  explain: ExplainLayout
 }
 
 const HOUSE = '/imgs/house'
@@ -60,6 +100,16 @@ export const PHENOMENA: Record<string, Phenomenon> = {
       wash: [-26, 0, 1515, 880],
       characters: { src: `${HOUSE}/living-room-balloon-girls.png`, rect: [-160, 80, 1042, 695] },
       icon: { src: `${HOUSE}/living-room-surprise-icon.png`, rect: [646, 110, 198.5, 132.3] }
+    },
+    // 03D — Living Room Description
+    explain: {
+      fit: 'card',
+      keep: [94, 0, 1275, BUBBLE_LINE],
+      background: { src: `${HOUSE}/living-room-background.png`, rect: [118, 66, 1227, 691] },
+      wash: [-26, 0, 1515, 880],
+      washColor: EXPLAIN_WASH,
+      characters: { src: `${HOUSE}/living-room-balloon-girls.png`, rect: [367, 119, 690, 460] },
+      icon: { src: `${HOUSE}/living-room-surprise-icon.png`, rect: [939, 93, 172, 115] }
     }
   },
   bend: {
@@ -79,6 +129,21 @@ export const PHENOMENA: Record<string, Phenomenon> = {
       background: { src: `${HOUSE}/bathroom-background.png`, rect: [-255, -112, 1742, 979] },
       wash: [-26, -62, 1555, 942],
       characters: { src: `${HOUSE}/bathroom-comb-boys.png`, rect: [-27, 235, 909, 606] }
+    },
+    // 04C — Bathroom Phenomenon (direct-instruction copy): the boys sit a little smaller
+    look: {
+      background: { src: `${HOUSE}/bathroom-background.png`, rect: [0, -126, 1558, 1039] },
+      wash: [0, -48, 1466, 884],
+      characters: { src: `${HOUSE}/bathroom-comb-boys.png`, rect: [199, 96, 1160, 773] }
+    },
+    // 04D — Bathroom Description
+    explain: {
+      fit: 'card',
+      keep: [94, 0, 1277, BUBBLE_LINE],
+      background: { src: `${HOUSE}/bathroom-background.png`, rect: [118, 66, 1229, 691] },
+      wash: [-26, -62, 1555, 942],
+      washColor: EXPLAIN_WASH,
+      characters: { src: `${HOUSE}/bathroom-comb-boys.png`, rect: [277, 106, 909, 606] }
     }
   },
   pepper: {
@@ -98,10 +163,27 @@ export const PHENOMENA: Record<string, Phenomenon> = {
       background: { src: `${HOUSE}/kitchen-background.png`, rect: [-300, 16, 1964, 807] },
       wash: [-26, 25, 1515, 880],
       characters: { src: `${HOUSE}/kitchen-pepper-girls.png`, rect: [0, 282, 852, 568] }
+    },
+    // 05D — Kitchen Phenomenon (direct-instruction copy): the girls sit a little smaller
+    look: {
+      background: { src: `${HOUSE}/kitchen-background.png`, rect: [0, -48, 1536, 1024] },
+      wash: [0, -48, 1466, 884],
+      characters: { src: `${HOUSE}/kitchen-pepper-girls.png`, rect: [145, 96, 1174, 783] }
+    },
+    // 05E — Kitchen Description
+    explain: {
+      fit: 'card',
+      keep: [94, 0, 1221, BUBBLE_LINE],
+      background: { src: `${HOUSE}/kitchen-background.png`, rect: [118, 66, 1173, 691] },
+      wash: [-26, 25, 1515, 880],
+      washColor: EXPLAIN_WASH,
+      characters: { src: `${HOUSE}/kitchen-pepper-girls.png`, rect: [279, 181, 852, 568] }
     }
   },
-  // Garden scenes are full-frame illustrations; each chat frame (07B/08B/09B) has its
-  // own artwork with the subject moved left of the panel
+  // Garden scenes are full-frame illustrations; each chat frame has its own artwork
+  // with the subject moved left of the panel, and each description frame
+  // (07B/08B/09B) has artwork with the subject centred. `keep` is where the
+  // animals / cobs are in it.
   puppies: {
     id: 'puppies',
     area: 'garden',
@@ -111,7 +193,14 @@ export const PHENOMENA: Record<string, Phenomenon> = {
     magnifier: [339, 90],
     hitbox: [0, 120, 340, 260],
     intro: { background: { src: `${GARDEN}/dog-house-puppies.png`, rect: [0, 0, 1463, 823] } },
-    chat: { background: { src: `${GARDEN}/dog-house-chat.png`, rect: [0, 0, 1463, 823] } }
+    chat: { background: { src: `${GARDEN}/dog-house-chat.png`, rect: [0, 0, 1463, 823] } },
+    // 07B — Dog Chat (direct instruction)
+    explain: {
+      fit: 'fill',
+      // Animals, down to Figma's bubble line so Nova overlaps them as in the design
+      keep: [343, 96, 757, BUBBLE_LINE - 96],
+      background: { src: `${GARDEN}/dog-house-explain.png`, rect: [0, 0, 1463, 823] }
+    }
   },
   corn: {
     id: 'corn',
@@ -122,7 +211,13 @@ export const PHENOMENA: Record<string, Phenomenon> = {
     magnifier: [1315, 364],
     hitbox: [1110, 450, 353, 373],
     intro: { background: { src: `${GARDEN}/corn-field-two-corns.png`, rect: [0, 0, 1463, 823] } },
-    chat: { background: { src: `${GARDEN}/corn-field-chat.png`, rect: [0, 0, 1463, 823] } }
+    chat: { background: { src: `${GARDEN}/corn-field-chat.png`, rect: [0, 0, 1463, 823] } },
+    // 08B — Corn Chat (direct instruction)
+    explain: {
+      fit: 'fill',
+      keep: [275, 168, 485, BUBBLE_LINE - 168],
+      background: { src: `${GARDEN}/corn-field-explain.png`, rect: [0, 0, 1463, 823] }
+    }
   },
   chickens: {
     id: 'chickens',
@@ -133,7 +228,15 @@ export const PHENOMENA: Record<string, Phenomenon> = {
     magnifier: [862, 152],
     hitbox: [600, 165, 750, 375],
     intro: { background: { src: `${GARDEN}/chicken-coop-family.png`, rect: [0, 0, 1463, 823] } },
-    chat: { background: { src: `${GARDEN}/chicken-coop-chat.png`, rect: [0, 0, 1463, 823] } }
+    chat: { background: { src: `${GARDEN}/chicken-coop-chat.png`, rect: [0, 0, 1463, 823] } },
+    // 09B — Chicken Chat (direct instruction). In Figma the bubble covers the two
+    // lowest chicks; here every head and comb (the point of this room) stays clear,
+    // only feet and straw may go under the bubble
+    explain: {
+      fit: 'fill',
+      keep: [245, 40, 1070, 665],
+      background: { src: `${GARDEN}/chicken-coop-explain.png`, rect: [0, 0, 1463, 823] }
+    }
   }
 }
 
@@ -192,6 +295,11 @@ export const MAP = {
     "Hi, I'm Nova, your friendly science assistant!",
     "We're going to explore some science mysteries happening around the house and the garden together.",
     'Which one would you like to explore first? Move your mouse and click on the place you are curious about!'
+  ],
+  // Both areas finished (possible now that finishing is the child's choice)
+  allDone: [
+    'Excellent work! We successfully completed our detective mission today.',
+    "Let's get back to your researcher!"
   ],
   returnVisit: (area: Area) => [
     "Welcome back! I'm Nova, your friendly science assistant.",

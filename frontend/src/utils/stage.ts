@@ -8,6 +8,9 @@ export const rectStyle = ([x, y, w, h]: Rect) => ({
   height: `${h}px`
 })
 
+/** How long a room's illustration takes to zoom into place (--curio-glide in theme.css) */
+export const GLIDE_MS = 1400
+
 const INTRO_PLAYED_KEY = 'curio_intro_played'
 
 /** Scripted intros play once per browser session (not every time the child comes back) */

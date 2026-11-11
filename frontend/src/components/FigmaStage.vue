@@ -24,6 +24,7 @@
  * the window edges with left/right/top/bottom in Figma pixels.
  */
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { GLIDE_MS } from '../utils/stage'
 
 const props = withDefaults(
   defineProps<{
@@ -53,7 +54,7 @@ watch(
   () => {
     gliding.value = true
     if (glideTimer) clearTimeout(glideTimer)
-    glideTimer = setTimeout(() => { gliding.value = false }, 1000)
+    glideTimer = setTimeout(() => { gliding.value = false }, GLIDE_MS + 100)
   }
 )
 
@@ -122,7 +123,7 @@ onUnmounted(() => {
 }
 
 .stage.gliding {
-  transition: transform 0.9s ease;
+  transition: transform var(--curio-glide) ease;
 }
 
 /* Let clicks fall through to the scene except where overlay content sits */

@@ -23,6 +23,8 @@ export function useAppVersion() {
   return {
     version,
     mapPath: computed(() => base.value || '/'),
+    /** Goodbye screen after Finish Exploring */
+    donePath: computed(() => `${base.value}/done`),
     areaPath: (area: string) => `${base.value}/area/${area}`,
     roomPath: (area: string, room: string) => `${base.value}/area/${area}/${room}`,
     /** Scripted intros are tracked per version, so testing one doesn't skip the other's */

@@ -5,6 +5,7 @@ import MapView from './views/MapView.vue'
 import AreaView from './views/AreaView.vue'
 import PhenomenonView from './views/PhenomenonView.vue'
 import ExplanationView from './views/ExplanationView.vue'
+import { activityEndedAt } from './utils/session'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -19,6 +20,14 @@ const router = createRouter({
       path: '/area/:area',
       name: 'Area',
       component: AreaView
+    },
+    // Where Finish Exploring ends the activity (in every version): the map with
+    // Nova's goodbye, nothing clickable
+    {
+      path: '/done',
+      name: 'Done',
+      component: MapView,
+      meta: { ended: true }
     },
     {
       path: '/area/:area/:phenomenon',
@@ -38,6 +47,12 @@ const router = createRouter({
       name: 'DirectArea',
       component: AreaView,
       meta: { version: 'direct' }
+    },
+    {
+      path: '/direct/done',
+      name: 'DirectDone',
+      component: MapView,
+      meta: { version: 'direct', ended: true }
     },
     {
       path: '/direct/area/:area/:phenomenon',
@@ -60,6 +75,12 @@ const router = createRouter({
       meta: { version: 'teacher' }
     },
     {
+      path: '/teacher/done',
+      name: 'TeacherDone',
+      component: MapView,
+      meta: { version: 'teacher', ended: true }
+    },
+    {
       path: '/teacher/area/:area/:phenomenon',
       name: 'TeacherPhenomenon',
       component: PhenomenonView,
@@ -77,6 +98,12 @@ const router = createRouter({
       component: Home
     }
   ]
+})
+
+// After Finish Exploring the child stays on the goodbye screen
+router.beforeEach(to => {
+  const end = activityEndedAt()
+  return end && to.path !== end ? end : true
 })
 
 export default router

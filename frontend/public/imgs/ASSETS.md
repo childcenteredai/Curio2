@@ -32,7 +32,7 @@ The one exception is the mic sprite, split losslessly into two PNGs and cropped 
 | nova/nova-happy.png | "happy NOVA" on the all-done popup (206:95), manual export |
 | ui/narrative-bubble-arrow.svg | "Polygon 1" next-line arrow (7:24) |
 | ui/magnifier-bubble.png | Magnifier marker for rooms not explored yet (updated 2026-10-29, manual export) |
-| ui/done.png | "Done!" marker for rooms already explored (2026-10-29, manual export) |
+| ui/done.png | "Done!" marker for rooms already explored (2026-10-29, manual export); not used since 2026-11-09, completion is shown only for whole areas on the map |
 | ui/back-to-map-button.png, -hover.png | Back to map button variants (268:143), re-exported 2026-10-29 |
 | ui/house-button.png | Room Selection Button (126:110), re-exported 2026-10-29 |
 | ui/finish-exploring-button.png, -hover.png | Finish Exploring button, default (yellow) / hover (blue), frames 02 and 06 (2026-11-04, manual export) |

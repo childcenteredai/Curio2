@@ -69,9 +69,8 @@ import {
 } from '../utils/session'
 import { useTypewriter } from '../utils/typewriter'
 import { BUBBLE, arrangeExplain, fitBubbleText, type BubbleFit, type View } from '../utils/explainLayout'
-
-/** Time for the illustration to glide into place before Nova starts */
-const GLIDE_MS = 900
+// Nova starts once the illustration has glided into place
+import { GLIDE_MS } from '../utils/stage'
 
 const route = useRoute()
 const router = useRouter()
@@ -156,7 +155,7 @@ const speak = async (index: number) => {
   if (token === speakToken) spoken.value = true
 }
 
-/** Show a bullet; reaching the last one counts the room as explored ("Done!") */
+/** Show a bullet; reaching the last one counts the room as explored (progress) */
 const show = (index: number) => {
   step.value = index
   if (index === bullets.value.length - 1 && !completeLogged) {

@@ -1,0 +1,66 @@
+/* Popup card and buttons from the Figma popups (Frame 70 / 71), built from shapes
+   and text. Shared by the chat check-ins and the map's Restart confirmation. */
+.popup-card {
+  position: relative;
+  width: min(880px, 92vw);
+  box-sizing: border-box;
+  padding: 44px 56px 40px;
+  background: #fcf0d9;
+  border: 12px solid #03365f;
+  border-radius: 40px;
+  box-shadow: 0 6px 0 #03365f;
+  text-align: center;
+  font-family: var(--curio-font-mono);
+  color: var(--curio-navy);
+  animation: curio-popup-in 0.3s ease;
+}
+
+.popup-button {
+  min-width: 237px;
+  height: 72px;
+  padding: 0 28px;
+  border: 5px solid var(--curio-navy);
+  border-radius: 999px;
+  font-family: var(--curio-font-mono);
+  font-weight: 700;
+  font-size: 26px;
+  cursor: pointer;
+  box-shadow: 0 5px 0 var(--curio-navy);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+
+.popup-button.primary {
+  background: var(--curio-yellow);
+  color: var(--curio-navy);
+}
+
+.popup-button.secondary {
+  background: #ffffff;
+  color: var(--curio-navy);
+}
+
+.popup-button:hover {
+  filter: brightness(1.05);
+  transform: translateY(-2px);
+}
+
+.popup-button:active {
+  transform: translateY(3px);
+  box-shadow: 0 2px 0 var(--curio-navy);
+}
+
+.popup-button:focus-visible {
+  outline: 4px solid var(--curio-blue-rim);
+  outline-offset: 4px;
+}
+
+.popup-button:disabled {
+  cursor: default;
+  filter: saturate(0.6);
+  transform: none;
+}
+
+@keyframes curio-popup-in {
+  from { transform: translateY(24px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}

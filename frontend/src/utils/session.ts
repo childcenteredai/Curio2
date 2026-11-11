@@ -13,6 +13,70 @@ export function getOrCreateSessionId(): string {
   return id
 }
 
+/** Goodbye screen of an activity that ended on this page load */
+let endedAt: string | null = null
+
+/**
+ * End of the child's activity (Finish Exploring). Until the page is loaded again
+ * (a new tab, a refresh, the next login), every navigation, browser back included,
+ * lands on the goodbye screen at `goodbyePath`. What this tab has seen (intros
+ * heard, mic check, the 30-minute clock, all kept as curio_* keys) is forgotten,
+ * so the next session started here begins like a fresh visit.
+ */
+export function endActivity(goodbyePath: string): void {
+  endedAt = goodbyePath
+  forgetTab()
+}
+
+/** Forgets what this tab has seen (intros heard, mic check, the 30-minute clock) */
+function forgetTab(): void {
+  try {
+    for (const key of Object.keys(sessionStorage)) {
+      if (key.startsWith('curio_')) sessionStorage.removeItem(key)
+    }
+  } catch {
+    // Storage blocked: nothing was kept
+  }
+}
+
+/**
+ * "Restart" on the map: this version's progress starts over for the logged-in user
+ * (else this browser), and this tab forgets what it has seen, so the next page
+ * load is a first visit. Earlier records stay in the database. Resolves to false
+ * if the backend didn't record it (progress unchanged).
+ */
+export async function restartProgress(version: AppVersion): Promise<boolean> {
+  try {
+    const res = await fetch('/api/progress/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version, session_id: getOrCreateSessionId() })
+    })
+    if (!res.ok) return false
+  } catch {
+    return false
+  }
+  forgetTab()
+  return true
+}
+
+export const activityEndedAt = () => endedAt
+
+/**
+ * Sign the child out of the lab login (backend /api/auth/sign-out). Resolves to the
+ * lab's logout page to send the browser to, which ends with the login page, or null
+ * when there is no sign-in to end (e.g. local dev).
+ */
+export async function signOut(): Promise<string | null> {
+  try {
+    const res = await fetch('/api/auth/sign-out', { method: 'POST' })
+    if (!res.ok) return null
+    return (await res.json()).redirect ?? null
+  } catch {
+    return null
+  }
+}
+
 export interface AreaProgress {
   explored: string[]
   completed: boolean

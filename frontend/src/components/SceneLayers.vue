@@ -129,7 +129,12 @@ const mirrorTiles = computed(() => {
 
 /* Opacity included so a crossfading image still fades while it glides */
 .layer.glide {
-  transition: left 0.9s ease, top 0.9s ease, width 0.9s ease, height 0.9s ease, opacity 0.8s ease;
+  transition:
+    left var(--curio-glide) ease,
+    top var(--curio-glide) ease,
+    width var(--curio-glide) ease,
+    height var(--curio-glide) ease,
+    opacity var(--curio-glide) ease;
 }
 
 /* Softened so the continuation reads as background, not part of the scene */

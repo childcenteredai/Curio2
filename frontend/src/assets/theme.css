@@ -28,4 +28,7 @@
   --curio-blue-rim: #7b9fd4;
   --curio-lavender: #d3cfdc;
   --curio-footer: #c3ccd9;
+
+  /* How long a room's illustration takes to zoom into place (GLIDE_MS in utils/stage.ts) */
+  --curio-glide: 1.4s;
 }

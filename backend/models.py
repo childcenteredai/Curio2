@@ -114,3 +114,20 @@ class ExplanationEvent(Base):
     step = Column(Integer)
     concept = Column(String)  # Knowledge component of the bullet at `step`
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class ProgressReset(Base):
+    """A click on "Restart" on the map: that version's progress starts over.
+
+    Nothing is deleted. Rows from before the latest reset just stop counting
+    (explored rooms, finished areas, chats to pick up again), so researchers keep
+    the full history of every run.
+    """
+
+    __tablename__ = "progress_resets"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    session_id = Column(String, nullable=False)
+    user_id = Column(String)  # From JWT payload.sub, when logged in
+    version = Column(String, nullable=False)
+    reset_at = Column(DateTime, default=datetime.utcnow, nullable=False)

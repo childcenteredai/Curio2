@@ -21,11 +21,17 @@ from openai import (
     OpenAI,
     RateLimitError,
 )
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import scoped_session, sessionmaker
 
-from models import AreaCompletion, Conversation, ExplanationEvent, Message
+from models import (
+    AreaCompletion,
+    Conversation,
+    ExplanationEvent,
+    Message,
+    ProgressReset,
+)
 from phenomena import (
     AREAS,
     CHAT_VERSIONS,
@@ -2736,6 +2742,10 @@ def get_conversations():
         query = db.query(Conversation)
         if version is not None:
             query = query.filter(Conversation.version == version)
+            # After "Restart" on the map, earlier chats aren't picked up again
+            cutoff = _reset_cutoff(db, user_info, session_id, version)
+            if cutoff:
+                query = query.filter(Conversation.created_at > cutoff)
 
         if user_info and user_info.get("userId"):
             user_id = user_info["userId"]
@@ -2806,6 +2816,14 @@ def _progress_owner_filter(query, model, user_info, session_id):
     return query.filter(model.session_id == session_id)
 
 
+def _reset_cutoff(db, user_info, session_id, version):
+    """When this user (else browser session) last clicked "Restart" in this version."""
+    query = db.query(func.max(ProgressReset.reset_at)).filter(
+        ProgressReset.version == version
+    )
+    return _progress_owner_filter(query, ProgressReset, user_info, session_id).scalar()
+
+
 @app.route("/api/progress", methods=["GET"])
 def get_progress():
     """
@@ -2815,9 +2833,9 @@ def get_progress():
     phenomenon counts as explored once at least one message has been sent in it
     in that version. Direct-instruction version
     (?version=direct): once the child has reached the last bullet of Nova's
-    explanation. Either way the room then shows "Done!". An area is completed
+    explanation. An area is completed
     (dimmed on the map) once the child has clicked "Finish Exploring" for it in
-    that version.
+    that version. Only what happened after the latest "Restart" counts.
     """
     db = SessionLocal()
     try:
@@ -2853,6 +2871,15 @@ def get_progress():
         finished_query = _progress_owner_filter(
             finished_query, AreaCompletion, user_info, session_id
         )
+        cutoff = _reset_cutoff(db, user_info, session_id, version)
+        if cutoff:
+            explored_time = (
+                ExplanationEvent.created_at
+                if version == "direct"
+                else Message.created_at
+            )
+            explored_query = explored_query.filter(explored_time > cutoff)
+            finished_query = finished_query.filter(AreaCompletion.finished_at > cutoff)
 
         explored = {phenomenon for (phenomenon,) in explored_query.distinct()}
         finished = {area for (area,) in finished_query.distinct()}
@@ -2918,6 +2945,81 @@ def finish_area():
         return jsonify({"error": "Failed to finish area"}), 500
     finally:
         db.close()
+
+
+@app.route("/api/progress/reset", methods=["POST"])
+def reset_progress():
+    """
+    A "Restart" click on the map: this version's progress starts over for the
+    logged-in user (else the browser session). Nothing is deleted; earlier rows
+    just stop counting for progress and for chats to resume.
+    """
+    db = SessionLocal()
+    try:
+        user_info = get_user_from_request(request)
+        data = request.get_json(silent=True) or {}
+        session_id = data.get("session_id")
+        version = data.get("version") or DEFAULT_VERSION
+
+        if version not in VERSIONS:
+            return jsonify({"error": f"version must be one of {list(VERSIONS)}"}), 400
+        if not session_id:
+            return jsonify({"error": "session_id is required"}), 400
+
+        reset = ProgressReset(
+            session_id=session_id,
+            user_id=user_info.get("userId") if user_info else None,
+            version=version,
+            reset_at=datetime.utcnow(),
+        )
+        db.add(reset)
+        db.commit()
+        return jsonify(
+            {"version": version, "reset_at": reset.reset_at.isoformat()}
+        ), 201
+
+    except Exception as e:
+        db.rollback()
+        print(f"Error resetting progress: {e}")
+        return jsonify({"error": "Failed to reset progress"}), 500
+    finally:
+        db.close()
+
+
+# Sign-in session cookie the AWS load balancer sets after the lab login (sharded
+# into -0, -1, ... when large); the default name unless the ingress renames it
+ALB_SESSION_COOKIE = os.getenv("ALB_SESSION_COOKIE", "AWSELBAuthSessionCookie")
+# The lab's Authentik logout, the same page as "Log out" in Authentik's own menu.
+# Works with Authentik's default settings: ends the lab session (every lab app in
+# this browser), then shows the lab's login page.
+LAB_LOGOUT_URL = os.getenv(
+    "LAB_LOGOUT_URL",
+    "https://auth.apps.learningmedialab.org/flows/-/default/invalidation/",
+)
+
+
+@app.route("/api/auth/sign-out", methods=["POST"])
+def sign_out():
+    """
+    Sign the child out after Finish Exploring, so the next session (theirs or the
+    next child's) starts at the lab's login page. Two sessions keep them signed in,
+    and each would sign them straight back in on its own:
+      - the load balancer's session cookie, expired here;
+      - the lab's Authentik session, ended by the browser visiting LAB_LOGOUT_URL
+        (returned as `redirect`).
+    `redirect` is null without a sign-in (e.g. local dev), so nobody is sent away.
+    """
+    signed_in = get_user_from_request(request) is not None
+    redirect_url = LAB_LOGOUT_URL if signed_in else None
+
+    response = jsonify({"redirect": redirect_url})
+    cookies = {f"{ALB_SESSION_COOKIE}-{i}" for i in range(4)}
+    cookies.update(
+        name for name in request.cookies if name.startswith(ALB_SESSION_COOKIE)
+    )
+    for name in sorted(cookies):
+        response.delete_cookie(name, path="/", secure=True, httponly=True)
+    return response
 
 
 # Direct-instruction version: Nova's explanation of each phenomenon, one bullet

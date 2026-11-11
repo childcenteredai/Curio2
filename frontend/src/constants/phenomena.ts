@@ -296,11 +296,13 @@ export const MAP = {
     "We're going to explore some science mysteries happening around the house and the garden together.",
     'Which one would you like to explore first? Move your mouse and click on the place you are curious about!'
   ],
-  // Both areas finished (possible now that finishing is the child's choice)
+  // Nova's goodbye after Finish Exploring (the same words as the 30-minute
+  // reminder), also shown if the map is opened with both areas finished
   allDone: [
     'Excellent work! We successfully completed our detective mission today.',
     "Let's get back to your researcher!"
   ],
+  // Next session, one area finished
   returnVisit: (area: Area) => [
     "Welcome back! I'm Nova, your friendly science assistant.",
     "I'm here with you again since we have one more mystery to explore together.",

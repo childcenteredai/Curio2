@@ -4,7 +4,7 @@
     <template #default="{ visible }">
       <img class="scene" :src="config.scene.src" :style="rectStyle(config.scene.rect)" alt="" />
 
-      <template v-if="!narrating">
+      <template v-if="ready && !narrating">
         <button
           v-for="p in rooms"
           :key="`hit-${p.id}`"
@@ -15,26 +15,27 @@
           @mouseleave="hovered = null"
           @click="enterRoom(p.id)"
         />
-        <!-- Explored rooms show "Done!" instead of the magnifier; both stay clickable -->
+        <!-- Every room keeps its magnifier: completion is shown only for whole
+             areas, on the map -->
         <button
           v-for="p in rooms"
           :key="`mag-${p.id}`"
           class="magnifier"
-          :class="{ active: hovered === p.id, done: isExplored(p.id) }"
+          :class="{ active: hovered === p.id }"
           :style="markerStyle(p, visible)"
-          :aria-label="`${isExplored(p.id) ? 'Explore again' : 'Explore'}: the ${p.label}`"
+          :aria-label="`Explore the ${p.label}`"
           @mouseenter="hovered = p.id"
           @mouseleave="hovered = null"
           @click="enterRoom(p.id)"
         >
-          <img :src="isExplored(p.id) ? '/imgs/ui/done.png' : '/imgs/ui/magnifier-bubble.png'" alt="" />
+          <img src="/imgs/ui/magnifier-bubble.png" alt="" />
         </button>
       </template>
     </template>
 
     <template #overlay>
       <button
-        v-if="!narrating"
+        v-if="ready && !narrating"
         class="back-to-map"
         aria-label="Back to map"
         @click="router.push(mapPath)"
@@ -43,7 +44,7 @@
         <img class="hover" src="/imgs/ui/back-to-map-button-hover.png" alt="" />
       </button>
       <button
-        v-if="!narrating"
+        v-if="ready && !narrating"
         class="finish-exploring"
         :aria-label="`Finish exploring the ${config.label}`"
         :disabled="finishing"
@@ -59,37 +60,37 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import FigmaStage from '../components/FigmaStage.vue'
 import NarrativeBubble from '../components/NarrativeBubble.vue'
 import { AREAS, phenomenaInArea, type Area, type Phenomenon } from '../constants/phenomena'
 import { useAppVersion } from '../utils/appVersion'
-import { fetchProgress, finishArea } from '../utils/session'
+import { endActivity, fetchProgress, finishArea } from '../utils/session'
 import { rectStyle, introPlayed, markIntroPlayed } from '../utils/stage'
 
 const route = useRoute()
 const router = useRouter()
-const { version, mapPath, roomPath, introKey: versionedKey } = useAppVersion()
+const { version, mapPath, donePath, roomPath, introKey: versionedKey } = useAppVersion()
 
 const area = computed(() => route.params.area as Area)
 const config = computed(() => AREAS[area.value])
 const rooms = computed(() => phenomenaInArea(area.value))
 
 const hovered = ref<string | null>(null)
+/** Rooms the child has explored here (progress), only used to skip the intro */
 const explored = ref<string[]>([])
-const isExplored = (id: string) => explored.value.includes(id)
 
-// Marker art sizes. Both bubbles keep the old magnifier's bottom-left corner
-// (120×124 at p.magnifier in Figma), so the tail still points at the room.
-const MAGNIFIER = { w: 163, h: 136 }
-const DONE = { w: 210, h: 174 }
+// Magnifier size (85% of its first size, 163×136). It keeps the old magnifier's
+// bottom-left corner (120×124 at p.magnifier in Figma), so the tail still points
+// at the room.
+const MAGNIFIER = { w: 139, h: 116 }
 const EDGE = 12
 type Bounds = { left: number; top: number; right: number; bottom: number }
 
 // Pulled back inside the window when the cover crop would cut a marker off
 const markerStyle = (p: Phenomenon, visible: Bounds) => {
-  const size = isExplored(p.id) ? DONE : MAGNIFIER
+  const size = MAGNIFIER
   const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi)
   const left = clamp(p.magnifier[0], visible.left + EDGE, visible.right - size.w - EDGE)
   const top = clamp(p.magnifier[1] + 124 - size.h, visible.top + EDGE, visible.bottom - size.h - EDGE)
@@ -101,27 +102,35 @@ const markerStyle = (p: Phenomenon, visible: Bounds) => {
   }
 }
 
-onMounted(async () => {
-  explored.value = (await fetchProgress(version.value))[area.value]?.explored ?? []
-})
+// Nova introduces an area only on the child's first visit: not when they come
+// back from a room, and not on a later visit once they have explored a room here
+// (progress is per child, so this also holds in a new tab or a second session)
+const ready = ref(false)
 const narrating = ref(false)
 
 const introKey = computed(() => versionedKey(`area:${area.value}`))
 
 watch(
   area,
-  a => {
+  async a => {
     if (!AREAS[a]) {
       router.replace(mapPath.value)
       return
     }
-    narrating.value = !introPlayed(introKey.value)
+    ready.value = false
+    narrating.value = false
+    const progress = await fetchProgress(version.value)
+    if (area.value !== a) return
+    explored.value = progress[a]?.explored ?? []
+    narrating.value = !introPlayed(introKey.value) && !explored.value.length
+    // Counted as heard once it starts, so leaving mid-intro doesn't replay it
+    if (narrating.value) markIntroPlayed(introKey.value)
+    ready.value = true
   },
   { immediate: true }
 )
 
 const finishIntro = () => {
-  markIntroPlayed(introKey.value)
   narrating.value = false
 }
 
@@ -130,7 +139,8 @@ const enterRoom = (id: string) => {
 }
 
 // Finishing is the completion signal for the area (no confirmation, available any
-// time); the map then shows it as Completed and points the child at the other area
+// time) and ends today's activity: Nova says goodbye and nothing is clickable.
+// The map's "welcome back" lines are for the next session.
 const finishing = ref(false)
 const finish = async () => {
   if (finishing.value) return
@@ -138,7 +148,8 @@ const finish = async () => {
   if (!(await finishArea(area.value, version.value))) {
     console.error(`Could not record ${area.value} as finished`)
   }
-  router.push(mapPath.value)
+  endActivity(donePath.value)
+  router.replace(donePath.value)
 }
 </script>
 
@@ -183,11 +194,6 @@ const finish = async () => {
 .magnifier.active img {
   transform: scale(1.15);
   filter: drop-shadow(0 0 12px rgba(255, 211, 77, 0.95));
-}
-
-/* Done markers sit still; only rooms left to explore bob for attention */
-.magnifier.done {
-  animation: none;
 }
 
 @keyframes bob {

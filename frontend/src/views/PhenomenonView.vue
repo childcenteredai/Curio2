@@ -38,16 +38,15 @@ import Conversation from '../components/Conversation.vue'
 import MicCheckModal from '../components/MicCheckModal.vue'
 import { AREAS, PHENOMENA } from '../constants/phenomena'
 import { MIC_CHECK_SESSION_KEY } from '../utils/session'
-import { introPlayed, markIntroPlayed } from '../utils/stage'
 import { useAppVersion } from '../utils/appVersion'
 
-/** How long the illustration is shown on its own before the chat pops up */
+/** How long the illustration is shown on its own before it zooms aside for the chat (every visit) */
 const INTRO_MS = 2500
 
 const route = useRoute()
 const router = useRouter()
 // Question-asking (/) and teacher (/teacher) versions share this screen
-const { mapPath, areaPath, introKey } = useAppVersion()
+const { mapPath, areaPath } = useAppVersion()
 
 const phenomenon = computed(() => {
   const p = PHENOMENA[route.params.phenomenon as string]
@@ -79,14 +78,8 @@ watch(
       router.replace(mapPath.value)
       return
     }
-    const key = introKey(`room:${p.id}`)
-    if (introPlayed(key)) {
-      phase.value = 'chat'
-      return
-    }
     phase.value = 'intro'
     timer = setTimeout(() => {
-      markIntroPlayed(key)
       phase.value = 'chat'
     }, INTRO_MS)
   },
@@ -137,7 +130,8 @@ onUnmounted(() => {
 
 .slide-enter-active {
   transition: transform 0.6s cubic-bezier(0.2, 0.9, 0.3, 1.2), opacity 0.4s ease;
-  transition-delay: 0.5s;
+  /* Lands as the illustration's zoom (--curio-glide) finishes */
+  transition-delay: 0.8s;
 }
 
 .slide-enter-from {
@@ -147,7 +141,7 @@ onUnmounted(() => {
 
 .pop-enter-active {
   transition: transform 0.4s ease, opacity 0.4s ease;
-  transition-delay: 0.6s;
+  transition-delay: 0.9s;
 }
 
 .pop-enter-from {

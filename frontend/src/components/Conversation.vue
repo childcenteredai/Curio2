@@ -108,7 +108,6 @@
           />
         </button>
       </div>
-      <p class="voice-hint">PRESS to Describe what you see or ask questions!</p>
     </div>
 
     <!-- 10-min room choice popup -->
@@ -417,124 +416,74 @@ const escapeHtml = (str: string): string => {
 }
 
 // Simple bold state tracking: if word contains '**', toggle bold state
-// Process words array and mark which words should be bold, and track first/last in sequence
-const renderWordsWithBoldState = (words: Array<{text: string, visible: boolean}>): Array<{text: string, visible: boolean, isBold: boolean, isFirstBold?: boolean, isLastBold?: boolean}> => {
+/**
+ * Highlights are the **…** spans in Nova's replies. A highlight covers only the text
+ * inside the markers, and it stops before an em dash: the rest of that span stays
+ * plain. `state` carries an open span from one word to the next.
+ */
+const EM_DASH = '\u2014'
+type HighlightState = { open: boolean; cut: boolean }
+const highlightRuns = (text: string, state: HighlightState): Array<{ text: string; bold: boolean }> => {
+  const runs: Array<{ text: string; bold: boolean }> = []
+  let run = ''
+  let runBold = state.open && !state.cut
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '*' && text[i + 1] === '*') {
+      i++
+      state.open = !state.open
+      state.cut = false
+      continue
+    }
+    if (text[i] === EM_DASH && state.open) state.cut = true
+    const bold = state.open && !state.cut
+    if (bold !== runBold && run) {
+      runs.push({ text: run, bold: runBold })
+      run = ''
+    }
+    runBold = bold
+    run += text[i]
+  }
+  if (run) runs.push({ text: run, bold: runBold })
+  return runs
+}
+
+type RenderedWord = { text: string; visible: boolean; isBold: boolean; isFirstBold?: boolean; isLastBold?: boolean }
+
+// Words of a spoken reply, split where a highlight starts or stops, with the first and
+// last piece of each highlighted run marked
+const renderWordsWithBoldState = (words: Array<{text: string, visible: boolean}>): RenderedWord[] => {
   if (!words) return []
-  
-  let isBold = false
-  const processedWords: Array<{text: string, visible: boolean, isBold: boolean, isFirstBold?: boolean, isLastBold?: boolean}> = []
-  
-  // First pass: mark bold words
+
+  const state: HighlightState = { open: false, cut: false }
+  const processedWords: RenderedWord[] = []
+
   for (const word of words) {
-    let wordText = word.text
-    
-    // Check if this word contains '**'
-    if (wordText.includes('**')) {
-      // Count how many '**' markers are in this word
-      const markerCount = (wordText.match(/\*\*/g) || []).length
-      
-      // Remove '**' markers from the text
-      wordText = wordText.replace(/\*\*/g, '')
-      
-      let wordIsBold: boolean
-      
-      if (markerCount % 2 === 1) {
-        // This is an opening or closing marker (odd count)
-        // Opening marker: isBold is false → toggle to true, word should be true
-        // Closing marker: isBold is true → word should be true, toggle to false
-        if (!isBold) {
-          // Opening marker: toggle first, then use new state
-          isBold = true
-          wordIsBold = true
-        } else {
-          // Closing marker: use current state, then toggle
-          wordIsBold = true
-          isBold = false
-        }
-      } else {
-        // Even count: **word** - content between markers is bold
-        wordIsBold = true
-        isBold = false  // closed
-      }
-      
-      processedWords.push({
-        text: wordText,
-        visible: word.visible,
-        isBold: wordIsBold
-      })
-    } else {
-      // No marker - don't highlight whitespace
-      const isWhitespace = /^\s+$/.test(wordText)
-      processedWords.push({
-        text: wordText,
-        visible: word.visible,
-        isBold: isWhitespace ? false : isBold
-      })
+    // Whitespace between highlighted words is never highlighted
+    if (/^\s+$/.test(word.text)) {
+      processedWords.push({ text: word.text, visible: word.visible, isBold: false })
+      continue
+    }
+    for (const run of highlightRuns(word.text, state)) {
+      processedWords.push({ text: run.text, visible: word.visible, isBold: run.bold })
     }
   }
-  
-  // Second pass: mark first and last in each bold sequence
+
   for (let i = 0; i < processedWords.length; i++) {
     const word = processedWords[i]
-    if (!word) continue
-    
-    if (word.isBold) {
-      // Check if this is the first in sequence
-      const isFirst = i === 0 || !processedWords[i - 1]?.isBold
-      // Check if this is the last in sequence
-      const isLast = i === processedWords.length - 1 || !processedWords[i + 1]?.isBold
-      
-      if (isFirst) {
-        word.isFirstBold = true
-      }
-      if (isLast) {
-        word.isLastBold = true
-      }
-    }
+    if (!word?.isBold) continue
+    if (i === 0 || !processedWords[i - 1]?.isBold) word.isFirstBold = true
+    if (i === processedWords.length - 1 || !processedWords[i + 1]?.isBold) word.isLastBold = true
   }
-  
+
   return processedWords
 }
 
 // Render text with bold state (for messages without words array)
 const renderTextWithBoldState = (text: string): string => {
   if (!text) return ''
-  
-  let isBold = false
-  let result = ''
-  let currentText = ''
-  
-  // Simple state machine: track bold state and build HTML
-  for (let i = 0; i < text.length; i++) {
-    if (text[i] === '*' && text[i + 1] === '*') {
-      // Found '**' marker
-      // Add accumulated text with current bold state
-      if (currentText) {
-        if (isBold) {
-          result += `<strong class="bold-highlight">${escapeHtml(currentText)}</strong>`
-        } else {
-          result += escapeHtml(currentText)
-        }
-        currentText = ''
-      }
-      // Toggle bold state
-      isBold = !isBold
-      i++ // Skip the second '*'
-    } else {
-      currentText += text[i]
-    }
-  }
-  
-  // Add remaining text
-  if (currentText) {
-    if (isBold) {
-      result += `<strong class="bold-highlight">${escapeHtml(currentText)}</strong>`
-    } else {
-      result += escapeHtml(currentText)
-    }
-  }
-  
-  return result
+  return highlightRuns(text, { open: false, cut: false })
+    .map(run => (run.bold ? `<strong class="bold-highlight">${escapeHtml(run.text)}</strong>` : escapeHtml(run.text)))
+    .join('')
 }
 
 
@@ -2116,16 +2065,6 @@ defineExpose({
   transform: translateX(-50%);
 }
 
-.voice-hint {
-  margin: 0;
-  font-family: var(--curio-font-mono);
-  font-weight: 500;
-  font-size: 16px;
-  white-space: nowrap;
-  color: #111111;
-  text-align: center;
-}
-
 .voice-input-button {
   width: var(--voice-btn-width);
   height: var(--voice-btn-size);
@@ -2333,7 +2272,8 @@ defineExpose({
   border-radius: 4px;
 }
 
-/* Popups (Frame 70 / 71): built from shapes and text, not images */
+/* Popups (Frame 70 / 71): built from shapes and text, not images. The card and
+   button look is shared (assets/popup.css). */
 .room-choice-overlay,
 .mission-complete-overlay {
   position: fixed;
@@ -2344,21 +2284,6 @@ defineExpose({
   justify-content: center;
   z-index: 10000;
   animation: fadeIn 0.25s ease;
-}
-
-.popup-card {
-  position: relative;
-  width: min(880px, 92vw);
-  box-sizing: border-box;
-  padding: 44px 56px 40px;
-  background: #fcf0d9;
-  border: 12px solid #03365f;
-  border-radius: 40px;
-  box-shadow: 0 6px 0 #03365f;
-  text-align: center;
-  font-family: var(--curio-font-mono);
-  color: var(--curio-navy);
-  animation: slideUp 0.3s ease;
 }
 
 .room-choice-title {
@@ -2378,40 +2303,6 @@ defineExpose({
   display: flex;
   justify-content: center;
   gap: 32px;
-}
-
-.popup-button {
-  min-width: 237px;
-  height: 72px;
-  padding: 0 28px;
-  border: 5px solid var(--curio-navy);
-  border-radius: 999px;
-  font-family: var(--curio-font-mono);
-  font-weight: 700;
-  font-size: 26px;
-  cursor: pointer;
-  box-shadow: 0 5px 0 var(--curio-navy);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
-}
-
-.popup-button.primary {
-  background: var(--curio-yellow);
-  color: var(--curio-navy);
-}
-
-.popup-button.secondary {
-  background: #ffffff;
-  color: var(--curio-navy);
-}
-
-.popup-button:hover {
-  filter: brightness(1.05);
-  transform: translateY(-2px);
-}
-
-.popup-button:active {
-  transform: translateY(3px);
-  box-shadow: 0 2px 0 var(--curio-navy);
 }
 
 .mission-complete-container {
@@ -2451,10 +2342,5 @@ defineExpose({
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
-}
-
-@keyframes slideUp {
-  from { transform: translateY(24px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
 }
 </style>

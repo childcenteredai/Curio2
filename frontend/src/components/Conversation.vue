@@ -2,6 +2,18 @@
   <div class="chat-container" :class="{ teacher: teacherMode }">
     <header class="chat-panel-header">
       <h1 class="chat-panel-title">ASK NOVA ANYTHING!</h1>
+      <!-- Starts this room's chat over in a new conversation (the old one stays in
+           the database); only while Nova is quiet and the mic is off -->
+      <button
+        type="button"
+        class="restart-chat-button"
+        :disabled="!canRestartChat"
+        aria-label="Start this chat over"
+        title="Start over"
+        @click="restartChat"
+      >
+        <i class="fa-solid fa-rotate-right" aria-hidden="true" />
+      </button>
     </header>
 
     <!-- Chat messages area -->
@@ -1737,6 +1749,25 @@ const startNewChat = async () => {
   await generateInitialGreeting()
 }
 
+// Header restart button: a fresh conversation in this room, Nova greets again.
+// Not before the chat has loaded (the first greeting would race it).
+const canRestartChat = computed(
+  () =>
+    chatHistory.value.length > 0 &&
+    !novaBusy.value &&
+    !isRecording.value &&
+    !isTranscribing.value
+)
+
+const restartChat = async () => {
+  if (!canRestartChat.value) return
+  draft.value = ''
+  draftTranscripts = []
+  draftAudio = null
+  transcribeFailed.value = false
+  await startNewChat()
+}
+
 const handleKeyDown = (e: KeyboardEvent) => {
   // Typing in the teacher's box: Space is just a space
   const target = e.target as HTMLElement | null
@@ -1927,6 +1958,7 @@ defineExpose({
 }
 
 .chat-panel-header {
+  position: relative;
   flex-shrink: 0;
   height: 92px;
   display: flex;
@@ -1942,6 +1974,46 @@ defineExpose({
   font-size: 30px;
   letter-spacing: 0.02em;
   color: #ffffff;
+}
+
+/* Restart this chat: a plain round icon button at the header's right end */
+.restart-chat-button {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  width: 50px;
+  height: 50px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 3px solid rgba(255, 255, 255, 0.85);
+  border-radius: 50%;
+  background: transparent;
+  color: #ffffff;
+  font-size: 22px;
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+.restart-chat-button:hover:not(:disabled) {
+  background: var(--curio-yellow);
+  border-color: var(--curio-yellow);
+  color: var(--curio-navy);
+}
+
+.restart-chat-button:active:not(:disabled) {
+  transform: translateY(-50%) scale(0.94);
+}
+
+.restart-chat-button:focus-visible {
+  outline: 4px solid var(--curio-yellow);
+  outline-offset: 3px;
+}
+
+.restart-chat-button:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 /* Messages */

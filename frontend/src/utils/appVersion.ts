@@ -5,9 +5,10 @@ import { useRoute } from 'vue-router'
  * App versions served side by side (ids match backend/phenomena.py VERSIONS):
  * - 'qa': question-asking with AI, at /
  * - 'direct': direct instruction with AI, at /direct
- * - 'teacher': the question-asking chat run by a teacher, at /teacher. Nova's
- *   replies are text only, and voice input is transcribed into a box the teacher
- *   can edit before sending.
+ * - 'teacher': the question-asking chat run by a teacher, at /teacher. Only the
+ *   map, room selection and chat: no Nova character or narration on those screens,
+ *   Nova's chat replies are text only, and voice input is transcribed into a box
+ *   the teacher can edit before sending.
  * All share the map and room-selection screens; only the room screen differs.
  */
 export type AppVersion = 'qa' | 'direct' | 'teacher'
@@ -23,6 +24,9 @@ export function useAppVersion() {
   return {
     version,
     mapPath: computed(() => base.value || '/'),
+    /** Nova (the character and her spoken lines) on the map, area screens and
+     *  popups; the teacher version has none, only her text replies in the chat */
+    hasNova: computed(() => version.value !== 'teacher'),
     /** Goodbye screen after Finish Exploring */
     donePath: computed(() => `${base.value}/done`),
     areaPath: (area: string) => `${base.value}/area/${area}`,

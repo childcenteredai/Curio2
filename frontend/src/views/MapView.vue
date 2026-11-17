@@ -93,12 +93,12 @@ import {
 import { rectStyle, introPlayed, markIntroPlayed } from '../utils/stage'
 
 const DIRECT_STARTED_SESSION_KEY = 'curio_direct_started'
-/** Nova's last line stays up this long before the child is signed out */
+/** Nova's last line (teacher version: the map alone) stays up this long before sign-out */
 const GOODBYE_PAUSE_MS = 3000
 
 const route = useRoute()
 const router = useRouter()
-const { version, areaPath, introKey: versionedKey } = useAppVersion()
+const { version, areaPath, hasNova, introKey: versionedKey } = useAppVersion()
 // Goodbye screen after Finish Exploring: Nova's last words stay up, nothing is clickable
 const ended = route.meta.ended === true
 
@@ -142,6 +142,12 @@ const activeImage = computed(() => {
 const introKey = computed(() => versionedKey(`map:${completed.value.join(',')}`))
 
 const startIntro = () => {
+  // Teacher version: no Nova, so the map is clickable straight away
+  if (!hasNova.value) {
+    if (ended) leaveAfterGoodbye()
+    else interactive.value = true
+    return
+  }
   if (ended) {
     narrating.value = true
   } else if (introPlayed(introKey.value)) {

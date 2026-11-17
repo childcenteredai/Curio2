@@ -71,7 +71,7 @@ import { rectStyle, introPlayed, markIntroPlayed } from '../utils/stage'
 
 const route = useRoute()
 const router = useRouter()
-const { version, mapPath, donePath, roomPath, introKey: versionedKey } = useAppVersion()
+const { version, mapPath, donePath, roomPath, hasNova, introKey: versionedKey } = useAppVersion()
 
 const area = computed(() => route.params.area as Area)
 const config = computed(() => AREAS[area.value])
@@ -104,7 +104,8 @@ const markerStyle = (p: Phenomenon, visible: Bounds) => {
 
 // Nova introduces an area only on the child's first visit: not when they come
 // back from a room, and not on a later visit once they have explored a room here
-// (progress is per child, so this also holds in a new tab or a second session)
+// (progress is per child, so this also holds in a new tab or a second session).
+// Never in the teacher version, which has no Nova.
 const ready = ref(false)
 const narrating = ref(false)
 
@@ -122,7 +123,7 @@ watch(
     const progress = await fetchProgress(version.value)
     if (area.value !== a) return
     explored.value = progress[a]?.explored ?? []
-    narrating.value = !introPlayed(introKey.value) && !explored.value.length
+    narrating.value = hasNova.value && !introPlayed(introKey.value) && !explored.value.length
     // Counted as heard once it starts, so leaving mid-intro doesn't replay it
     if (narrating.value) markIntroPlayed(introKey.value)
     ready.value = true

@@ -150,11 +150,20 @@
       class="mission-complete-overlay"
       @click.self="handleMissionCompleteDismiss"
     >
-      <div class="mission-complete-container popup-card" role="dialog" aria-modal="true" aria-label="Session reminder">
-        <img class="happy-nova" src="/imgs/nova/nova-happy.png" alt="" />
-        <img class="star star-1" src="/imgs/ui/star.png" alt="" />
-        <img class="star star-2" src="/imgs/ui/star.png" alt="" />
-        <img class="star star-3" src="/imgs/ui/star.png" alt="" />
+      <div
+        class="mission-complete-container popup-card"
+        :class="{ 'with-nova': hasNova }"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Session reminder"
+      >
+        <!-- Teacher version: no Nova, just the message -->
+        <template v-if="hasNova">
+          <img class="happy-nova" src="/imgs/nova/nova-happy.png" alt="" />
+          <img class="star star-1" src="/imgs/ui/star.png" alt="" />
+          <img class="star star-2" src="/imgs/ui/star.png" alt="" />
+          <img class="star star-3" src="/imgs/ui/star.png" alt="" />
+        </template>
         <div class="mission-complete-message">
           Excellent work! We successfully completed our detective mission today. Let's get back to your researcher!
         </div>
@@ -207,7 +216,7 @@ const sessionId = ref<string>(getOrCreateSessionId())
 const isGeneratingGreeting = ref(false)
 
 const router = useRouter()
-const { version, mapPath, areaPath } = useAppVersion()
+const { version, mapPath, areaPath, hasNova } = useAppVersion()
 // Teacher version (/teacher): Nova's lines are shown as text only (no speech), and
 // the mic fills an editable box that the teacher sends when it's right
 const teacherMode = computed(() => version.value === 'teacher')
@@ -2377,7 +2386,8 @@ defineExpose({
   gap: 32px;
 }
 
-.mission-complete-container {
+/* Room on the right for happy Nova and her stars */
+.mission-complete-container.with-nova {
   padding-right: 300px;
   text-align: left;
 }
